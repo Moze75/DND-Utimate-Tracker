@@ -205,7 +205,7 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
       setPreviousLevel(player.level);
       initializeResources();
     }
-  }, [player.class, player.level]);
+  }, [player.class, player.level]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Bard: clamp used_bardic_inspiration if cap auto changes
   const lastClampKey = useRef<string | null>(null);
@@ -273,6 +273,7 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
     }
   };
 
+  // Carte Emplacements de sorts (gardée pour usage futur, mais non rendue)
   const renderSpellSlots = () => {
     const spellSlots = player.spell_slots || {};
     const hasSpellSlots = Object.keys(spellSlots).some((key) => key.startsWith('level') && !key.startsWith('used') && (spellSlots[key as keyof SpellSlots] || 0) > 0);
@@ -450,36 +451,7 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
     }
   };
 
-  const initializeResources = async () => {
-    if (!player.class) return;
-
-    try {
-      const defaultSpellSlots = getSpellSlotsByLevel(player.class, player.level);
-      const defaultClassResources = getDefaultClassResources(player);
-
-      const { error } = await supabase
-        .from('players')
-        .update({
-          spell_slots: defaultSpellSlots,
-          class_resources: defaultClassResources,
-        })
-        .eq('id', player.id);
-
-      if (error) throw error;
-
-      onUpdate({
-        ...player,
-        spell_slots: defaultSpellSlots,
-        class_resources: defaultClassResources,
-      });
-
-      toast.success('Ressources initialisées');
-    } catch (error) {
-      console.error('Erreur lors de l\'initialisation des ressources:', error);
-      toast.error('Erreur lors de l\'initialisation');
-    }
-  };
-
+  // Carte Ressources de classe (gardée pour usage futur, mais non rendue)
   const renderClassResources = () => {
     if (!player.class_resources || !player.class) return null;
 
@@ -714,10 +686,43 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
     );
   };
 
+  const initializeResources = async () => {
+    if (!player.class) return;
+
+    try {
+      const defaultSpellSlots = getSpellSlotsByLevel(player.class, player.level);
+      const defaultClassResources = getDefaultClassResources(player);
+
+      const { error } = await supabase
+        .from('players')
+        .update({
+          spell_slots: defaultSpellSlots,
+          class_resources: defaultClassResources,
+        })
+        .eq('id', player.id);
+
+      if (error) throw error;
+
+      onUpdate({
+        ...player,
+        spell_slots: defaultSpellSlots,
+        class_resources: defaultClassResources,
+      });
+
+      toast.success('Ressources initialisées');
+    } catch (error) {
+      console.error('Erreur lors de l\'initialisation des ressources:', error);
+      toast.error('Erreur lors de l\'initialisation');
+    }
+  };
+
   return (
     <div className="space-y-8">
       <KnownSpellsSection player={player} onUpdate={onUpdate} />
-      {renderSpellSlots()}
+
+      {/* Section "Emplacements de sorts" masquée */}
+      {/* {renderSpellSlots()} */}
+
       <div className="stats-card">
         <div className="stat-header flex items-center gap-3">
           <Book className="w-5 h-5 text-blue-500" />
@@ -726,14 +731,19 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
         <div className="p-4">
           <button
             onClick={() => setShowSpellbook(true)}
-            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg shadow-blue-900/20 hover:shadow-blue-900/40 flex items-center justify-center gap-2"
+            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg"
           >
-            <Book size={20} />
-            Ouvrir le grimoire
+            <div className="flex items-center justify-center gap-2">
+              <Book size={20} />
+              Ouvrir le grimoire
+            </div>
           </button>
         </div>
       </div>
-      {renderClassResources()}
+
+      {/* Section "Ressources de classe" masquée */}
+      {/* {renderClassResources()} */}
+
       {showSpellbook && (
         <SpellbookModal
           isOpen={showSpellbook}
@@ -741,6 +751,7 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
           playerClass={player.class}
         />
       )}
+
       {showSpellSlotModal && spellSlotModalData && (
         <SpellSlotSelectionModal
           isOpen={showSpellSlotModal}
