@@ -34,6 +34,8 @@ function stripDiacritics(s: string): string {
 }
 
 const SUBCLASS_NAME_MAP: Record<string, string> = {
+  // clé en minuscules -> nom exact utilisé dans les fichiers/dossiers
+
   // Ensorceleur
   "magie draconique": "Sorcellerie draconique",
   "sorcellerie draconique": "Sorcellerie draconique",
@@ -45,18 +47,6 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
   "voie de la main ouverte": "Credo de la paume",
   "way of the open hand": "Credo de la paume",
   "open hand": "Credo de la paume",
-
-  // Barde — Collège du savoir
-  "college du savoir": "Collège du savoir",
-  "collège du savoir": "Collège du savoir",
-  "college of lore": "Collège du savoir",
-
-  // Paladin — Serment de dévotion (ajouté ici)
-  "serment de devotion": "serment de dévotion",
-  "serment de dévotion": "serment de dévotion",
-  "serment devotion": "serment de dévotion",
-  "oath of devotion": "serment de dévotion",
-  "oath devotion": "serment de dévotion",
 };
 
 function normalizeName(name: string): string {
@@ -169,79 +159,76 @@ async function loadSubclassMarkdown(
   return null;
 }
 
-// VERSION ULTRA PERMISSIVE DU PARSEUR DE SECTIONS
+// Nouvelle version: ne flush qu'en détectant un "###" valide (Niveau/Niv./NIVEAU).
+// Les autres "### ..." sont conservés dans le contenu si une carte est ouverte.
 function parseMarkdownToSections(mdText: string, origin: "class" | "subclass"): AbilitySection[] {
-  // Sépare les lignes et détecte tous les titres commençant par "###"
   const lines = mdText.replace(/\r\n/g, "\n").split("\n");
 
-  type SectionMeta = {
-    index: number;
-    rawHeading: string;
-    normalizedHeading: string;
-  };
+  const sections: AbilitySection[] = [];
+  let currentTitle: string | null = null;
+  let currentLevel: number | null = null;
+  let currentBuffer: string[] = [];
 
-  const headingIndices: SectionMeta[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const rawLine = lines[i];
-    const match = rawLine.match(/^\s*#{3,}\s+(.*)$/);
-    if (match) {
-      const rawHeading = match[1].trim();
-      headingIndices.push({
-        index: i,
-        rawHeading,
-        normalizedHeading: stripDiacritics(rawHeading).toLowerCase(),
+  const flush = () => {
+    if (typeof currentLevel === "number") {
+      const title =
+        currentTitle && currentTitle.trim().length > 0
+          ? currentTitle.trim()
+          : `Capacité de niveau ${currentLevel}`;
+      const content = currentBuffer.join("\n").trim();
+      sections.push({
+        level: currentLevel,
+        title,
+        content,
+        origin,
       });
     }
-  }
+    currentTitle = null;
+    currentLevel = null;
+    currentBuffer = [];
+  };
 
-  // Si pas de titres détectés, tout le markdown est une seule section
-  if (headingIndices.length === 0) {
-    return [
-      {
-        level: 0,
-        title: "",
-        content: mdText.trim(),
-        origin,
-      },
-    ];
-  }
+  for (const raw of lines) {
+    const line = raw.trimRight();
 
-  // Découpe le markdown selon les titres détectés
-  const sections: AbilitySection[] = [];
-  for (let h = 0; h < headingIndices.length; h++) {
-    const start = headingIndices[h].index;
-    const end = h + 1 < headingIndices.length ? headingIndices[h + 1].index : lines.length;
-    const headingText = headingIndices[h].rawHeading;
+    // Détection d’un titre de section (exactement 3 #)
+    const h3Match = line.match(/^###\s+(.+)\s*$/);
+    if (h3Match) {
+      const heading = h3Match[1].trim();
 
-    // Extraction permissive du niveau et du titre
-    // Exemples acceptés : "Niveau 3 - Attaque", "Level 5: Power", "Serment de dévotion", "9: Nom", ...
-    let level = 0;
-    let title = headingText;
+      // Uniquement si c'est "Niveau ..." / "Niv. ..." / "NIVEAU ..."
+      const m =
+        heading.match(/^Niveau\s+(\d+)\s*(?:[-–—:]\s*(.+))?$/i) ||
+        heading.match(/^Niv\.\s*(\d+)\s*(?:[-–—:]\s*(.+))?$/i) ||
+        heading.match(/^NIVEAU\s+(\d+)\s*(?:[-–—:]\s*(.+))?$/);
 
-    // Regex ultra permissif pour niveau
-    const m = headingText.match(/(?:niveau|niv\.?|level)?\s*(\d{1,2})\s*[:\-–—]?\s*(.*)/i);
-    if (m) {
-      level = m[1] ? parseInt(m[1], 10) : 0;
-      title = m[2] ? m[2].trim() : headingText.trim();
-      if (!title) title = headingText.trim();
-    } else {
-      // Si pas de niveau trouvé, tente un début numérique
-      const mNum = headingText.match(/^(\d{1,2})\s*[:\-–—]?\s*(.*)/);
-      if (mNum) {
-        level = parseInt(mNum[1], 10);
-        title = mNum[2] ? mNum[2].trim() : headingText.trim();
+      if (m) {
+        // Nouveau bloc valide => on flush l'ancien puis on démarre le nouveau
+        flush();
+        currentLevel = parseInt(m[1], 10);
+        currentTitle = m[2] ? m[2].trim() : "";
+        continue;
       }
+
+      // Sinon: ce "### ..." n'est pas un en-tête de niveau => on le garde dans la carte en cours
+      if (typeof currentLevel === "number") {
+        currentBuffer.push(raw);
+        continue;
+      }
+
+      // Pas encore de carte ouverte: on ignore ou on accumule dans un préambule non utilisé
+      // (ici, on ignore)
+      continue;
     }
 
-    // Si pas de niveau détecté, laisse level=0 et garde le titre
-    const body = lines.slice(start + 1, end).join("\n").trim();
-    sections.push({
-      level,
-      title,
-      content: body,
-      origin,
-    });
+    // Lignes "#### ..." ou "##### ..." (cases cochables côté UI) => gardées telles quelles dans le contenu
+    if (typeof currentLevel === "number") {
+      currentBuffer.push(raw);
+    }
   }
+
+  // Dernier flush si on était dans une carte
+  flush();
 
   return sections;
 }
