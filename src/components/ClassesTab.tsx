@@ -52,13 +52,11 @@ type PlayerLike = {
 };
 
 type Props = {
-  // Dans GamePage on passe un Player complet; ailleurs, on tolère un PlayerLike
   player?: (PlayerLike & Partial<Player>) | null;
   playerClass?: string;
   className?: string;
   subclassName?: string | null;
   characterLevel?: number;
-  // Remontée d'état vers le parent (GamePage.applyPlayerUpdate)
   onUpdate?: (player: Player) => void;
 };
 
@@ -83,7 +81,6 @@ const CLASS_ALIASES: Record<string, string[]> = {
 };
 
 const SUBCLASS_ALIASES: Record<string, string[]> = {
-  // Moine (exemples)
   'voie de la paume': [
     'Voie de la Paume',
     'Voie de la Main Ouverte',
@@ -99,12 +96,11 @@ const SUBCLASS_ALIASES: Record<string, string[]> = {
   ],
   'credo de la paume': ['Voie de la Paume', 'Voie de la Main Ouverte', 'Way of the Open Hand'],
 
-  // Barde — Collège du savoir (fichier réel: "Sous-classe - College du savoir.md")
   'college du savoir': [
-    'College du savoir', // sans accent (nom de fichier)
-    'Collège du savoir', // avec accent (saisie utilisateur)
+    'College du savoir',
+    'Collège du savoir',
     'Collège du Savoir',
-    'College of Lore', // EN
+    'College of Lore',
     'College Of Lore',
   ],
   'collège du savoir': [
@@ -178,7 +174,6 @@ function slug(s: string) {
 
 /* ===========================================================
    Helper robuste: modificateur de Charisme
-   (supporte plusieurs schémas possibles dans player)
    =========================================================== */
 
 function getChaModFromPlayerLike(p?: any): number {
@@ -193,7 +188,6 @@ function getChaModFromPlayerLike(p?: any): number {
     return null;
   };
 
-  // tentatives: structure abilities (objet ou tableau)
   let chaObj: any = null;
   const abilities = p?.abilities;
   if (Array.isArray(abilities)) {
@@ -219,7 +213,6 @@ function getChaModFromPlayerLike(p?: any): number {
     if (score != null) return Math.floor((score - 10) / 2);
   }
 
-  // fallbacks simples
   const score2 =
     p?.stats?.charisma ??
     p?.stats?.CHA ??
@@ -235,6 +228,98 @@ function getChaModFromPlayerLike(p?: any): number {
 }
 
 /* ===========================================================
+   Overlay ripple plein écran
+   =========================================================== */
+
+function ScreenRipple({
+  x,
+  y,
+  onDone,
+  duration = 750,
+  color = 'rgba(168,85,247,0.28)', // violet 500 ~ #a855f7 avec alpha
+  blur = 2,
+}: {
+  x: number;
+  y: number;
+  onDone: () => void;
+  duration?: number;
+  color?: string;
+  blur?: number;
+}) {
+  const circleRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const circle = circleRef.current;
+    if (!circle) return;
+
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    // distance max jusqu'à un coin (pour couvrir tout l'écran)
+    const dTopLeft = Math.hypot(x - 0, y - 0);
+    const dTopRight = Math.hypot(x - w, y - 0);
+    const dBottomLeft = Math.hypot(x - 0, y - h);
+    const dBottomRight = Math.hypot(x - w, y - h);
+    const maxR = Math.max(dTopLeft, dTopRight, dBottomLeft, dBottomRight);
+
+    const finalDiameter = Math.ceil(maxR * 2) + 2 * blur;
+
+    // Position/size fixes, on animera via scale
+    circle.style.width = `${finalDiameter}px`;
+    circle.style.height = `${finalDiameter}px`;
+    circle.style.left = `${x}px`;
+    circle.style.top = `${y}px`;
+    circle.style.transform = 'translate(-50%, -50%) scale(0.01)';
+    circle.style.opacity = '0.75';
+
+    // Déclenche l’animation (scale vers 1 + fadeout)
+    const raf = requestAnimationFrame(() => {
+      circle.style.transition = `transform ${duration}ms ease-out, opacity ${duration + 100}ms ease-in`;
+      circle.style.transform = 'translate(-50%, -50%) scale(1)';
+      circle.style.opacity = '0';
+    });
+
+    const to = window.setTimeout(() => {
+      onDone();
+    }, duration + 140);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(to);
+    };
+  }, [x, y, onDone, duration, blur]);
+
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        pointerEvents: 'none',
+        zIndex: 70, // au-dessus de l’UI
+      }}
+    >
+      {/* Cercle expansif */}
+      <div
+        ref={circleRef}
+        style={{
+          position: 'fixed',
+          borderRadius: '9999px',
+          left: 0,
+          top: 0,
+          transform: 'translate(-50%, -50%) scale(0.01)',
+          willChange: 'transform, opacity',
+          // Gradient radial doux
+          background: `radial-gradient(closest-side, ${color}, rgba(168,85,247,0.18), rgba(168,85,247,0.0))`,
+          boxShadow: `0 0 ${blur * 4}px ${color}`,
+          opacity: 0,
+        }}
+      />
+    </div>
+  );
+}
+
+/* ===========================================================
    Composant principal
    =========================================================== */
 
@@ -246,6 +331,17 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   const [loadingChecks, setLoadingChecks] = useState(false);
 
   const [classResources, setClassResources] = useState<ClassResources | null | undefined>(player?.class_resources);
+
+  // État pour ripple plein écran
+  const [screenRipple, setScreenRipple] = useState<{ x: number; y: number; key: number } | null>(null);
+
+  const triggerScreenRippleFromEvent = (ev: React.MouseEvent<HTMLElement>) => {
+    const el = ev.currentTarget as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    const x = Math.round(rect.left + rect.width / 2);
+    const y = Math.round(rect.top + rect.height / 2);
+    setScreenRipple({ x, y, key: Date.now() });
+  };
 
   const rawClass = (player?.class ?? playerClass ?? className ?? '').trim();
   const rawSubclass = (player?.subclass ?? subclassName) ?? null;
@@ -341,7 +437,6 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
 
         setClassResources(current as ClassResources);
 
-        // Remonte au parent pour sync immédiate
         if (onUpdate && player) {
           onUpdate({ ...(player as any), class_resources: current } as Player);
         }
@@ -354,7 +449,6 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   }, [player?.id, displayClass, finalLevel, classResources, player]);
 
   // Barde: auto-cap dynamique pour Inspiration bardique
-  // total = max(0, modificateur de Charisme); used <= total
   const bardCapRef = useRef<string | null>(null);
   useEffect(() => {
     (async () => {
@@ -384,7 +478,6 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
           setClassResources(next as ClassResources);
           bardCapRef.current = key;
 
-          // Remonte au parent pour sync immédiate
           if (onUpdate && player) {
             onUpdate({ ...(player as any), class_resources: next } as Player);
           }
@@ -430,7 +523,6 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
     }
   }
 
-  // Miroir Moine: quand on met à jour "credo_*", on reflète aussi "ki_*" (et inversement)
   function mirrorMonkKeys(resource: keyof ClassResources, value: any, into: Record<string, any>) {
     const r = String(resource);
     if (r === 'credo_points') {
@@ -450,7 +542,6 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   ) => {
     if (!player?.id) return;
 
-    // Barde: pas d'édition du total; clamp du "used"
     if (resource === 'bardic_inspiration') {
       toast.error("Le total d'Inspiration bardique est calculé automatiquement (modificateur de Charisme).");
       return;
@@ -465,7 +556,6 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
       next[resource] = value;
     }
 
-    // Miroir pour Moine (alignement avec migrations ki_points)
     mirrorMonkKeys(resource, value, next);
 
     try {
@@ -474,7 +564,6 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
 
       setClassResources(next as ClassResources);
 
-      // Remonte au parent pour sync immédiate
       if (onUpdate && player) {
         onUpdate({ ...(player as any), class_resources: next } as Player);
       }
@@ -532,57 +621,71 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   const hasClass = !!displayClass;
 
   return (
-    <div className="space-y-4">
-      <div className="bg-gradient-to-r from-violet-700/30 via-fuchsia-600/20 to-amber-600/20 border border-white/10 rounded-2xl px-4 py-3 ring-1 ring-black/5 shadow-md shadow-black/20">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-white">
-            {hasClass ? displayClass : '—'}{displaySubclass ? ` - ${displaySubclass}` : ''}
-          </span>
-          <span className="text-xs text-white/70">Niveau {finalLevel}</span>
+    <>
+      <div className="space-y-4">
+        <div className="bg-gradient-to-r from-violet-700/30 via-fuchsia-600/20 to-amber-600/20 border border-white/10 rounded-2xl px-4 py-3 ring-1 ring-black/5 shadow-md shadow-black/20">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-white">
+              {hasClass ? displayClass : '—'}{displaySubclass ? ` - ${displaySubclass}` : ''}
+            </span>
+            <span className="text-xs text-white/70">Niveau {finalLevel}</span>
+          </div>
         </div>
+
+        {hasClass && (
+          <ClassResourcesCard
+            playerClass={displayClass}
+            resources={classResources || undefined}
+            onUpdateResource={updateClassResource}
+            player={player ?? undefined}
+            level={finalLevel}
+            // nouveau: propage le ripple global
+            onPulseScreen={triggerScreenRippleFromEvent}
+          />
+        )}
+
+        {!hasClass ? (
+          <div className="text-center text-white/70 py-10">Sélectionne une classe pour afficher les aptitudes.</div>
+        ) : loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-400" />
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="text-center text-white/70 py-10">
+            Aucune aptitude trouvée pour “{displayClass}{displaySubclass ? ` - ${displaySubclass}` : ''}”.
+            {DEBUG && <pre className="mt-3 text-xs text-white/60">Activez window.UT_DEBUG = true pour voir les tentatives de chargement dans la console.</pre>}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {visible.map((s, i) => (
+              <AbilityCard
+                key={`${s.origin}-${s.level ?? 'x'}-${i}`}
+                section={s}
+                defaultOpen={s.level === finalLevel}
+                ctx={{
+                  characterId,
+                  className: displayClass,
+                  subclassName: displaySubclass,
+                  checkedMap,
+                  onToggle: handleToggle,
+                }}
+                disableContentWhileLoading={loadingChecks}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {hasClass && (
-        <ClassResourcesCard
-          playerClass={displayClass}
-          resources={classResources || undefined}
-          onUpdateResource={updateClassResource}
-          player={player ?? undefined}
-          level={finalLevel}
+      {/* Overlay ripple plein écran */}
+      {screenRipple && (
+        <ScreenRipple
+          key={screenRipple.key}
+          x={screenRipple.x}
+          y={screenRipple.y}
+          onDone={() => setScreenRipple(null)}
         />
       )}
-
-      {!hasClass ? (
-        <div className="text-center text-white/70 py-10">Sélectionne une classe pour afficher les aptitudes.</div>
-      ) : loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-400" />
-        </div>
-      ) : visible.length === 0 ? (
-        <div className="text-center text-white/70 py-10">
-          Aucune aptitude trouvée pour “{displayClass}{displaySubclass ? ` - ${displaySubclass}` : ''}”.
-          {DEBUG && <pre className="mt-3 text-xs text-white/60">Activez window.UT_DEBUG = true pour voir les tentatives de chargement dans la console.</pre>}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {visible.map((s, i) => (
-            <AbilityCard
-              key={`${s.origin}-${s.level ?? 'x'}-${i}`}
-              section={s}
-              defaultOpen={s.level === finalLevel}
-              ctx={{
-                characterId,
-                className: displayClass,
-                subclassName: displaySubclass,
-                checkedMap,
-                onToggle: handleToggle,
-              }}
-              disableContentWhileLoading={loadingChecks}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -624,7 +727,6 @@ async function loadSectionsSmart(params: { className: string; subclassName: stri
     });
   }
 
-  // 1) Classe + sous-classe
   for (const c of classCandidates) {
     for (const sc of subclassCandidates) {
       try {
@@ -641,7 +743,6 @@ async function loadSectionsSmart(params: { className: string; subclassName: stri
     }
   }
 
-  // 2) Classe seule
   for (const c of classCandidates) {
     try {
       if (DEBUG) console.debug('[ClassesTab] loadAbilitySections try (class only)', { className: c, level });
@@ -656,7 +757,6 @@ async function loadSectionsSmart(params: { className: string; subclassName: stri
     }
   }
 
-  // 3) Échec
   return [];
 }
 
@@ -820,6 +920,7 @@ function ResourceBlock({
   color = 'purple',
   onDelete,
   hideEdit = false,
+  onGlobalPulse,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -833,14 +934,15 @@ function ResourceBlock({
   color?: 'red' | 'purple' | 'yellow' | 'green' | 'blue';
   onDelete?: () => void;
   hideEdit?: boolean;
+  onGlobalPulse?: (ev: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   const remaining = Math.max(0, total - used);
   const [isEditing, setIsEditing] = useState(false);
   const [amount, setAmount] = useState<string>('');
 
-  // Etat pour l'effet pulse
+  // Etat pour l'effet pulse local
   const [pulse, setPulse] = useState(false);
-  const triggerPulse = () => {
+  const triggerLocalPulse = () => {
     setPulse(true);
     window.setTimeout(() => setPulse(false), 260);
   };
@@ -889,12 +991,13 @@ function ResourceBlock({
         <div className="flex-1 flex items-center gap-1">
           <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} className="input-dark flex-1 px-3 py-1 rounded-md text-center" placeholder="0" />
           <button
-            onClick={() => {
+            onClick={(e) => {
               const value = parseInt(amount) || 0;
               if (value > 0) {
                 onUpdateUsed?.(used + value);
                 setAmount('');
-                triggerPulse(); // pulse sur consommation
+                triggerLocalPulse();
+                onGlobalPulse?.(e);
               }
             }}
             className="p-1 text-red-500 hover:bg-red-900/30 rounded-md transition-colors"
@@ -908,7 +1011,7 @@ function ResourceBlock({
               if (value > 0) {
                 onUpdateUsed?.(Math.max(0, used - value));
                 setAmount('');
-                // pas de pulse pour la récupération
+                // pas de ripple pour la récupération
               }
             }}
             className="p-1 text-green-500 hover:bg-green-900/30 rounded-md transition-colors"
@@ -920,10 +1023,11 @@ function ResourceBlock({
       ) : (
         <div className="flex gap-2">
           <button
-            onClick={() => {
+            onClick={(e) => {
               if (remaining <= 0) return;
               onUse();
-              triggerPulse(); // pulse sur consommation
+              triggerLocalPulse();
+              onGlobalPulse?.(e);
             }}
             disabled={remaining <= 0}
             className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
@@ -936,7 +1040,7 @@ function ResourceBlock({
             onClick={() => {
               if (used <= 0) return;
               onRestore();
-              // pas de pulse pour la récupération
+              // pas de ripple pour la récupération
             }}
             disabled={used <= 0}
             className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
@@ -972,12 +1076,14 @@ function ClassResourcesCard({
   onUpdateResource,
   player,
   level,
+  onPulseScreen,
 }: {
   playerClass: string;
   resources?: ClassResources;
   onUpdateResource: (resource: keyof ClassResources, value: any) => void;
   player?: PlayerLike;
   level?: number;
+  onPulseScreen?: (ev: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   if (!resources || !playerClass) return null;
 
@@ -998,13 +1104,13 @@ function ClassResourcesCard({
             onUpdateTotal={(n) => onUpdateResource('rage', n)}
             onRestore={() => onUpdateResource('used_rage', Math.max(0, (resources.used_rage || 0) - 1))}
             color="red"
+            onGlobalPulse={onPulseScreen}
           />
         );
       }
       break;
 
     case 'Barde': {
-      // total auto = modificateur de CHA (>= 0). Sans édition manuelle du total.
       const cap = Math.max(0, getChaModFromPlayerLike(player));
       const used = Math.min(resources.used_bardic_inspiration || 0, cap);
 
@@ -1020,6 +1126,7 @@ function ClassResourcesCard({
           onRestore={() => onUpdateResource('used_bardic_inspiration', Math.max(0, used - 1))}
           color="purple"
           hideEdit
+          onGlobalPulse={onPulseScreen}
         />
       );
       break;
@@ -1038,6 +1145,7 @@ function ClassResourcesCard({
             onUpdateTotal={(n) => onUpdateResource('channel_divinity', n)}
             onRestore={() => onUpdateResource('used_channel_divinity', Math.max(0, (resources.used_channel_divinity || 0) - 1))}
             color="yellow"
+            onGlobalPulse={onPulseScreen}
           />
         );
       }
@@ -1056,6 +1164,7 @@ function ClassResourcesCard({
             onUpdateTotal={(n) => onUpdateResource('wild_shape', n)}
             onRestore={() => onUpdateResource('used_wild_shape', Math.max(0, (resources.used_wild_shape || 0) - 1))}
             color="green"
+            onGlobalPulse={onPulseScreen}
           />
         );
       }
@@ -1074,6 +1183,7 @@ function ClassResourcesCard({
             onUpdateTotal={(n) => onUpdateResource('sorcery_points', n)}
             onRestore={() => onUpdateResource('used_sorcery_points', Math.max(0, (resources.used_sorcery_points || 0) - 1))}
             color="purple"
+            onGlobalPulse={onPulseScreen}
           />
         );
       }
@@ -1092,6 +1202,7 @@ function ClassResourcesCard({
             onUpdateTotal={(n) => onUpdateResource('action_surge', n)}
             onRestore={() => onUpdateResource('used_action_surge', Math.max(0, (resources.used_action_surge || 0) - 1))}
             color="red"
+            onGlobalPulse={onPulseScreen}
           />
         );
       }
@@ -1136,6 +1247,7 @@ function ClassResourcesCard({
             onUpdateTotal={(n) => onUpdateResource('credo_points', n)}
             onRestore={() => onUpdateResource('used_credo_points', Math.max(0, used - 1))}
             color="blue"
+            onGlobalPulse={onPulseScreen}
           />
         );
       }
@@ -1155,6 +1267,7 @@ function ClassResourcesCard({
             onUpdateUsed={(v) => onUpdateResource('used_lay_on_hands', v)}
             color="yellow"
             useNumericInput
+            onGlobalPulse={onPulseScreen}
           />
         );
       }
@@ -1173,6 +1286,7 @@ function ClassResourcesCard({
             onUpdateTotal={(n) => onUpdateResource('favored_foe', n)}
             onRestore={() => onUpdateResource('used_favored_foe', Math.max(0, (resources.used_favored_foe || 0) - 1))}
             color="green"
+            onGlobalPulse={onPulseScreen}
           />
         );
       }
@@ -1220,7 +1334,6 @@ function buildDefaultsForClass(cls: string, level: number, player?: PlayerLike |
     case 'Barbare':
       return { rage: Math.min(6, Math.floor((level + 3) / 4) + 2), used_rage: 0 };
     case 'Barde': {
-      // total auto géré par l’effet; on initialise juste le "used"
       return { used_bardic_inspiration: 0 };
     }
     case 'Clerc':
@@ -1234,7 +1347,6 @@ function buildDefaultsForClass(cls: string, level: number, player?: PlayerLike |
     case 'Magicien':
       return { arcane_recovery: true, used_arcane_recovery: false };
     case 'Moine':
-      // On initialise les deux clés pour rester compatible avec les migrations SQL
       return { credo_points: level, used_credo_points: 0, ki_points: level, used_ki_points: 0 } as any;
     case 'Paladin':
       return { lay_on_hands: level * 5, used_lay_on_hands: 0 };
