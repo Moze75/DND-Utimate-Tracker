@@ -24,7 +24,7 @@ import {
 
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
-import type { ClassResources } from '../types/dnd';
+import type { ClassResources, Player } from '../types/dnd';
 import { loadFeatureChecks, upsertFeatureCheck } from '../services/featureChecks';
 import { loadAbilitySections } from '../services/classesContent';
 import { MarkdownLite, type MarkdownCtx } from '../lib/markdownLite';
@@ -52,11 +52,14 @@ type PlayerLike = {
 };
 
 type Props = {
-  player?: PlayerLike;
+  // Dans GamePage on passe un Player complet; ailleurs, on tolère un PlayerLike
+  player?: (PlayerLike & Partial<Player>) | null;
   playerClass?: string;
   className?: string;
   subclassName?: string | null;
   characterLevel?: number;
+  // Remontée d'état vers le parent (GamePage.applyPlayerUpdate)
+  onUpdate?: (player: Player) => void;
 };
 
 const DEBUG = typeof window !== 'undefined' && (window as any).UT_DEBUG === true;
@@ -235,7 +238,7 @@ function getChaModFromPlayerLike(p?: any): number {
    Composant principal
    =========================================================== */
 
-function ClassesTab({ player, playerClass, className, subclassName, characterLevel }: Props) {
+function ClassesTab({ player, playerClass, className, subclassName, characterLevel, onUpdate }: Props) {
   const [sections, setSections] = useState<AbilitySection[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -335,12 +338,19 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
       try {
         const { error } = await supabase.from('players').update({ class_resources: current }).eq('id', player.id);
         if (error) throw error;
+
         setClassResources(current as ClassResources);
+
+        // Remonte au parent pour sync immédiate
+        if (onUpdate && player) {
+          onUpdate({ ...(player as any), class_resources: current } as Player);
+        }
       } catch (e) {
         initKeyRef.current = null;
         console.error('[ClassesTab] auto-init class_resources error:', e);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player?.id, displayClass, finalLevel, classResources, player]);
 
   // Barde: auto-cap dynamique pour Inspiration bardique
@@ -370,8 +380,14 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
         try {
           const { error } = await supabase.from('players').update({ class_resources: next }).eq('id', player.id);
           if (error) throw error;
+
           setClassResources(next as ClassResources);
           bardCapRef.current = key;
+
+          // Remonte au parent pour sync immédiate
+          if (onUpdate && player) {
+            onUpdate({ ...(player as any), class_resources: next } as Player);
+          }
         } catch (e) {
           console.error('[ClassesTab] bard cap update error:', e);
           bardCapRef.current = null;
@@ -391,6 +407,8 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
     player?.abilities,
     classResources?.bardic_inspiration,
     classResources?.used_bardic_inspiration,
+    onUpdate,
+    player,
   ]);
 
   async function handleToggle(featureKey: string, checked: boolean) {
@@ -409,6 +427,20 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
       });
     } catch (e) {
       if (DEBUG) console.debug('[ClassesTab] upsertFeatureCheck error:', e);
+    }
+  }
+
+  // Miroir Moine: quand on met à jour "credo_*", on reflète aussi "ki_*" (et inversement)
+  function mirrorMonkKeys(resource: keyof ClassResources, value: any, into: Record<string, any>) {
+    const r = String(resource);
+    if (r === 'credo_points') {
+      into.ki_points = value;
+    } else if (r === 'used_credo_points') {
+      into.used_ki_points = value;
+    } else if (r === 'ki_points') {
+      into.credo_points = value;
+    } else if (r === 'used_ki_points') {
+      into.used_credo_points = value;
     }
   }
 
@@ -433,10 +465,19 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
       next[resource] = value;
     }
 
+    // Miroir pour Moine (alignement avec migrations ki_points)
+    mirrorMonkKeys(resource, value, next);
+
     try {
       const { error } = await supabase.from('players').update({ class_resources: next }).eq('id', player.id);
       if (error) throw error;
+
       setClassResources(next as ClassResources);
+
+      // Remonte au parent pour sync immédiate
+      if (onUpdate && player) {
+        onUpdate({ ...(player as any), class_resources: next } as Player);
+      }
 
       if (typeof value === 'boolean') {
         toast.success(`Récupération arcanique ${value ? 'utilisée' : 'disponible'}`);
@@ -449,6 +490,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
           sorcery_points: 'Points de sorcellerie',
           action_surge: "Sursaut d'action",
           credo_points: 'Points de crédo',
+          ki_points: 'Points de crédo',
           lay_on_hands: 'Imposition des mains',
           favored_foe: 'Ennemi juré',
           sneak_attack: 'Attaque sournoise',
@@ -505,7 +547,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
           playerClass={displayClass}
           resources={classResources || undefined}
           onUpdateResource={updateClassResource}
-          player={player}
+          player={player ?? undefined}
           level={finalLevel}
         />
       )}
@@ -1175,7 +1217,8 @@ function buildDefaultsForClass(cls: string, level: number, player?: PlayerLike |
     case 'Magicien':
       return { arcane_recovery: true, used_arcane_recovery: false };
     case 'Moine':
-      return { credo_points: level, used_credo_points: 0 };
+      // On initialise les deux clés pour rester compatible avec les migrations SQL
+      return { credo_points: level, used_credo_points: 0, ki_points: level, used_ki_points: 0 } as any;
     case 'Paladin':
       return { lay_on_hands: level * 5, used_lay_on_hands: 0 };
     case 'Rôdeur':
