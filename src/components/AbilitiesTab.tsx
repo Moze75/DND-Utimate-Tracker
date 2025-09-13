@@ -661,8 +661,17 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
         if (typeof classResources.lay_on_hands === 'number') {
           items.push(
             <ResourceBlock
-               key="lay_on_hands"
-              
+            key="lay_on_hands"
+            icon={<HandHeart size={20} />}
+            label="Imposition des mains"
+            total={...}        // inchangé
+            used={...}         // inchangé
+            onUpdateTotal={...}
+            onUpdateUsed={...}
+            color="yellow"
+            useNumericInput
+            hideEdit={true}                     // masque la roue des paramètres
+            onlyMinus={true}                    // nouvelle prop pour n’afficher que le bouton "-"
             />
           );
         }
@@ -885,24 +894,35 @@ function ResourceBlock({
         </div>
       </div>
 
-      {useNumericInput ? (
-        <div className="flex-1 flex items-center gap-1">
-          <input
-            type="number"
-            min="0"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="input-dark flex-1 px-3 py-1 rounded-md text-center"
-            placeholder="0"
-          />
-          <button
-            onClick={() => {
-              const value = parseInt(amount) || 0;
-              if (value > 0) {
-                onUpdateUsed?.(used + value);
-                setAmount('');
-              }
-            }}
+            {useNumericInput ? (
+              <div className="flex-1 flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  value={amount}
+                  onChange={e => setAmount(e.target.value)}
+                  className="input-dark flex-1 px-3 py-1 rounded-md text-center"
+                  placeholder="0"
+                />
+                <button
+                  onClick={() => {
+                    const value = parseInt(amount) || 0;
+                    if (value > 0) {
+                      onUpdateUsed?.(used + value);
+                      setAmount('');
+                    }
+                  }}
+                  className="p-1 text-red-500 hover:bg-red-900/30 rounded-md transition-colors"
+                  title="Dépenser"
+                  style={{ minWidth: 44, minHeight: 44 }} // bouton plus gros
+                >
+                  <Minus size={26} /> {/* taille plus grande */}
+                </button>
+                {/* Plus de bouton "+" ici */}
+              </div>
+            ) : (
+              // ...
+            )}
             className="p-1 text-red-500 hover:bg-red-900/30 rounded-md transition-colors"
             title="Dépenser"
           >
