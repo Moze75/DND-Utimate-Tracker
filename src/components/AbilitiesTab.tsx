@@ -661,17 +661,8 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
         if (typeof classResources.lay_on_hands === 'number') {
           items.push(
             <ResourceBlock
-            key="lay_on_hands"
-            icon={<HandHeart size={20} />}
-            label="Imposition des mains"
-            total={...}        // inchangé
-            used={...}         // inchangé
-            onUpdateTotal={...}
-            onUpdateUsed={...}
-            color="yellow"
-            useNumericInput
-            hideEdit={true}                     // masque la roue des paramètres
-            onlyMinus={true}                    // nouvelle prop pour n’afficher que le bouton "-"
+               key="lay_on_hands"
+              
             />
           );
         }
@@ -894,7 +885,7 @@ function ResourceBlock({
         </div>
       </div>
 
-            {useNumericInput ? (
+            {useNumericInput ? ( 
               <div className="flex-1 flex items-center gap-2">
                 <input
                   type="number"
