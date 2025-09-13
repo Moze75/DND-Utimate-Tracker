@@ -838,6 +838,21 @@ function ResourceBlock({
   const [isEditing, setIsEditing] = useState(false);
   const [amount, setAmount] = useState<string>('');
 
+  // Etat pour l'effet pulse
+  const [pulse, setPulse] = useState(false);
+  const triggerPulse = () => {
+    setPulse(true);
+    window.setTimeout(() => setPulse(false), 260);
+  };
+
+  const ringColorClasses: Record<NonNullable<typeof color>, string> = {
+    red: 'ring-red-400/60',
+    purple: 'ring-purple-400/60',
+    yellow: 'ring-yellow-400/60',
+    green: 'ring-green-400/60',
+    blue: 'ring-blue-400/60',
+  };
+
   const colorClasses = {
     red: 'text-red-500 hover:bg-red-900/30',
     purple: 'text-purple-500 hover:bg-purple-900/30',
@@ -847,34 +862,26 @@ function ResourceBlock({
   };
 
   return (
-    <div className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3">
+    <div
+      className={[
+        'resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3',
+        'transition-shadow duration-200',
+        pulse ? `ring-2 ${ringColorClasses[color]}` : '',
+      ].join(' ')}
+    >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className={`${colorClasses[color]}`}>{icon}</div>
           <span className="text-sm font-medium text-gray-300">{label}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="text-sm text-gray-400 bg-gray-800/50 px-3 py-1 rounded-md min-w-[64px] text-center">
-            {remaining}/{total}
-          </div>
-          {!hideEdit && (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-blue-500 hover:bg-blue-900/30 rounded-full transition-colors"
-              title="Modifier"
-            >
-              <Settings size={16} />
-            </button>
-          )}
-          {onDelete && (
-            <button
-              onClick={onDelete}
-              className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-900/30 rounded-full transition-colors"
-              title="Supprimer"
-            >
-              <Trash2 size={16} />
-            </button>
-          )}
+        <div
+          className={[
+            'text-sm text-gray-400 bg-gray-800/50 px-3 py-1 rounded-md min-w-[64px] text-center',
+            'transition-transform duration-200',
+            pulse ? `scale-105 ring-1 ${ringColorClasses[color]} shadow-md` : '',
+          ].join(' ')}
+        >
+          {remaining}/{total}
         </div>
       </div>
 
@@ -887,6 +894,7 @@ function ResourceBlock({
               if (value > 0) {
                 onUpdateUsed?.(used + value);
                 setAmount('');
+                triggerPulse(); // pulse sur consommation
               }
             }}
             className="p-1 text-red-500 hover:bg-red-900/30 rounded-md transition-colors"
@@ -900,6 +908,7 @@ function ResourceBlock({
               if (value > 0) {
                 onUpdateUsed?.(Math.max(0, used - value));
                 setAmount('');
+                // pas de pulse pour la récupération
               }
             }}
             className="p-1 text-green-500 hover:bg-green-900/30 rounded-md transition-colors"
@@ -911,7 +920,11 @@ function ResourceBlock({
       ) : (
         <div className="flex gap-2">
           <button
-            onClick={onUse}
+            onClick={() => {
+              if (remaining <= 0) return;
+              onUse();
+              triggerPulse(); // pulse sur consommation
+            }}
             disabled={remaining <= 0}
             className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
               remaining > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
@@ -920,7 +933,11 @@ function ResourceBlock({
             <Minus size={16} className="mx-auto" />
           </button>
           <button
-            onClick={onRestore}
+            onClick={() => {
+              if (used <= 0) return;
+              onRestore();
+              // pas de pulse pour la récupération
+            }}
             disabled={used <= 0}
             className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
               used > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
