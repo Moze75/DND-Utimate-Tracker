@@ -34,8 +34,6 @@ function stripDiacritics(s: string): string {
 }
 
 const SUBCLASS_NAME_MAP: Record<string, string> = {
-  // clé en minuscules -> nom exact utilisé dans les fichiers/dossiers
-
   // Ensorceleur
   "magie draconique": "Sorcellerie draconique",
   "sorcellerie draconique": "Sorcellerie draconique",
@@ -47,6 +45,18 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
   "voie de la main ouverte": "Credo de la paume",
   "way of the open hand": "Credo de la paume",
   "open hand": "Credo de la paume",
+
+  // Barde — Collège du savoir
+  "college du savoir": "Collège du savoir",
+  "collège du savoir": "Collège du savoir",
+  "college of lore": "Collège du savoir",
+
+  // Paladin — Serment de dévotion (ajouté ici)
+  "serment de devotion": "serment de dévotion",
+  "serment de dévotion": "serment de dévotion",
+  "serment devotion": "serment de dévotion",
+  "oath of devotion": "serment de dévotion",
+  "oath devotion": "serment de dévotion",
 };
 
 function normalizeName(name: string): string {
