@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { testConnection } from '../lib/supabase';
+import { supabase, testConnection } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { Player } from '../types/dnd';
 import { LogOut } from 'lucide-react';
@@ -80,6 +80,40 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
     initialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, selectedCharacter.id]);
+
+  // Abonnement temps réel: si le joueur est mis à jour en base (ex: ressources de classe),
+  // on met à jour l'état local et on notifie le parent.
+  useEffect(() => {
+    if (!currentPlayer?.id) return;
+
+    const channel = supabase
+      .channel(`player:${currentPlayer.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'players', filter: `id=eq.${currentPlayer.id}` },
+        (payload) => {
+          try {
+            const next = payload.new as Player;
+            // Sécurité: ne remonte que si c'est bien la même entité
+            if (next?.id === currentPlayer.id) {
+              applyPlayerUpdate(next);
+            }
+          } catch (e) {
+            console.warn('[GamePage] realtime payload parsing error:', e);
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          // Optionnel: debug
+          // console.log('[GamePage] realtime subscribed for player', currentPlayer.id);
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentPlayer?.id, applyPlayerUpdate]);
 
   const handleSignOut = async () => {
     try {
