@@ -1508,15 +1508,17 @@ function ClassResourcesCard({
       if (typeof resources.lay_on_hands === 'number') {
         items.push(
           <ResourceBlock
-            key="lay_on_hands"
-            icon={<HandHeart size={20} />}
-            label="Imposition des mains"
-            total={resources.lay_on_hands}
-            used={resources.used_lay_on_hands || 0}
-            onUpdateTotal={(n) => onUpdateResource('lay_on_hands', n)}
-            onUpdateUsed={(v) => onUpdateResource('used_lay_on_hands', v)}
-            color="yellow"
-            useNumericInput
+             key="lay_on_hands"
+              icon={<HandHeart size={20} />}
+              label="Imposition des mains"
+              total={resources.lay_on_hands}
+              used={resources.used_lay_on_hands || 0}
+              onUpdateTotal={(n) => onUpdateResource('lay_on_hands', n)}
+              onUpdateUsed={(v) => onUpdateResource('used_lay_on_hands', v)}
+              color="yellow"
+              useNumericInput
+              hideEdit={true} // masque la roue
+              hideRestore={true} // masque le bouton "+" 
           />
         );
       }
