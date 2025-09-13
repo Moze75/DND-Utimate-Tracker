@@ -32,7 +32,7 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(selectedCharacter);
-  const [inventory, setInventory] = useState([]);
+  const [inventory, setInventory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('combat');
 
   useEffect(() => {
@@ -170,7 +170,13 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
               )}
 
               {activeTab === 'class' && (
-                <ClassesTab player={currentPlayer} />
+                <ClassesTab
+                  player={currentPlayer}
+                  onUpdate={(updatedPlayer) => {
+                    // ⚠️ Synchroniser l'état parent pour éviter la “perte” en changeant d’onglet
+                    setCurrentPlayer(updatedPlayer);
+                  }}
+                />
               )}
             </PlayerContext.Provider>
           </>
