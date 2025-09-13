@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { testConnection } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { Player } from '../types/dnd';
@@ -12,6 +12,7 @@ import { StatsTab } from '../components/StatsTab';
 import { ClassesTab } from '../components/ClassesTab';
 import { PlayerContext } from '../contexts/PlayerContext';
 
+// Services (certains peuvent être inutilisés selon ta page)
 import { playerService } from '../services/playerService';
 import { inventoryService } from '../services/inventoryService';
 import { authService } from '../services/authService';
@@ -23,7 +24,8 @@ interface GamePageProps {
   session: any;
   selectedCharacter: Player;
   onBackToSelection: () => void;
-  onUpdateCharacter: (player: Player) => void;
+  // Devient optionnel: la page ne crashe plus si le parent ne le fournit pas
+  onUpdateCharacter?: (player: Player) => void;
 }
 
 export function GamePage({ session, selectedCharacter, onBackToSelection, onUpdateCharacter }: GamePageProps) {
@@ -33,12 +35,18 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
   const [inventory, setInventory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('combat');
 
-  // Helper centralisé: met à jour l'état local ET le parent (source de vérité en amont)
-  const applyPlayerUpdate = (updatedPlayer: Player) => {
+  // Helper central: met à jour l'état local et, si dispo, remonte au parent
+  const applyPlayerUpdate = useCallback((updatedPlayer: Player) => {
     setCurrentPlayer(updatedPlayer);
-    // Propager au parent pour qu'il ré-injecte toujours une version à jour de selectedCharacter
-    onUpdateCharacter(updatedPlayer);
-  };
+    if (typeof onUpdateCharacter === 'function') {
+      try {
+        onUpdateCharacter(updatedPlayer);
+      } catch (e) {
+        // On ne casse pas l'UI si le parent jette
+        console.warn('[GamePage] onUpdateCharacter a levé une erreur:', e);
+      }
+    }
+  }, [onUpdateCharacter]);
 
   useEffect(() => {
     const initialize = async () => {
@@ -51,7 +59,7 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
           throw new Error('Impossible de se connecter à la base de données');
         }
 
-        // Important: n'écrase pas currentPlayer si on est déjà sur le même perso.
+        // Important: ne pas écraser currentPlayer si on reste sur le même personnage
         setCurrentPlayer(prev => {
           if (!prev || prev.id !== selectedCharacter.id) return selectedCharacter;
           return prev;
@@ -68,7 +76,7 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
       }
     };
 
-    // Ne dépend que de la session et de l'identité du perso, pas de l'objet complet
+    // Ne redéclenche que si l'identité du perso change (évite des resets visuels)
     initialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, selectedCharacter.id]);
