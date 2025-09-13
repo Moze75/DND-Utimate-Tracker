@@ -1199,19 +1199,23 @@ function ResourceBlock({
   color = 'purple',
   onDelete,
   hideEdit = false,
+  minusOnly = false,
+  minusSize = 18,
 }: {
   icon: React.ReactNode;
   label: string;
   total: number;
   used: number;
-  onUse: () => void;
-  onRestore: () => void;
+  onUse?: () => void;
+  onRestore?: () => void;
   onUpdateTotal: (newTotal: number) => void;
   onUpdateUsed?: (value: number) => void;
   useNumericInput?: boolean;
   color?: 'red' | 'purple' | 'yellow' | 'green' | 'blue';
   onDelete?: () => void;
   hideEdit?: boolean;
+  minusOnly?: boolean;
+  minusSize?: number;
 }) {
   const remaining = Math.max(0, total - used);
   const [isEditing, setIsEditing] = useState(false);
@@ -1258,7 +1262,7 @@ function ResourceBlock({
       </div>
 
       {useNumericInput ? (
-        <div className="flex-1 flex items-center gap-1">
+        <div className="flex-1 flex items-center gap-2">
           <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} className="input-dark flex-1 px-3 py-1 rounded-md text-center" placeholder="0" />
           <button
             onClick={() => {
@@ -1270,43 +1274,50 @@ function ResourceBlock({
             }}
             className="p-1 text-red-500 hover:bg-red-900/30 rounded-md transition-colors"
             title="Dépenser"
+            style={{ minWidth: 44, minHeight: 44 }}
           >
-            <Minus size={18} />
+            <Minus size={minusSize} />
           </button>
-          <button
-            onClick={() => {
-              const value = parseInt(amount) || 0;
-              if (value > 0) {
-                onUpdateUsed?.(Math.max(0, used - value));
-                setAmount('');
-              }
-            }}
-            className="p-1 text-green-500 hover:bg-green-900/30 rounded-md transition-colors"
-            title="Récupérer"
-          >
-            <Plus size={18} />
-          </button>
+          {!minusOnly && (
+            <button
+              onClick={() => {
+                const value = parseInt(amount) || 0;
+                if (value > 0) {
+                  onUpdateUsed?.(Math.max(0, used - value));
+                  setAmount('');
+                }
+              }}
+              className="p-1 text-green-500 hover:bg-green-900/30 rounded-md transition-colors"
+              title="Récupérer"
+            >
+              <Plus size={18} />
+            </button>
+          )}
         </div>
       ) : (
         <div className="flex gap-2">
-          <button
-            onClick={onUse}
-            disabled={remaining <= 0}
-            className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
-              remaining > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
-            }`}
-          >
-            <Minus size={16} className="mx-auto" />
-          </button>
-          <button
-            onClick={onRestore}
-            disabled={used <= 0}
-            className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
-              used > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
-            }`}
-          >
-            <Plus size={16} className="mx-auto" />
-          </button>
+          {onUse && (
+            <button
+              onClick={onUse}
+              disabled={remaining <= 0}
+              className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
+                remaining > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
+              }`}
+            >
+              <Minus size={16} className="mx-auto" />
+            </button>
+          )}
+          {onRestore && (
+            <button
+              onClick={onRestore}
+              disabled={used <= 0}
+              className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
+                used > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
+              }`}
+            >
+              <Plus size={16} className="mx-auto" />
+            </button>
+          )}
         </div>
       )}
 
@@ -1316,7 +1327,7 @@ function ResourceBlock({
             label={`Nombre total de ${label.toLowerCase()}`}
             total={total}
             onSave={(newTotal) => {
-              onRestore();
+              onRestore && onRestore();
               onUpdateTotal(newTotal);
               setIsEditing(false);
             }}
@@ -1508,17 +1519,18 @@ function ClassResourcesCard({
       if (typeof resources.lay_on_hands === 'number') {
         items.push(
           <ResourceBlock
-             key="lay_on_hands"
-              icon={<HandHeart size={20} />}
-              label="Imposition des mains"
-              total={resources.lay_on_hands}
-              used={resources.used_lay_on_hands || 0}
-              onUpdateTotal={(n) => onUpdateResource('lay_on_hands', n)}
-              onUpdateUsed={(v) => onUpdateResource('used_lay_on_hands', v)}
-              color="yellow"
-              useNumericInput
-              hideEdit={true} // masque la roue
-              hideRestore={true} // masque le bouton "+" 
+            key="lay_on_hands"
+            icon={<HandHeart size={20} />}
+            label="Imposition des mains"
+            total={resources.lay_on_hands}
+            used={resources.used_lay_on_hands || 0}
+            onUpdateTotal={(n) => onUpdateResource('lay_on_hands', n)}
+            onUpdateUsed={(v) => onUpdateResource('used_lay_on_hands', v)}
+            color="yellow"
+            useNumericInput
+            hideEdit={true}
+            minusOnly={true}
+            minusSize={26}
           />
         );
       }
@@ -1571,6 +1583,10 @@ function ClassResourcesCard({
     </div>
   );
 }
+
+// =============================================================================
+// UI utilitaires
+// =============================================================================
 
 export default ClassesTab;
 export { ClassesTab };
