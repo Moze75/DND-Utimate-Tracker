@@ -159,65 +159,79 @@ async function loadSubclassMarkdown(
   return null;
 }
 
+// VERSION ULTRA PERMISSIVE DU PARSEUR DE SECTIONS
 function parseMarkdownToSections(mdText: string, origin: "class" | "subclass"): AbilitySection[] {
+  // Sépare les lignes et détecte tous les titres commençant par "###"
   const lines = mdText.replace(/\r\n/g, "\n").split("\n");
 
-  const sections: AbilitySection[] = [];
-  let currentTitle: string | null = null;
-  let currentLevel: number | null = null;
-  let currentBuffer: string[] = [];
-
-  const flush = () => {
-    if (typeof currentLevel === "number") {
-      const title = currentTitle && currentTitle.trim().length > 0 ? currentTitle.trim() : `Capacité de niveau ${currentLevel}`;
-      const content = currentBuffer.join("\n").trim();
-      sections.push({
-        level: currentLevel,
-        title,
-        content,
-        origin,
-      });
-    }
-    currentTitle = null;
-    currentLevel = null;
-    currentBuffer = [];
+  type SectionMeta = {
+    index: number;
+    rawHeading: string;
+    normalizedHeading: string;
   };
 
-  for (const raw of lines) {
-    const line = raw.trimRight();
-
-    // Détection d’un titre de section (### ... )
-    const h3Match = line.match(/^###\s+(.+)\s*$/);
-    if (h3Match) {
-      // Nouveau bloc => flush précédent
-      flush();
-
-      const heading = h3Match[1].trim();
-      // Accepte séparateurs -, –, —, : ou rien après le niveau
-      const m =
-        heading.match(/^Niveau\s+(\d+)\s*(?:[-–—:]\s*(.+))?$/i) ||
-        heading.match(/^Niv\.\s*(\d+)\s*(?:[-–—:]\s*(.+))?$/i) ||
-        heading.match(/^NIVEAU\s+(\d+)\s*(?:[-–—:]\s*(.+))?$/); // tolère "NIVEAU" explicite
-
-      if (m) {
-        currentLevel = parseInt(m[1], 10);
-        currentTitle = m[2] ? m[2].trim() : "";
-      } else {
-        // Titre non conforme => on ignore ce bloc
-        currentLevel = null;
-        currentTitle = null;
-      }
-      continue;
-    }
-
-    // Sinon, accumuler dans le contenu courant si on est dans un bloc valide
-    if (typeof currentLevel === "number") {
-      currentBuffer.push(raw);
+  const headingIndices: SectionMeta[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    const match = rawLine.match(/^\s*#{3,}\s+(.*)$/);
+    if (match) {
+      const rawHeading = match[1].trim();
+      headingIndices.push({
+        index: i,
+        rawHeading,
+        normalizedHeading: stripDiacritics(rawHeading).toLowerCase(),
+      });
     }
   }
 
-  // Dernier flush
-  flush();
+  // Si pas de titres détectés, tout le markdown est une seule section
+  if (headingIndices.length === 0) {
+    return [
+      {
+        level: 0,
+        title: "",
+        content: mdText.trim(),
+        origin,
+      },
+    ];
+  }
+
+  // Découpe le markdown selon les titres détectés
+  const sections: AbilitySection[] = [];
+  for (let h = 0; h < headingIndices.length; h++) {
+    const start = headingIndices[h].index;
+    const end = h + 1 < headingIndices.length ? headingIndices[h + 1].index : lines.length;
+    const headingText = headingIndices[h].rawHeading;
+
+    // Extraction permissive du niveau et du titre
+    // Exemples acceptés : "Niveau 3 - Attaque", "Level 5: Power", "Serment de dévotion", "9: Nom", ...
+    let level = 0;
+    let title = headingText;
+
+    // Regex ultra permissif pour niveau
+    const m = headingText.match(/(?:niveau|niv\.?|level)?\s*(\d{1,2})\s*[:\-–—]?\s*(.*)/i);
+    if (m) {
+      level = m[1] ? parseInt(m[1], 10) : 0;
+      title = m[2] ? m[2].trim() : headingText.trim();
+      if (!title) title = headingText.trim();
+    } else {
+      // Si pas de niveau trouvé, tente un début numérique
+      const mNum = headingText.match(/^(\d{1,2})\s*[:\-–—]?\s*(.*)/);
+      if (mNum) {
+        level = parseInt(mNum[1], 10);
+        title = mNum[2] ? mNum[2].trim() : headingText.trim();
+      }
+    }
+
+    // Si pas de niveau détecté, laisse level=0 et garde le titre
+    const body = lines.slice(start + 1, end).join("\n").trim();
+    sections.push({
+      level,
+      title,
+      content: body,
+      origin,
+    });
+  }
 
   return sections;
 }
