@@ -9,11 +9,9 @@ import CombatTab from '../components/CombatTab';
 import { EquipmentTab } from '../components/EquipmentTab';
 import { AbilitiesTab } from '../components/AbilitiesTab';
 import { StatsTab } from '../components/StatsTab';
-// Onglet Classe
 import { ClassesTab } from '../components/ClassesTab';
 import { PlayerContext } from '../contexts/PlayerContext';
 
-// Import des services
 import { playerService } from '../services/playerService';
 import { inventoryService } from '../services/inventoryService';
 import { authService } from '../services/authService';
@@ -25,7 +23,7 @@ interface GamePageProps {
   session: any;
   selectedCharacter: Player;
   onBackToSelection: () => void;
-  onUpdateCharacter: (player: Player) => void; // 🔥 nouvelle prop
+  onUpdateCharacter: (player: Player) => void;
 }
 
 export function GamePage({ session, selectedCharacter, onBackToSelection, onUpdateCharacter }: GamePageProps) {
@@ -34,6 +32,13 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(selectedCharacter);
   const [inventory, setInventory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('combat');
+
+  // Helper centralisé: met à jour l'état local ET le parent (source de vérité en amont)
+  const applyPlayerUpdate = (updatedPlayer: Player) => {
+    setCurrentPlayer(updatedPlayer);
+    // Propager au parent pour qu'il ré-injecte toujours une version à jour de selectedCharacter
+    onUpdateCharacter(updatedPlayer);
+  };
 
   useEffect(() => {
     const initialize = async () => {
@@ -46,21 +51,27 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
           throw new Error('Impossible de se connecter à la base de données');
         }
 
-        // Utilise le personnage sélectionné
-        setCurrentPlayer(selectedCharacter);
+        // Important: n'écrase pas currentPlayer si on est déjà sur le même perso.
+        setCurrentPlayer(prev => {
+          if (!prev || prev.id !== selectedCharacter.id) return selectedCharacter;
+          return prev;
+        });
+
         const inventoryData = await inventoryService.getPlayerInventory(selectedCharacter.id);
         setInventory(inventoryData);
 
         setLoading(false);
       } catch (error: any) {
-        console.error('Erreur d\'initialisation:', error);
+        console.error("Erreur d'initialisation:", error);
         setConnectionError(error.message);
         setLoading(false);
       }
     };
 
+    // Ne dépend que de la session et de l'identité du perso, pas de l'objet complet
     initialize();
-  }, [session, selectedCharacter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, selectedCharacter.id]);
 
   const handleSignOut = async () => {
     try {
@@ -119,11 +130,9 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
         {currentPlayer && (
           <>
             <PlayerContext.Provider value={currentPlayer}>
-              <PlayerProfile 
-                player={currentPlayer} 
-                onUpdate={(updatedPlayer) => {
-                  setCurrentPlayer(updatedPlayer);
-                }} 
+              <PlayerProfile
+                player={currentPlayer}
+                onUpdate={applyPlayerUpdate}
               />
 
               <TabNavigation
@@ -133,56 +142,45 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
 
               {activeTab === 'combat' && (
                 <CombatTab
-                  player={currentPlayer} 
-                  onUpdate={(updatedPlayer) => {
-                    setCurrentPlayer(updatedPlayer);
-                  }} 
+                  player={currentPlayer}
+                  onUpdate={applyPlayerUpdate}
                 />
               )}
 
               {activeTab === 'abilities' && (
                 <AbilitiesTab
                   player={currentPlayer}
-                  onUpdate={(updatedPlayer) => {
-                    setCurrentPlayer(updatedPlayer);
-                  }}
+                  onUpdate={applyPlayerUpdate}
                 />
               )}
 
               {activeTab === 'stats' && (
                 <StatsTab
                   player={currentPlayer}
-                  onUpdate={(updatedPlayer) => {
-                    setCurrentPlayer(updatedPlayer);
-                  }}
+                  onUpdate={applyPlayerUpdate}
                 />
               )}
 
               {activeTab === 'equipment' && (
                 <EquipmentTab
-                  player={currentPlayer} 
-                  inventory={inventory} 
-                  onPlayerUpdate={(updatedPlayer) => {
-                    setCurrentPlayer(updatedPlayer);
-                  }} 
-                  onInventoryUpdate={setInventory} 
+                  player={currentPlayer}
+                  inventory={inventory}
+                  onPlayerUpdate={applyPlayerUpdate}
+                  onInventoryUpdate={setInventory}
                 />
               )}
 
               {activeTab === 'class' && (
                 <ClassesTab
                   player={currentPlayer}
-                  onUpdate={(updatedPlayer) => {
-                    // ⚠️ Synchroniser l'état parent pour éviter la “perte” en changeant d’onglet
-                    setCurrentPlayer(updatedPlayer);
-                  }}
+                  onUpdate={applyPlayerUpdate}
                 />
               )}
             </PlayerContext.Provider>
           </>
         )}
       </div>
-      
+
       <div className="w-full max-w-md mx-auto mt-6 px-4">
         <button
           onClick={handleSignOut}
