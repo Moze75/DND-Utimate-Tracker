@@ -62,12 +62,15 @@ export function parseMarkdownLite(md: string, ctx: MarkdownCtx): React.ReactNode
       continue;
     }
 
-    // ##### -> case à cocher persistante
-    const h5chk = line.match(/^\s*#####\s+(.*)$/);
-    if (h5chk) {
-      const rawLabel = h5chk[1];
+    // #### / ##### -> case à cocher persistante
+    // (4 ou 5 dièses = checkbox, jamais titre)
+    const chk = line.match(/^\s*#####{0,1}\s+(.*)$/); // #### or #####
+    if (chk) {
+      const rawLabel = chk[1];
       const label = sentenceCase(rawLabel);
-      const featureKey = slug(`${ctx.section?.level ?? 'x'}-${ctx.section?.origin ?? 'class'}-${ctx.section?.title ?? ''}--${label}`);
+      const featureKey = slug(
+        `${ctx.section?.level ?? 'x'}-${ctx.section?.origin ?? 'class'}-${ctx.section?.title ?? ''}--${label}`
+      );
       const checked = ctx.checkedMap?.get(featureKey) ?? false;
       const id = `chk-${key}`;
 
@@ -89,19 +92,7 @@ export function parseMarkdownLite(md: string, ctx: MarkdownCtx): React.ReactNode
       continue;
     }
 
-    // #### -> petit titre
-    const h4small = line.match(/^\s*####\s+(.*)$/);
-    if (h4small) {
-      out.push(
-        <h5 key={`h4s-${key++}`} className="text-white font-semibold text-[13px]" style={{ fontVariant: 'small-caps' }}>
-          {formatInline(sentenceCase(h4small[1]))}
-        </h5>
-      );
-      i++;
-      continue;
-    }
-
-    // ### / ## / #
+    // ### / ## / # -> titres de contenu (n'affecte pas le découpage en cartes)
     const h3 = line.match(/^\s*###\s+(.*)$/i);
     if (h3) {
       out.push(
