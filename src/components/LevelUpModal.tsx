@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, TrendingUp, Heart, Dices } from 'lucide-react';
+import { X, TrendingUp, Heart, Dices, BookOpen } from 'lucide-react';
 import { Player, DndClass } from '../types/dnd';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -25,7 +25,7 @@ const getHitDieSize = (playerClass: DndClass | null | undefined): number => {
     case 'Druide':
     case 'Moine':
     case 'Roublard':
-    case 'Sorcier': return 8;
+    case 'Sorcier': return 8; // Sorcier = Occultiste (Warlock) dans ce projet
     case 'Magicien':
     case 'Ensorceleur': return 6;
     default: return 8;
@@ -36,23 +36,23 @@ const getAverageHpGain = (hitDieSize: number): number => {
   return Math.floor((hitDieSize / 2) + 1);
 };
 
-// Modificateur de Charisme depuis StatsTab (player.abilities) — robuste
-const getChaModFromPlayer = (player: Player): number => {
+// Modificateurs de caractéristiques depuis StatsTab (player.abilities) — robustes
+const extractAbilityMod = (player: Player, keys: string[]) => {
   const abilities: any = (player as any)?.abilities;
   if (Array.isArray(abilities)) {
-    const cha = abilities.find((a: any) => {
+    const found = abilities.find((a: any) => {
       const n = (a?.name || a?.abbr || a?.key || a?.code || '').toString().toLowerCase();
-      return n === 'charisme' || n === 'charisma' || n === 'cha' || n === 'car';
+      return keys.some(k => n === k);
     });
-    if (cha) {
-      if (typeof cha.modifier === 'number' && Number.isFinite(cha.modifier)) return cha.modifier;
-      if (typeof cha.score === 'number' && Number.isFinite(cha.score)) return Math.floor((cha.score - 10) / 2);
-      if (typeof cha.modifier === 'string') {
-        const n = Number(cha.modifier.replace(/[^\d+-]/g, ''));
+    if (found) {
+      if (typeof found.modifier === 'number' && Number.isFinite(found.modifier)) return found.modifier;
+      if (typeof found.score === 'number' && Number.isFinite(found.score)) return Math.floor((found.score - 10) / 2);
+      if (typeof found.modifier === 'string') {
+        const n = Number(found.modifier.replace(/[^\d+-]/g, ''));
         if (Number.isFinite(n)) return n;
       }
-      if (typeof cha.score === 'string') {
-        const n = Number(cha.score.replace(/[^\d+-]/g, ''));
+      if (typeof found.score === 'string') {
+        const n = Number(found.score.replace(/[^\d+-]/g, ''));
         if (Number.isFinite(n)) return Math.floor((n - 10) / 2);
       }
     }
@@ -60,20 +60,157 @@ const getChaModFromPlayer = (player: Player): number => {
   return 0;
 };
 
-// Résout le total d'inspiration bardique: override manuel (si défini et valide) sinon auto = mod CHA
-const resolveBardicTotal = (player: Player, currentResources: any): { cap: number; hasManual: boolean; manualNum?: number } => {
-  const raw = currentResources?.bardic_inspiration;
-  if (typeof raw === 'string' && raw.trim() === '') {
-    // suppression côté paramètres => auto CHA
-    return { cap: getChaModFromPlayer(player), hasManual: false };
+const getChaModFromPlayer = (player: Player): number =>
+  extractAbilityMod(player, ['charisme', 'charisma', 'cha', 'car']);
+
+const getWisModFromPlayer = (player: Player): number =>
+  extractAbilityMod(player, ['sagesse', 'wisdom', 'wis', 'sag']);
+
+const getIntModFromPlayer = (player: Player): number =>
+  extractAbilityMod(player, ['intelligence', 'intellect', 'int']);
+
+/* ============================ Tables “sorts à ajouter” ============================ */
+/*
+  Règles d’après le tableau fourni par l’utilisateur.
+  - Barde, Ensorceleur, (Occultiste/Sorcier): listes “connus”
+  - Clerc, Druide: préparation quotidienne (Niveau + Sag), cantrips par paliers
+  - Magicien: préparation (Niveau + Int), cantrips par paliers (standard 5e)
+  - Paladin, Rôdeur: “sorts connus” d’après le tableau fourni (pas de cantrips)
+  NB: Les tableaux ci-dessous sont indexés dès 1 (index 0 inutilisé).
+*/
+
+const clampLevel = (n: number) => Math.max(1, Math.min(20, n));
+
+const BARD_CANTRIPS = [0, 2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4];
+const BARD_KNOWN    = [0, 4,5,6,7,8,9,10,11,12,14,15,15,16,18,19,19,20,22,22,22];
+
+const SORCERER_CANTRIPS = [0, 4,4,4,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,6,6];
+const SORCERER_KNOWN    = [0, 2,3,4,5,6,7,8,9,10,11,12,12,13,13,14,14,15,15,15,15];
+
+// Occultiste (Warlock) — dans le code, la classe est “Sorcier”
+const WARLOCK_CANTRIPS = [0, 2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4];
+const WARLOCK_KNOWN    = [0, 2,3,4,5,6,7,8,9,10,10,11,11,12,12,13,13,14,14,15,15];
+
+// Paladin (table fournie)
+const PALADIN_KNOWN = [0, 0,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11];
+
+// Rôdeur (table fournie)
+const RANGER_KNOWN = [0, 0,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11];
+
+// Clerc — cantrips par paliers, préparation: niveau + Sagesse
+const getClericCantrips = (lvl: number) => {
+  if (lvl >= 10) return 5;
+  if (lvl >= 4) return 4;
+  return 3;
+};
+
+// Druide — cantrips par paliers, préparation: niveau + Sagesse
+const getDruidCantrips = (lvl: number) => {
+  if (lvl >= 8) return 4;
+  if (lvl >= 4) return 3;
+  return 2;
+};
+
+// Magicien — cantrips standard 5e: 3 (niv 1) / 4 (niv 4) / 5 (niv 10)
+const getWizardCantrips = (lvl: number) => {
+  if (lvl >= 10) return 5;
+  if (lvl >= 4) return 4;
+  return 3;
+};
+
+type SpellInfo =
+  | { kind: 'known'; cantrips?: number; known?: number; label: string; note?: string }
+  | { kind: 'prepared'; cantrips?: number; preparedCount: number; preparedFormula: string; label: string; note?: string }
+  | { kind: 'none' };
+
+const getSpellKnowledgeInfo = (player: Player, newLevel: number): SpellInfo => {
+  const lvl = clampLevel(newLevel);
+  const cls = (player.class || '').toString();
+
+  switch (cls) {
+    case 'Barde': {
+      return {
+        kind: 'known',
+        cantrips: BARD_CANTRIPS[lvl],
+        known: BARD_KNOWN[lvl],
+        label: 'Barde',
+        note: 'Valeurs totales au nouveau niveau'
+      };
+    }
+    case 'Ensorceleur': {
+      return {
+        kind: 'known',
+        cantrips: SORCERER_CANTRIPS[lvl],
+        known: SORCERER_KNOWN[lvl],
+        label: 'Ensorceleur',
+        note: 'Valeurs totales au nouveau niveau'
+      };
+    }
+    case 'Occultiste': // alias utilisateur
+    case 'Sorcier': {   // nom de classe utilisé dans le code (Warlock)
+      return {
+        kind: 'known',
+        cantrips: WARLOCK_CANTRIPS[lvl],
+        known: WARLOCK_KNOWN[lvl],
+        label: 'Occultiste',
+        note: 'Valeurs totales au nouveau niveau'
+      };
+    }
+    case 'Clerc': {
+      const wis = getWisModFromPlayer(player);
+      const prepared = Math.max(1, lvl + wis);
+      return {
+        kind: 'prepared',
+        cantrips: getClericCantrips(lvl),
+        preparedCount: prepared,
+        preparedFormula: `Niveau (${lvl}) + mod. Sagesse (${wis >= 0 ? `+${wis}` : wis})`,
+        label: 'Clerc',
+        note: 'Préparation quotidienne (liste complète)'
+      };
+    }
+    case 'Druide': {
+      const wis = getWisModFromPlayer(player);
+      const prepared = Math.max(1, lvl + wis);
+      return {
+        kind: 'prepared',
+        cantrips: getDruidCantrips(lvl),
+        preparedCount: prepared,
+        preparedFormula: `Niveau (${lvl}) + mod. Sagesse (${wis >= 0 ? `+${wis}` : wis})`,
+        label: 'Druide',
+        note: 'Préparation quotidienne (liste complète)'
+      };
+    }
+    case 'Magicien': {
+      const intel = getIntModFromPlayer(player);
+      const prepared = Math.max(1, lvl + intel);
+      return {
+        kind: 'prepared',
+        cantrips: getWizardCantrips(lvl),
+        preparedCount: prepared,
+        preparedFormula: `Niveau (${lvl}) + mod. Intelligence (${intel >= 0 ? `+${intel}` : intel})`,
+        label: 'Magicien',
+        note: 'Préparation quotidienne (grimoire)'
+      };
+    }
+    case 'Paladin': {
+      return {
+        kind: 'known',
+        known: PALADIN_KNOWN[lvl],
+        label: 'Paladin',
+        note: 'Valeur totale des sorts connus au nouveau niveau'
+      };
+    }
+    case 'Rôdeur': {
+      return {
+        kind: 'known',
+        known: RANGER_KNOWN[lvl],
+        label: 'Rôdeur',
+        note: 'Valeur totale des sorts connus au nouveau niveau'
+      };
+    }
+    default:
+      return { kind: 'none' };
   }
-  const n = typeof raw === 'string' ? Number(raw) : raw;
-  const hasManual = typeof n === 'number' && Number.isFinite(n);
-  return {
-    cap: hasManual ? (n as number) : getChaModFromPlayer(player),
-    hasManual,
-    manualNum: hasManual ? (n as number) : undefined
-  };
 };
 
 /* ============================ Composant ============================ */
@@ -113,24 +250,18 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         used: player.hit_dice?.used || 0
       };
 
-      // Calculer les nouveaux emplacements de sorts selon la classe et le niveau
+      // Emplacements de sorts (inchangé)
       const getSpellSlotsByLevel = (playerClass: string | null | undefined, level: number) => {
         const slots: any = {};
         
-        // Les moines n'ont pas d'emplacements de sorts
         if (playerClass === 'Moine') {
           return player.spell_slots || {};
         }
         
-        // Classes avec sorts complets (Magicien, Ensorceleur, Barde, Clerc, Druide)
         const fullCasters = ['Magicien', 'Ensorceleur', 'Barde', 'Clerc', 'Druide'];
-        // Classes avec demi-sorts (Paladin, Rôdeur)
         const halfCasters = ['Paladin', 'Rôdeur'];
-        // Classes avec tiers de sorts (Guerrier Eldritch, Roublard Arcanique)
-        // const thirdCasters = ['Guerrier', 'Roublard']; // non utilisé ici
         
         if (fullCasters.includes(playerClass || '')) {
-          // Progression complète des sorts
           if (level >= 1) {
             slots.level1 = level === 1 ? 2 : level === 2 ? 3 : 4;
             slots.used1 = player.spell_slots?.used1 || 0;
@@ -168,7 +299,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
             slots.used9 = player.spell_slots?.used9 || 0;
           }
         } else if (halfCasters.includes(playerClass || '')) {
-          // Progression demi-lanceur (Paladin, Rôdeur)
           if (level >= 2) {
             slots.level1 = level === 2 ? 2 : level <= 4 ? 3 : 4;
             slots.used1 = player.spell_slots?.used1 || 0;
@@ -194,7 +324,7 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         return { ...player.spell_slots, ...slots };
       };
 
-      // Calculer les nouvelles ressources de classe selon la classe et le niveau
+      // Ressources de classe (inchangé)
       const getClassResourcesByLevel = (playerClass: string | null | undefined, level: number) => {
         const resources: any = { ...player.class_resources };
 
@@ -203,20 +333,11 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
             resources.rage = Math.min(6, Math.floor((level + 3) / 4) + 2);
             break;
           case 'Barde': {
-            // Ne pas forcer une valeur basée sur le niveau.
-            // Si une valeur manuelle existe (numérique), la conserver.
-            // Sinon, laisser vide et calculer automatiquement depuis le modificateur CHA côté UI.
-            const { cap, hasManual, manualNum } = resolveBardicTotal(player, resources);
-            if (hasManual) {
-              resources.bardic_inspiration = manualNum!;
-            } else {
-              // si une chaîne vide traîne, on nettoie
-              if (typeof resources.bardic_inspiration === 'string' && resources.bardic_inspiration.trim() === '') {
-                delete resources.bardic_inspiration;
-              }
+            const raw = resources?.bardic_inspiration;
+            if (typeof raw === 'string' && raw.trim() === '') {
+              delete resources.bardic_inspiration;
             }
-            // Toujours borner le "used" sur la capacité (manuel ou auto)
-            const upper = Math.max(0, cap);
+            const upper = Math.max(0, getChaModFromPlayer(player));
             resources.used_bardic_inspiration = Math.min(resources.used_bardic_inspiration || 0, upper);
             break;
           }
@@ -255,17 +376,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
       const newSpellSlots = getSpellSlotsByLevel(player.class, newLevel);
       const newClassResources = getClassResourcesByLevel(player.class, newLevel);
 
-      console.log('Mise à jour du niveau:', {
-        oldLevel: player.level,
-        newLevel,
-        oldMaxHp: player.max_hp,
-        newMaxHp,
-        hpGainValue,
-        newSpellSlots,
-        newClassResources
-      });
-
-      // Sauvegarder directement en base de données
       const { error } = await supabase
         .from('players')
         .update({
@@ -280,7 +390,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
 
       if (error) throw error;
 
-      // Mettre à jour l'état du composant parent
       onUpdate({
         ...player,
         level: newLevel,
@@ -294,7 +403,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
       toast.success(`Félicitations ! Passage au niveau ${newLevel} (+${hpGainValue} PV)`);
       onClose();
       
-      // Fermer automatiquement les paramètres après le passage de niveau
       setTimeout(() => {
         if ((window as any).closeSettings) {
           (window as any).closeSettings();
@@ -331,23 +439,18 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         used: player.hit_dice?.used || 0
       };
 
-      // Calculer les nouveaux emplacements de sorts selon la classe et le niveau
+      // Emplacements de sorts (inchangé)
       const getSpellSlotsByLevel = (playerClass: string | null | undefined, level: number) => {
         const slots: any = {};
         
-        // Les moines n'ont pas d'emplacements de sorts
         if (playerClass === 'Moine') {
           return player.spell_slots || {};
         }
         
-        // Classes avec sorts complets (Magicien, Ensorceleur, Barde, Clerc, Druide)
         const fullCasters = ['Magicien', 'Ensorceleur', 'Barde', 'Clerc', 'Druide'];
-        // Classes avec demi-sorts (Paladin, Rôdeur)
         const halfCasters = ['Paladin', 'Rôdeur'];
-        // const thirdCasters = ['Guerrier', 'Roublard']; // non utilisé ici
         
         if (fullCasters.includes(playerClass || '')) {
-          // Progression complète des sorts
           if (level >= 1) {
             slots.level1 = level === 1 ? 2 : level === 2 ? 3 : 4;
             slots.used1 = player.spell_slots?.used1 || 0;
@@ -385,7 +488,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
             slots.used9 = player.spell_slots?.used9 || 0;
           }
         } else if (halfCasters.includes(playerClass || '')) {
-          // Progression demi-lanceur (Paladin, Rôdeur)
           if (level >= 2) {
             slots.level1 = level === 2 ? 2 : level <= 4 ? 3 : 4;
             slots.used1 = player.spell_slots?.used1 || 0;
@@ -411,7 +513,7 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         return { ...player.spell_slots, ...slots };
       };
 
-      // Calculer les nouvelles ressources de classe selon la classe et le niveau
+      // Ressources de classe (inchangé)
       const getClassResourcesByLevel = (playerClass: string | null | undefined, level: number) => {
         const resources: any = { ...player.class_resources };
 
@@ -420,15 +522,11 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
             resources.rage = Math.min(6, Math.floor((level + 3) / 4) + 2);
             break;
           case 'Barde': {
-            const { cap, hasManual, manualNum } = resolveBardicTotal(player, resources);
-            if (hasManual) {
-              resources.bardic_inspiration = manualNum!;
-            } else {
-              if (typeof resources.bardic_inspiration === 'string' && resources.bardic_inspiration.trim() === '') {
-                delete resources.bardic_inspiration;
-              }
+            const raw = resources?.bardic_inspiration;
+            if (typeof raw === 'string' && raw.trim() === '') {
+              delete resources.bardic_inspiration;
             }
-            const upper = Math.max(0, cap);
+            const upper = Math.max(0, getChaModFromPlayer(player));
             resources.used_bardic_inspiration = Math.min(resources.used_bardic_inspiration || 0, upper);
             break;
           }
@@ -467,16 +565,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
       const newSpellSlots = getSpellSlotsByLevel(player.class, newLevel);
       const newClassResources = getClassResourcesByLevel(player.class, newLevel);
 
-      console.log('Mise à jour du niveau:', {
-        oldLevel: player.level,
-        newLevel,
-        oldMaxHp: player.max_hp,
-        newMaxHp,
-        hpGainValue,
-        newSpellSlots,
-        newClassResources
-      });
-
       const { error } = await supabase
         .from('players')
         .update({
@@ -504,7 +592,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
       toast.success(`Félicitations ! Passage au niveau ${newLevel} (+${hpGainValue} PV)`);
       onClose();
       
-      // Fermer automatiquement les paramètres après le passage de niveau
       if ((window as any).closeSettings) {
         (window as any).closeSettings();
       }
@@ -515,6 +602,9 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
       setIsProcessing(false);
     }
   };
+
+  const spellInfo = getSpellKnowledgeInfo(player, newLevel);
+  const isCaster = spellInfo.kind !== 'none';
 
   const modalContent = (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -613,6 +703,60 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
               </span>
             </div>
           </div>
+
+          {/* Sorts à ajouter (indicatif) */}
+          {isCaster && (
+            <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
+              <div className="flex items-center gap-2 mb-3">
+                <BookOpen className="w-5 h-5 text-purple-400" />
+                <h5 className="font-medium text-gray-200">Sorts à ajouter (indicatif)</h5>
+              </div>
+
+              {spellInfo.kind === 'known' && (
+                <div className="space-y-1 text-sm">
+                  <p className="text-gray-300">
+                    Classe: <span className="font-semibold">{spellInfo.label}</span>
+                  </p>
+                  {typeof spellInfo.cantrips === 'number' && spellInfo.cantrips > 0 && (
+                    <p className="text-gray-300">
+                      Sorts mineurs connus au niveau {newLevel}: <span className="font-semibold">{spellInfo.cantrips}</span>
+                    </p>
+                  )}
+                  {typeof spellInfo.known === 'number' && (
+                    <p className="text-gray-300">
+                      Sorts connus au niveau {newLevel}: <span className="font-semibold">{spellInfo.known}</span>
+                    </p>
+                  )}
+                  {spellInfo.note && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      {spellInfo.note}. Si vous en avez déjà appris, ajoutez simplement la différence depuis l’onglet Sorts.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {spellInfo.kind === 'prepared' && (
+                <div className="space-y-1 text-sm">
+                  <p className="text-gray-300">
+                    Classe: <span className="font-semibold">{spellInfo.label}</span>
+                  </p>
+                  {typeof spellInfo.cantrips === 'number' && (
+                    <p className="text-gray-300">
+                      Sorts mineurs connus au niveau {newLevel}: <span className="font-semibold">{spellInfo.cantrips}</span>
+                    </p>
+                  )}
+                  <p className="text-gray-300">
+                    Préparation quotidienne: <span className="font-semibold">{spellInfo.preparedCount}</span> ({spellInfo.preparedFormula})
+                  </p>
+                  {spellInfo.note && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      {spellInfo.note}. Gérez vos sorts dans l’onglet Sorts; ce nombre est un total au nouveau niveau.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Action Buttons */}
@@ -621,7 +765,7 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
             <button
               onClick={handleLevelUpWithAutoSave}
               disabled={isProcessing || !hpGain || parseInt(hpGain) < 1}
-              className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg shadow-green-900/20 hover:shadow-green-900/40 flex items-center justify-center gap-2"
+              className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
             >
               {isProcessing ? (
                 <>
