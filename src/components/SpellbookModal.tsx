@@ -700,19 +700,16 @@ export function SpellbookModal({
             {/* Bouton de validation en mode sélection */}
             {selectionMode && selectedSpells.length > 0 && (
               <div className="sticky top-0 z-10 bg-gray-800/95 backdrop-blur-sm border border-gray-700/50 rounded-lg p-4 mb-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div className="w-8 h-8 bg-blue-500/20 rounded-full flex items-center justify-center">
                       <Check className="w-4 h-4 text-blue-400" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <h4 className="font-medium text-gray-100">
                         {selectedSpells.length} sort{selectedSpells.length > 1 ? 's' : ''} sélectionné{selectedSpells.length > 1 ? 's' : ''}
                       </h4>
-                      <p className="text-sm text-gray-400">
-                        {selectedSpells.slice(0, 3).map(s => s.name).join(', ')}
-                        {selectedSpells.length > 3 && ` et ${selectedSpells.length - 3} autre${selectedSpells.length - 3 > 1 ? 's' : ''}`}
-                      </p>
+                      {/* Noms retirés volontairement pour éviter la casse de layout */}
                     </div>
                   </div>
                   <button
@@ -722,7 +719,7 @@ export function SpellbookModal({
                         onClose();
                       }
                     }}
-                    className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-6 py-2 rounded-lg font-medium transition-all duration-200 shadow-lg shadow-green-900/20 hover:shadow-green-900/40 flex items-center gap-2"
+                    className="shrink-0 min-w-[200px] sm:min-w-[220px] bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-6 py-2 rounded-lg font-medium transition-all duration-200 shadow-lg flex items-center gap-2 justify-center"
                   >
                     <Check size={16} />
                     Valider la sélection
