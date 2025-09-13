@@ -27,6 +27,10 @@ import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import type { ClassResources } from '../types/dnd';
 
+/* =============================================================================
+   Types et helpers
+   ============================================================================= */
+
 type AbilitySection = {
   level: number | undefined;
   title: string;
@@ -54,6 +58,7 @@ type Props = {
   className?: string;
   subclassName?: string | null;
   characterLevel?: number;
+  onUpdate?: (player: any) => void; // Nouveau: remonter l'état au parent
 };
 
 const DEBUG = typeof window !== 'undefined' && (window as any).UT_DEBUG === true;
@@ -231,8 +236,7 @@ type ParsedHeading = {
 };
 
 function parseHeadingLabelForLevel(label: string): ParsedHeading {
-  // Exemples tolérés:
-  // "Niveau 3 : Titre", "NIVEAU 6- Truc", "Level 14: Something", "Niveau 11  Titre"
+  // Exemples: "Niveau 3 : Titre", "Level 14: Something"
   const m = label.match(/\b(niveau|level)\s*[:\-]?\s*(\d{1,2})\b/i);
   const levelNum = m ? Number(m[2]) : undefined;
 
@@ -240,7 +244,6 @@ function parseHeadingLabelForLevel(label: string): ParsedHeading {
   let title = label.trim();
   const split = title.split(/[:\-–—]\s*/);
   if (split.length >= 2) {
-    // titre = tout après le premier séparateur
     title = split.slice(1).join(': ').trim();
   }
 
@@ -254,7 +257,7 @@ function splitMarkdownIntoSections(md: string, origin: 'class' | 'subclass'): Ab
   const headingIdxs: Array<{ index: number; label: string }> = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const m = line.match(/^\s*#{3,6}\s+(.*)$/); // tolère ###, ####, etc.
+    const m = line.match(/^\s*#{3,6}\s+(.*)$/);
     if (m) {
       const label = m[1].trim();
       headingIdxs.push({ index: i, label });
@@ -263,7 +266,7 @@ function splitMarkdownIntoSections(md: string, origin: 'class' | 'subclass'): Ab
 
   // S'il n'y a pas de titres, retourner une seule section
   if (headingIdxs.length === 0) {
-    const { label, levelNum } = parseHeadingLabelForLevel(''); // pas de titre détectable
+    const { label, levelNum } = parseHeadingLabelForLevel('');
     return [
       {
         level: levelNum,
@@ -299,7 +302,6 @@ function fixSectionsPermissive(
   secs: AbilitySection[],
   origin: 'class' | 'subclass'
 ): AbilitySection[] {
-  // Cas trivial: rien à corriger
   if (!Array.isArray(secs) || secs.length === 0) return secs;
 
   // Heuristique: si une section contient plusieurs "###", on re‑split son contenu.
@@ -313,7 +315,6 @@ function fixSectionsPermissive(
   }
 
   if (!needFix && secs.length === 1) {
-    // Même si pas de "###" détectés, tente un split si le parser amont a tout mis dans un bloc unique avec titres en MAJ
     const single = secs[0];
     if (/^\s*#{3,6}\s+/m.test(single.content)) {
       needFix = true;
@@ -322,11 +323,9 @@ function fixSectionsPermissive(
 
   if (!needFix) return secs;
 
-  // Re-split: aplatir tout, puis re-découper
   const combined = secs.map(s => `### ${s.title}\n\n${s.content}`).join('\n\n');
   const reparsed = splitMarkdownIntoSections(combined, origin);
 
-  // Si on a réussi à obtenir plus de granularité, retourne la version réparée
   if (reparsed.length >= secs.length) {
     return reparsed;
   }
@@ -337,7 +336,7 @@ function fixSectionsPermissive(
    Composant principal
    ========================================================================== */
 
-function ClassesTab({ player, playerClass, className, subclassName, characterLevel }: Props) {
+function ClassesTab({ player, playerClass, className, subclassName, characterLevel, onUpdate }: Props) {
   const [sections, setSections] = useState<AbilitySection[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -438,12 +437,14 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
         const { error } = await supabase.from('players').update({ class_resources: current }).eq('id', player.id);
         if (error) throw error;
         setClassResources(current as ClassResources);
+        // Propager au parent
+        onUpdate?.({ ...(player || {}), class_resources: current });
       } catch (e) {
         initKeyRef.current = null;
         console.error('[ClassesTab] auto-init class_resources error:', e);
       }
     })();
-  }, [player?.id, displayClass, finalLevel, classResources, player]);
+  }, [player?.id, displayClass, finalLevel, classResources, player, onUpdate]);
 
   // Auto-cap dynamique pour Inspiration bardique (Barde):
   // total = modificateur de Charisme (>= 0), used <= total, pas de min 1 imposé
@@ -474,6 +475,8 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
           if (error) throw error;
           setClassResources(next as ClassResources);
           bardCapRef.current = key;
+          // Propager au parent
+          onUpdate?.({ ...(player || {}), class_resources: next });
         } catch (e) {
           console.error('[ClassesTab] bard cap update error:', e);
           bardCapRef.current = null;
@@ -494,6 +497,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
     player?.abilities,
     classResources?.bardic_inspiration,
     classResources?.used_bardic_inspiration,
+    onUpdate,
   ]);
 
   async function handleToggle(featureKey: string, checked: boolean) {
@@ -540,6 +544,9 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
       const { error } = await supabase.from('players').update({ class_resources: next }).eq('id', player.id);
       if (error) throw error;
       setClassResources(next as ClassResources);
+
+      // Propager au parent pour synchroniser les autres onglets
+      onUpdate?.({ ...(player || {}), class_resources: next });
 
       if (typeof value === 'boolean') {
         toast.success(`Récupération arcanique ${value ? 'utilisée' : 'disponible'}`);
@@ -1263,7 +1270,14 @@ function ResourceBlock({
 
       {useNumericInput ? (
         <div className="flex-1 flex items-center gap-2">
-          <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} className="input-dark flex-1 px-3 py-1 rounded-md text-center" placeholder="0" />
+          <input
+            type="number"
+            min="0"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            className="input-dark flex-1 px-3 py-1 rounded-md text-center"
+            placeholder="0"
+          />
           <button
             onClick={() => {
               const value = parseInt(amount) || 0;
@@ -1377,7 +1391,6 @@ function ClassResourcesCard({
       break;
 
     case 'Barde': {
-      // Toujours auto: total = modificateur de Charisme (>= 0). Pas d’override ni de roue d’édition.
       const cap = Math.max(0, getChaModFromPlayerLike(player));
       const used = Math.min(resources.used_bardic_inspiration || 0, cap);
 
@@ -1583,10 +1596,6 @@ function ClassResourcesCard({
     </div>
   );
 }
-
-// =============================================================================
-// UI utilitaires
-// =============================================================================
 
 export default ClassesTab;
 export { ClassesTab };
