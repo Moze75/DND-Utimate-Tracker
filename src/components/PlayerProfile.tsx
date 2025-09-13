@@ -651,7 +651,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           {/* Vitesse */}
           <div className="flex flex-col items-center">
             <div
-              className="relative w-10 h-10 -mt-2 -mb-1 group cursor-pointer"
+              className="relative w-12 h-10 -mt-2 -mb-1 group cursor-pointer"
               onClick={() => setActiveTooltip(activeTooltip === 'speed' ? null : 'speed')}
             >
               <div className="text-lg font-bold text-gray-100">
