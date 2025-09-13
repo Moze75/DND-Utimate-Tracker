@@ -21,18 +21,17 @@ import {
   Plus,
   Minus,
 } from 'lucide-react';
-import { loadAbilitySections } from '../services/classesContent';
-import { loadFeatureChecks, upsertFeatureCheck } from '../services/featureChecks';
-import { supabase } from '../lib/supabase';
+
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 import type { ClassResources } from '../types/dnd';
+import { loadFeatureChecks, upsertFeatureCheck } from '../services/featureChecks';
+import { loadAbilitySections } from '../services/classesContent';
+import { MarkdownLite, type MarkdownCtx } from '../lib/markdownLite';
 
-/* =============================================================================
-   Types et helpers
-   ============================================================================= */
-
+// Type de section tel que renvoyé par classesContent.ts
 type AbilitySection = {
-  level: number | undefined;
+  level: number;
   title: string;
   content: string;
   origin: 'class' | 'subclass';
@@ -44,12 +43,12 @@ type PlayerLike = {
   subclass?: string | null;
   level?: number | null;
   class_resources?: ClassResources | null;
-  // Les champs ci-dessous sont facultatifs, utilisés pour lire CHA
+  // champs optionnels utiles pour extraire le modificateur de Charisme
   stats?: { charisma?: number; CHA?: number } | null;
   charisma?: number;
   CHA?: number;
   ability_scores?: { cha?: number } | null;
-  abilities?: any; // on laisse "any" pour couvrir array | object
+  abilities?: any; // objet ou tableau selon les modèles
 };
 
 type Props = {
@@ -58,10 +57,13 @@ type Props = {
   className?: string;
   subclassName?: string | null;
   characterLevel?: number;
-  onUpdate?: (player: any) => void; // Nouveau: remonter l'état au parent
 };
 
 const DEBUG = typeof window !== 'undefined' && (window as any).UT_DEBUG === true;
+
+/* ===========================================================
+   Aides noms / alias
+   =========================================================== */
 
 const CLASS_ALIASES: Record<string, string[]> = {
   moine: ['Moine', 'Monk'],
@@ -78,7 +80,7 @@ const CLASS_ALIASES: Record<string, string[]> = {
 };
 
 const SUBCLASS_ALIASES: Record<string, string[]> = {
-  // Moine
+  // Moine (exemples)
   'voie de la paume': [
     'Voie de la Paume',
     'Voie de la Main Ouverte',
@@ -94,12 +96,12 @@ const SUBCLASS_ALIASES: Record<string, string[]> = {
   ],
   'credo de la paume': ['Voie de la Paume', 'Voie de la Main Ouverte', 'Way of the Open Hand'],
 
-  // Barde — Collège du savoir
+  // Barde — Collège du savoir (fichier réel: "Sous-classe - College du savoir.md")
   'college du savoir': [
-    'College du savoir', // sans accent, tel que le nom de fichier
-    'Collège du savoir',
+    'College du savoir', // sans accent (nom de fichier)
+    'Collège du savoir', // avec accent (saisie utilisateur)
     'Collège du Savoir',
-    'College of Lore',
+    'College of Lore', // EN
     'College Of Lore',
   ],
   'collège du savoir': [
@@ -110,6 +112,10 @@ const SUBCLASS_ALIASES: Record<string, string[]> = {
     'College Of Lore',
   ],
 };
+
+/* ===========================================================
+   Utils textes
+   =========================================================== */
 
 function norm(s: string) {
   return (s || '')
@@ -167,7 +173,11 @@ function slug(s: string) {
     .replace(/(^-|-$)/g, '');
 }
 
-/* ===== Helper robuste: modificateur de Charisme (array/object FR/EN + fallbacks) ===== */
+/* ===========================================================
+   Helper robuste: modificateur de Charisme
+   (supporte plusieurs schémas possibles dans player)
+   =========================================================== */
+
 function getChaModFromPlayerLike(p?: any): number {
   if (!p) return 0;
 
@@ -180,38 +190,33 @@ function getChaModFromPlayerLike(p?: any): number {
     return null;
   };
 
-  const fromObj = (obj: any): any | null => {
-    if (!obj || typeof obj !== 'object') return null;
-    const keys = Object.keys(obj);
+  // tentatives: structure abilities (objet ou tableau)
+  let chaObj: any = null;
+  const abilities = p?.abilities;
+  if (Array.isArray(abilities)) {
+    chaObj = abilities.find((a: any) => {
+      const n = (a?.name || a?.abbr || a?.key || a?.code || '').toString().toLowerCase();
+      return n === 'charisme' || n === 'charisma' || n === 'cha' || n === 'car';
+    });
+  } else if (abilities && typeof abilities === 'object') {
+    const keys = Object.keys(abilities);
     const key =
       keys.find(k => {
         const kk = k.toLowerCase();
         return kk === 'charisme' || kk === 'charisma' || kk === 'cha' || kk === 'car';
       }) ??
       keys.find(k => k.toLowerCase().includes('charis') || k.toLowerCase() === 'cha' || k.toLowerCase() === 'car');
-    return key ? obj[key] : null;
-  };
-
-  let cha: any = null;
-  const abilities = p?.abilities;
-
-  if (Array.isArray(abilities)) {
-    cha = abilities.find((a: any) => {
-      const n = (a?.name || a?.abbr || a?.key || a?.code || '').toString().toLowerCase();
-      return n === 'charisme' || n === 'charisma' || n === 'cha' || n === 'car';
-    });
-  } else if (abilities && typeof abilities === 'object') {
-    cha = fromObj(abilities);
+    if (key) chaObj = abilities[key];
   }
 
-  if (cha) {
-    const mod = toNum(cha.modifier) ?? toNum(cha.mod) ?? toNum(cha.modValue) ?? toNum(cha.value);
+  if (chaObj) {
+    const mod = toNum(chaObj.modifier) ?? toNum(chaObj.mod) ?? toNum(chaObj.modValue) ?? toNum(chaObj.value);
     if (mod != null) return mod;
-    const score = toNum(cha.score) ?? toNum(cha.total) ?? toNum(cha.base);
+    const score = toNum(chaObj.score) ?? toNum(chaObj.total) ?? toNum(chaObj.base);
     if (score != null) return Math.floor((score - 10) / 2);
   }
 
-  // Fallbacks simples si utilisés dans ton modèle
+  // fallbacks simples
   const score2 =
     p?.stats?.charisma ??
     p?.stats?.CHA ??
@@ -220,123 +225,17 @@ function getChaModFromPlayerLike(p?: any): number {
     p?.ability_scores?.cha ??
     p?.abilities?.cha ??
     null;
+
   if (typeof score2 === 'number') return Math.floor((score2 - 10) / 2);
 
   return 0;
 }
 
-/* =============================================================================
-   Fallback: re‑sectionnement permissif du Markdown en cas de parsing insuffisant
-   ========================================================================== */
-
-type ParsedHeading = {
-  raw: string;
-  label: string;
-  levelNum: number | undefined;
-};
-
-function parseHeadingLabelForLevel(label: string): ParsedHeading {
-  // Exemples: "Niveau 3 : Titre", "Level 14: Something"
-  const m = label.match(/\b(niveau|level)\s*[:\-]?\s*(\d{1,2})\b/i);
-  const levelNum = m ? Number(m[2]) : undefined;
-
-  // Titre après ':' ou '-' si présent
-  let title = label.trim();
-  const split = title.split(/[:\-–—]\s*/);
-  if (split.length >= 2) {
-    title = split.slice(1).join(': ').trim();
-  }
-
-  return { raw: label, label: title || label.trim(), levelNum };
-}
-
-function splitMarkdownIntoSections(md: string, origin: 'class' | 'subclass'): AbilitySection[] {
-  const lines = md.split(/\r?\n/);
-
-  // Collecte des indices de titres de niveau 3+ (### ...)
-  const headingIdxs: Array<{ index: number; label: string }> = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const m = line.match(/^\s*#{3,6}\s+(.*)$/);
-    if (m) {
-      const label = m[1].trim();
-      headingIdxs.push({ index: i, label });
-    }
-  }
-
-  // S'il n'y a pas de titres, retourner une seule section
-  if (headingIdxs.length === 0) {
-    const { label, levelNum } = parseHeadingLabelForLevel('');
-    return [
-      {
-        level: levelNum,
-        title: '',
-        content: md.trim(),
-        origin,
-      },
-    ];
-  }
-
-  // Construire les sections entre titres successifs
-  const sections: AbilitySection[] = [];
-  for (let h = 0; h < headingIdxs.length; h++) {
-    const start = headingIdxs[h].index;
-    const end = h + 1 < headingIdxs.length ? headingIdxs[h + 1].index : lines.length;
-    const headingText = headingIdxs[h].label;
-
-    const body = lines.slice(start + 1, end).join('\n').trim();
-    const { label, levelNum } = parseHeadingLabelForLevel(headingText);
-
-    sections.push({
-      level: levelNum,
-      title: label || headingText,
-      content: body,
-      origin,
-    });
-  }
-
-  return sections;
-}
-
-function fixSectionsPermissive(
-  secs: AbilitySection[],
-  origin: 'class' | 'subclass'
-): AbilitySection[] {
-  if (!Array.isArray(secs) || secs.length === 0) return secs;
-
-  // Heuristique: si une section contient plusieurs "###", on re‑split son contenu.
-  let needFix = false;
-  for (const s of secs) {
-    const countHeadings = (s.content.match(/^\s*#{3,6}\s+/gm) || []).length;
-    if (countHeadings >= 1) {
-      needFix = true;
-      break;
-    }
-  }
-
-  if (!needFix && secs.length === 1) {
-    const single = secs[0];
-    if (/^\s*#{3,6}\s+/m.test(single.content)) {
-      needFix = true;
-    }
-  }
-
-  if (!needFix) return secs;
-
-  const combined = secs.map(s => `### ${s.title}\n\n${s.content}`).join('\n\n');
-  const reparsed = splitMarkdownIntoSections(combined, origin);
-
-  if (reparsed.length >= secs.length) {
-    return reparsed;
-  }
-  return secs;
-}
-
-/* =============================================================================
+/* ===========================================================
    Composant principal
-   ========================================================================== */
+   =========================================================== */
 
-function ClassesTab({ player, playerClass, className, subclassName, characterLevel, onUpdate }: Props) {
+function ClassesTab({ player, playerClass, className, subclassName, characterLevel }: Props) {
   const [sections, setSections] = useState<AbilitySection[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -437,17 +336,15 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
         const { error } = await supabase.from('players').update({ class_resources: current }).eq('id', player.id);
         if (error) throw error;
         setClassResources(current as ClassResources);
-        // Propager au parent
-        onUpdate?.({ ...(player || {}), class_resources: current });
       } catch (e) {
         initKeyRef.current = null;
         console.error('[ClassesTab] auto-init class_resources error:', e);
       }
     })();
-  }, [player?.id, displayClass, finalLevel, classResources, player, onUpdate]);
+  }, [player?.id, displayClass, finalLevel, classResources, player]);
 
-  // Auto-cap dynamique pour Inspiration bardique (Barde):
-  // total = modificateur de Charisme (>= 0), used <= total, pas de min 1 imposé
+  // Barde: auto-cap dynamique pour Inspiration bardique
+  // total = max(0, modificateur de Charisme); used <= total
   const bardCapRef = useRef<string | null>(null);
   useEffect(() => {
     (async () => {
@@ -466,7 +363,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
       if (typeof total !== 'number' || total !== cap || used > cap) {
         const next = {
           ...(classResources || {}),
-          bardic_inspiration: cap, // miroir en BDD, pas éditable côté UI
+          bardic_inspiration: cap,
           used_bardic_inspiration: Math.min(used, cap),
         };
 
@@ -475,8 +372,6 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
           if (error) throw error;
           setClassResources(next as ClassResources);
           bardCapRef.current = key;
-          // Propager au parent
-          onUpdate?.({ ...(player || {}), class_resources: next });
         } catch (e) {
           console.error('[ClassesTab] bard cap update error:', e);
           bardCapRef.current = null;
@@ -488,7 +383,6 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   }, [
     player?.id,
     displayClass,
-    // Dépendances qui peuvent impacter CHA
     player?.stats?.charisma,
     player?.stats?.CHA,
     player?.charisma,
@@ -497,7 +391,6 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
     player?.abilities,
     classResources?.bardic_inspiration,
     classResources?.used_bardic_inspiration,
-    onUpdate,
   ]);
 
   async function handleToggle(featureKey: string, checked: boolean) {
@@ -525,7 +418,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   ) => {
     if (!player?.id) return;
 
-    // Barde: pas d'override du total; clamp du "used"
+    // Barde: pas d'édition du total; clamp du "used"
     if (resource === 'bardic_inspiration') {
       toast.error("Le total d'Inspiration bardique est calculé automatiquement (modificateur de Charisme).");
       return;
@@ -544,9 +437,6 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
       const { error } = await supabase.from('players').update({ class_resources: next }).eq('id', player.id);
       if (error) throw error;
       setClassResources(next as ClassResources);
-
-      // Propager au parent pour synchroniser les autres onglets
-      onUpdate?.({ ...(player || {}), class_resources: next });
 
       if (typeof value === 'boolean') {
         toast.success(`Récupération arcanique ${value ? 'utilisée' : 'disponible'}`);
@@ -654,48 +544,28 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   );
 }
 
-/* =============================================================================
-   Chargement "smart" + correctif permissif
-   ========================================================================== */
-
-function buildDefaultsForClass(cls: string, level: number, player?: PlayerLike | any): Partial<ClassResources> {
-  switch (cls) {
-    case 'Barbare':
-      return { rage: Math.min(6, Math.floor((level + 3) / 4) + 2), used_rage: 0 };
-    case 'Barde': {
-      // Pas d’override manuel; on initialise seulement le "used"
-      return { used_bardic_inspiration: 0 };
-    }
-    case 'Clerc':
-      return { channel_divinity: level >= 6 ? 2 : 1, used_channel_divinity: 0 };
-    case 'Druide':
-      return { wild_shape: 2, used_wild_shape: 0 };
-    case 'Ensorceleur':
-      return { sorcery_points: level, used_sorcery_points: 0 };
-    case 'Guerrier':
-      return { action_surge: level >= 17 ? 2 : 1, used_action_surge: 0 };
-    case 'Magicien':
-      return { arcane_recovery: true, used_arcane_recovery: false };
-    case 'Moine':
-      return { credo_points: level, used_credo_points: 0 };
-    case 'Paladin':
-      return { lay_on_hands: level * 5, used_lay_on_hands: 0 };
-    case 'Rôdeur':
-      return { favored_foe: Math.max(1, Math.floor((level + 3) / 4)), used_favored_foe: 0 };
-    case 'Roublard':
-      return { sneak_attack: `${Math.ceil(level / 2)}d6` };
-    default:
-      return {};
-  }
-}
+/* ===========================================================
+   Chargement "smart"
+   =========================================================== */
 
 async function loadSectionsSmart(params: { className: string; subclassName: string | null; level: number }): Promise<AbilitySection[]> {
   const { className, subclassName, level } = params;
   const clsNorm = norm(className);
   const subNorm = subclassName ? norm(subclassName) : '';
 
-  const classCandidatesBase = uniq([className, stripDiacritics(className), stripParentheses(className), sentenceCase(className)]).filter(Boolean) as string[];
-  const subclassCandidatesBase = uniq([subclassName ?? '', stripParentheses(subclassName ?? ''), stripDiacritics(subclassName ?? ''), sentenceCase(subclassName ?? '')]).filter(Boolean) as string[];
+  const classCandidatesBase = uniq([
+    className,
+    stripDiacritics(className),
+    stripParentheses(className),
+    sentenceCase(className),
+  ]).filter(Boolean) as string[];
+
+  const subclassCandidatesBase = uniq([
+    subclassName ?? '',
+    stripParentheses(subclassName ?? ''),
+    stripDiacritics(subclassName ?? ''),
+    sentenceCase(subclassName ?? ''),
+  ]).filter(Boolean) as string[];
 
   const classAlias = CLASS_ALIASES[clsNorm] ?? [];
   const subclassAlias = subNorm ? (SUBCLASS_ALIASES[subNorm] ?? []) : [];
@@ -712,17 +582,13 @@ async function loadSectionsSmart(params: { className: string; subclassName: stri
     });
   }
 
-  // 1) Essayer toutes les combinaisons (classe x sous-classe)
+  // 1) Classe + sous-classe
   for (const c of classCandidates) {
     for (const sc of subclassCandidates) {
       try {
         if (DEBUG) console.debug('[ClassesTab] loadAbilitySections try', { className: c, subclassName: sc, level });
         const res = await loadAbilitySections({ className: c, subclassName: sc, characterLevel: level });
-        let secs = (res?.sections ?? []) as AbilitySection[];
-
-        // Correctif permissif: si besoin, re-sectionner localement
-        secs = fixSectionsPermissive(secs, 'subclass');
-
+        const secs = (res?.sections ?? []) as AbilitySection[];
         if (Array.isArray(secs) && secs.length > 0) {
           if (DEBUG) console.debug('[ClassesTab] -> OK', { className: c, subclassName: sc, count: secs.length });
           return secs;
@@ -733,15 +599,12 @@ async function loadSectionsSmart(params: { className: string; subclassName: stri
     }
   }
 
-  // 2) Classe uniquement (sans sous-classe)
+  // 2) Classe seule
   for (const c of classCandidates) {
     try {
       if (DEBUG) console.debug('[ClassesTab] loadAbilitySections try (class only)', { className: c, level });
       const res = await loadAbilitySections({ className: c, subclassName: null, characterLevel: level });
-      let secs = (res?.sections ?? []) as AbilitySection[];
-
-      secs = fixSectionsPermissive(secs, 'class');
-
+      const secs = (res?.sections ?? []) as AbilitySection[];
       if (Array.isArray(secs) && secs.length > 0) {
         if (DEBUG) console.debug('[ClassesTab] -> OK (class only)', { className: c, count: secs.length });
         return secs;
@@ -755,9 +618,9 @@ async function loadSectionsSmart(params: { className: string; subclassName: stri
   return [];
 }
 
-/* =============================================================================
-   UI: cartes et rendu Markdown léger
-   ========================================================================== */
+/* ===========================================================
+   UI: cartes & rendu
+   =========================================================== */
 
 function AbilityCard({
   section,
@@ -862,300 +725,9 @@ function OriginPill({ origin }: { origin: 'class' | 'subclass' }) {
   );
 }
 
-type MarkdownCtx = {
-  characterId?: string | null;
-  className: string;
-  subclassName?: string | null;
-  checkedMap?: Map<string, boolean>;
-  onToggle?: (featureKey: string, checked: boolean) => void;
-};
-
-function MarkdownLite({ text, ctx }: { text: string; ctx: MarkdownCtx & { section: { level: number; origin: 'class' | 'subclass'; title: string } } }) {
-  const nodes = useMemo(() => parseMarkdownLite(text, ctx), [text, ctx]);
-  return <>{nodes}</>;
-}
-
-function parseMarkdownLite(
-  md: string,
-  ctx: MarkdownCtx & { section: { level: number; origin: 'class' | 'subclass'; title: string } }
-): React.ReactNode[] {
-  const lines = md.split(/\r?\n/);
-  const out: React.ReactNode[] = [];
-  let i = 0;
-  let key = 0;
-
-  const pushPara = (buff: string[]) => {
-    const content = buff.join(' ').trim();
-    if (!content) return;
-    out.push(
-      <p key={`p-${key++}`} className="text-sm">
-        {formatInline(content)}
-      </p>
-    );
-  };
-
-  while (i < lines.length) {
-    const line = lines[i];
-
-    if (!line.trim()) {
-      out.push(<div key={`sp-${key++}`} className="h-2" />);
-      i++;
-      continue;
-    }
-
-    // Séparateur horizontal --- (thème)
-    if (/^\s*---+\s*$/.test(line)) {
-      out.push(<div key={`hr-${key++}`} className="my-3 border-t border-white/10" />);
-      i++;
-      continue;
-    }
-
-    // ##### -> case à cocher persistante
-    const h5chk = line.match(/^\s*#####\s+(.*)$/);
-    if (h5chk) {
-      const rawLabel = h5chk[1];
-      const label = sentenceCase(rawLabel);
-      const featureKey = slug(`${ctx.section.level}-${ctx.section.origin}-${ctx.section.title}--${label}`);
-      const checked = ctx.checkedMap?.get(featureKey) ?? false;
-      const id = `chk-${key}`;
-
-      out.push(
-        <div key={`chk-${key++}`} className="flex items-start gap-2">
-          <input
-            id={id}
-            type="checkbox"
-            checked={checked}
-            onChange={(e) => ctx.onToggle?.(featureKey, e.currentTarget.checked)}
-            className="mt-0.5 h-4 w-4 accent-violet-500 bg-black/40 border border-white/20 rounded"
-          />
-          <label htmlFor={id} className="text-sm text-white/90">
-            {formatInline(label)}
-          </label>
-        </div>
-      );
-      i++;
-      continue;
-    }
-
-    // #### -> petit titre (small-caps)
-    const h4small = line.match(/^\s*####\s+(.*)$/);
-    if (h4small) {
-      out.push(
-        <h5
-          key={`h4s-${key++}`}
-          className="text-white font-semibold text-[13px]"
-          style={{ fontVariant: 'small-caps' }}
-        >
-          {formatInline(sentenceCase(h4small[1]))}
-        </h5>
-      );
-      i++;
-      continue;
-    }
-
-    // ### / ## / #
-    const h3 = line.match(/^\s*###\s+(.*)$/i);
-    if (h3) {
-      out.push(
-        <h4 key={`h3-${key++}`} className="text-white font-semibold text-sm sm:text-base">
-          {formatInline(sentenceCase(h3[1]))}
-        </h4>
-      );
-      i++;
-      continue;
-    }
-    const h2 = line.match(/^\s*##\s+(.*)$/i);
-    if (h2) {
-      out.push(
-        <h4 key={`h2-${key++}`} className="text-white font-semibold text-sm sm:text-base">
-          {formatInline(sentenceCase(h2[1]))}
-        </h4>
-      );
-      i++;
-      continue;
-    }
-    const h1 = line.match(/^\s*#\s+(.*)$/i);
-    if (h1) {
-      out.push(
-        <h4 key={`h1-${key++}`} className="text-white font-semibold text-sm sm:text-base">
-          {formatInline(sentenceCase(h1[1]))}
-        </h4>
-      );
-      i++;
-      continue;
-    }
-
-    // Table Markdown simple
-    if (line.includes('|')) {
-      const block: string[] = [];
-      while (i < lines.length && lines[i].includes('|')) {
-        block.push(lines[i]);
-        i++;
-      }
-      const tableNode = renderTable(block, key);
-      if (tableNode) {
-        out.push(tableNode);
-        key++;
-        continue;
-      }
-      out.push(
-        <p key={`pf-${key++}`} className="text-sm">
-          {formatInline(block.join(' '))}
-        </p>
-      );
-      continue;
-    }
-
-    // Liste à puces
-    if (/^\s*[-*]\s+/.test(line)) {
-      const items: string[] = [];
-      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
-        items.push(lines[i].replace(/^\s*[-*]\s+/, ''));
-        i++;
-      }
-      out.push(
-        <ul key={`ul-${key++}`} className="list-disc pl-5 space-y-1">
-          {items.map((it, idx) => (
-            <li key={`li-${idx}`} className="text-sm">
-              {formatInline(it)}
-            </li>
-          ))}
-        </ul>
-      );
-      continue;
-    }
-
-    // Liste ordonnée
-    if (/^\s*\d+\.\s+/.test(line)) {
-      const items: string[] = [];
-      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
-        items.push(lines[i].replace(/^\s*\d+\.\s+/, ''));
-        i++;
-      }
-      out.push(
-        <ol key={`ol-${key++}`} className="list-decimal pl-5 space-y-1">
-          {items.map((it, idx) => (
-            <li key={`oli-${idx}`} className="text-sm">
-              {formatInline(it)}
-            </li>
-          ))}
-        </ol>
-      );
-      continue;
-    }
-
-    // Paragraphe (agrège jusqu’à ligne de rupture)
-    const buff: string[] = [line];
-    i++;
-    while (
-      i < lines.length &&
-      lines[i].trim() &&
-      !/^\s*[-*]\s+/.test(lines[i]) &&
-      !/^\s*\d+\.\s+/.test(lines[i]) &&
-      !lines[i].includes('|') &&
-      !/^\s*#{1,6}\s+/.test(lines[i]) &&
-      !/^\s*---+\s*$/.test(lines[i])
-    ) {
-      buff.push(lines[i]);
-      i++;
-    }
-    pushPara(buff);
-  }
-
-  return out;
-}
-
-function renderTable(block: string[], key: number): React.ReactNode | null {
-  if (block.length < 2) return null;
-  const rows = block.map(r =>
-    r
-      .split('|')
-      .map(c => c.trim())
-      .filter((_, idx, arr) => !(idx === 0 && arr[0] === '') && !(idx === arr.length - 1 && arr[arr.length - 1] === ''))
-  );
-
-  const hasSep = rows[1] && rows[1].every(cell => /^:?-{3,}:?$/.test(cell));
-  const header = hasSep ? rows[0] : null;
-  const body = hasSep ? rows.slice(2) : rows;
-
-  return (
-    <div key={`tbl-${key}`} className="overflow-x-auto">
-      <table className="min-w-[360px] w-full text-sm border-separate border-spacing-y-1">
-        {header && (
-          <thead>
-            <tr>
-              {header.map((h, i) => (
-                <th key={`th-${i}`} className="text-left text-white font-semibold px-2 py-1 bg-white/5 rounded">
-                  {formatInline(sentenceCase(h))}
-                </th>
-              ))}
-            </tr>
-          </thead>
-        )}
-        <tbody>
-          {body.map((cells, r) => (
-            <tr key={`tr-${r}`}>
-              {cells.map((c, ci) => (
-                <td key={`td-${ci}`} className="px-2 py-1 text-white/90 bg-white/0">
-                  {formatInline(c)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// Inline: **gras**, *italique* ou _italique_
-function formatInline(text: string): React.ReactNode[] {
-  let parts: Array<string | React.ReactNode> = [text];
-
-  // Gras **...**
-  parts = splitAndMap(parts, /\*\*([^*]+)\*\*/g, (m, i) => <strong key={`b-${i}`} className="text-white">{m[1]}</strong>);
-
-  // Italique *...*
-  parts = splitAndMap(parts, /(^|[^*])\*([^*]+)\*(?!\*)/g, (m, i) => [m[1], <em key={`i-${i}`} className="italic">{m[2]}</em>]);
-
-  // Italique _..._
-  parts = splitAndMap(parts, /_([^_]+)_/g, (m, i) => <em key={`u-${i}`} className="italic">{m[1]}</em>);
-
-  return parts.map((p, i) => (typeof p === 'string' ? <React.Fragment key={`t-${i}`}>{p}</React.Fragment> : p));
-}
-
-function splitAndMap(
-  parts: Array<string | React.ReactNode>,
-  regex: RegExp,
-  toNode: (m: RegExpExecArray, idx: number) => React.ReactNode | React.ReactNode[]
-): Array<string | React.ReactNode> {
-  const out: Array<string | React.ReactNode> = [];
-
-  for (const part of parts) {
-    if (typeof part !== 'string') {
-      out.push(part);
-      continue;
-    }
-    let str = part;
-    let lastIndex = 0;
-    let m: RegExpExecArray | null;
-    const r = new RegExp(regex.source, regex.flags);
-
-    while ((m = r.exec(str)) !== null) {
-      out.push(str.slice(lastIndex, m.index));
-      const node = toNode(m, out.length);
-      if (Array.isArray(node)) out.push(...node);
-      else out.push(node);
-      lastIndex = m.index + m[0].length;
-    }
-    out.push(str.slice(lastIndex));
-  }
-  return out;
-}
-
-/* =============================================================================
+/* ===========================================================
    Ressources de classe
-   ========================================================================== */
+   =========================================================== */
 
 function ResourceEditModal({
   label,
@@ -1206,23 +778,19 @@ function ResourceBlock({
   color = 'purple',
   onDelete,
   hideEdit = false,
-  minusOnly = false,
-  minusSize = 18,
 }: {
   icon: React.ReactNode;
   label: string;
   total: number;
   used: number;
-  onUse?: () => void;
-  onRestore?: () => void;
+  onUse: () => void;
+  onRestore: () => void;
   onUpdateTotal: (newTotal: number) => void;
   onUpdateUsed?: (value: number) => void;
   useNumericInput?: boolean;
   color?: 'red' | 'purple' | 'yellow' | 'green' | 'blue';
   onDelete?: () => void;
   hideEdit?: boolean;
-  minusOnly?: boolean;
-  minusSize?: number;
 }) {
   const remaining = Math.max(0, total - used);
   const [isEditing, setIsEditing] = useState(false);
@@ -1269,15 +837,8 @@ function ResourceBlock({
       </div>
 
       {useNumericInput ? (
-        <div className="flex-1 flex items-center gap-2">
-          <input
-            type="number"
-            min="0"
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            className="input-dark flex-1 px-3 py-1 rounded-md text-center"
-            placeholder="0"
-          />
+        <div className="flex-1 flex items-center gap-1">
+          <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} className="input-dark flex-1 px-3 py-1 rounded-md text-center" placeholder="0" />
           <button
             onClick={() => {
               const value = parseInt(amount) || 0;
@@ -1288,50 +849,43 @@ function ResourceBlock({
             }}
             className="p-1 text-red-500 hover:bg-red-900/30 rounded-md transition-colors"
             title="Dépenser"
-            style={{ minWidth: 44, minHeight: 44 }}
           >
-            <Minus size={minusSize} />
+            <Minus size={18} />
           </button>
-          {!minusOnly && (
-            <button
-              onClick={() => {
-                const value = parseInt(amount) || 0;
-                if (value > 0) {
-                  onUpdateUsed?.(Math.max(0, used - value));
-                  setAmount('');
-                }
-              }}
-              className="p-1 text-green-500 hover:bg-green-900/30 rounded-md transition-colors"
-              title="Récupérer"
-            >
-              <Plus size={18} />
-            </button>
-          )}
+          <button
+            onClick={() => {
+              const value = parseInt(amount) || 0;
+              if (value > 0) {
+                onUpdateUsed?.(Math.max(0, used - value));
+                setAmount('');
+              }
+            }}
+            className="p-1 text-green-500 hover:bg-green-900/30 rounded-md transition-colors"
+            title="Récupérer"
+          >
+            <Plus size={18} />
+          </button>
         </div>
       ) : (
         <div className="flex gap-2">
-          {onUse && (
-            <button
-              onClick={onUse}
-              disabled={remaining <= 0}
-              className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
-                remaining > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
-              }`}
-            >
-              <Minus size={16} className="mx-auto" />
-            </button>
-          )}
-          {onRestore && (
-            <button
-              onClick={onRestore}
-              disabled={used <= 0}
-              className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
-                used > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
-              }`}
-            >
-              <Plus size={16} className="mx-auto" />
-            </button>
-          )}
+          <button
+            onClick={onUse}
+            disabled={remaining <= 0}
+            className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
+              remaining > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
+            }`}
+          >
+            <Minus size={16} className="mx-auto" />
+          </button>
+          <button
+            onClick={onRestore}
+            disabled={used <= 0}
+            className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
+              used > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
+            }`}
+          >
+            <Plus size={16} className="mx-auto" />
+          </button>
         </div>
       )}
 
@@ -1341,7 +895,7 @@ function ResourceBlock({
             label={`Nombre total de ${label.toLowerCase()}`}
             total={total}
             onSave={(newTotal) => {
-              onRestore && onRestore();
+              onRestore();
               onUpdateTotal(newTotal);
               setIsEditing(false);
             }}
@@ -1391,6 +945,7 @@ function ClassResourcesCard({
       break;
 
     case 'Barde': {
+      // total auto = modificateur de CHA (>= 0). Sans édition manuelle du total.
       const cap = Math.max(0, getChaModFromPlayerLike(player));
       const used = Math.min(resources.used_bardic_inspiration || 0, cap);
 
@@ -1402,7 +957,7 @@ function ClassResourcesCard({
           total={cap}
           used={used}
           onUse={() => onUpdateResource('used_bardic_inspiration', Math.min(used + 1, cap))}
-          onUpdateTotal={() => { /* no-op: pas d’édition du total */ }}
+          onUpdateTotal={() => { /* no-op */ }}
           onRestore={() => onUpdateResource('used_bardic_inspiration', Math.max(0, used - 1))}
           color="purple"
           hideEdit
@@ -1541,9 +1096,6 @@ function ClassResourcesCard({
             onUpdateUsed={(v) => onUpdateResource('used_lay_on_hands', v)}
             color="yellow"
             useNumericInput
-            hideEdit={true}
-            minusOnly={true}
-            minusSize={26}
           />
         );
       }
@@ -1599,3 +1151,38 @@ function ClassResourcesCard({
 
 export default ClassesTab;
 export { ClassesTab };
+
+/* ===========================================================
+   Helpers spécifiques
+   =========================================================== */
+
+function buildDefaultsForClass(cls: string, level: number, player?: PlayerLike | any): Partial<ClassResources> {
+  switch (cls) {
+    case 'Barbare':
+      return { rage: Math.min(6, Math.floor((level + 3) / 4) + 2), used_rage: 0 };
+    case 'Barde': {
+      // total auto géré par l’effet; on initialise juste le "used"
+      return { used_bardic_inspiration: 0 };
+    }
+    case 'Clerc':
+      return { channel_divinity: level >= 6 ? 2 : 1, used_channel_divinity: 0 };
+    case 'Druide':
+      return { wild_shape: 2, used_wild_shape: 0 };
+    case 'Ensorceleur':
+      return { sorcery_points: level, used_sorcery_points: 0 };
+    case 'Guerrier':
+      return { action_surge: level >= 17 ? 2 : 1, used_action_surge: 0 };
+    case 'Magicien':
+      return { arcane_recovery: true, used_arcane_recovery: false };
+    case 'Moine':
+      return { credo_points: level, used_credo_points: 0 };
+    case 'Paladin':
+      return { lay_on_hands: level * 5, used_lay_on_hands: 0 };
+    case 'Rôdeur':
+      return { favored_foe: Math.max(1, Math.floor((level + 3) / 4)), used_favored_foe: 0 };
+    case 'Roublard':
+      return { sneak_attack: `${Math.ceil(level / 2)}d6` };
+    default:
+      return {};
+  }
+}
