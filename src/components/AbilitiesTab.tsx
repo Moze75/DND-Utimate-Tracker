@@ -661,15 +661,8 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
         if (typeof classResources.lay_on_hands === 'number') {
           items.push(
             <ResourceBlock
-              key="lay_on_hands"
-              icon={<HandHeart size={20} />}
-              label="Imposition des mains"
-              total={classResources.lay_on_hands}
-              used={classResources.used_lay_on_hands || 0}
-              onUpdateTotal={(newTotal) => updateClassResource('lay_on_hands', newTotal)}
-              onUpdateUsed={(v) => updateClassResource('used_lay_on_hands', v)}
-              color="yellow"
-              useNumericInput
+               key="lay_on_hands"
+              
             />
           );
         }
