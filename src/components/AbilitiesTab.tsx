@@ -662,7 +662,7 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
           items.push(
             <ResourceBlock
                key="lay_on_hands"
-              
+               
             />
           );
         }
