@@ -29,7 +29,6 @@ import type { Player, SpellSlots, ClassResources, DndClass } from '../types/dnd'
 
 /* ============================ Helpers ============================ */
 
-// Emplacements de sorts “par défaut” par niveau (approche simplifiée)
 const getSpellSlotsByLevel = (playerClass: DndClass | null | undefined, level: number): SpellSlots => {
   const slots: SpellSlots = {};
   if (playerClass === 'Moine') return slots;
@@ -47,7 +46,6 @@ const getSpellSlotsByLevel = (playerClass: DndClass | null | undefined, level: n
   return slots;
 };
 
-// Lecture robuste du modificateur de Charisme
 const getChaModFromPlayer = (p: Player): number => {
   const abilities: any = (p as any)?.abilities;
 
@@ -64,7 +62,6 @@ const getChaModFromPlayer = (p: Player): number => {
   const getFromObj = (obj: any): any | null => {
     if (!obj || typeof obj !== 'object') return null;
     const keys = Object.keys(obj);
-    // cherche clé qui ressemble à charisme
     const matchKey = keys.find(k => {
       const kk = k.toLowerCase();
       return kk === 'charisme' || kk === 'charisma' || kk === 'cha' || kk === 'car';
@@ -101,10 +98,8 @@ const getChaModFromPlayer = (p: Player): number => {
   return 0;
 };
 
-// Toujours auto: total = modificateur de Charisme
 const getBardicCap = (player: Player): number => getChaModFromPlayer(player);
 
-// Valeurs par défaut — on ne stocke pas le total d'inspi bardique (auto), on borne seulement "used"
 const getDefaultClassResources = (player: Player): ClassResources => {
   const level = Number(player.level) || 1;
   const cls = player.class as DndClass | null | undefined;
@@ -120,7 +115,6 @@ const getDefaultClassResources = (player: Player): ClassResources => {
       const cap = getBardicCap(player);
       const upper = Math.max(0, cap);
       resources.used_bardic_inspiration = Math.min(resources.used_bardic_inspiration || 0, upper);
-      // Ne pas écrire resources.bardic_inspiration: total = auto
       break;
     }
 
@@ -205,17 +199,15 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
     modifier: number;
   } | null>(null);
 
-  // Si classe/niveau change: réinit slots + ressources
   useEffect(() => {
     if (player.class !== previousClass || player.level !== previousLevel) {
       setPreviousClass(player.class);
       setPreviousLevel(player.level);
       initializeResources();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player.class, player.level]);
 
-  // Bard: recadre used_bardic_inspiration si le cap auto change
+  // Bard: clamp used_bardic_inspiration if cap auto changes
   const lastClampKey = useRef<string | null>(null);
   useEffect(() => {
     if (player.class !== 'Barde' || !player?.id) return;
@@ -250,10 +242,8 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
     player?.id,
     player?.class,
     player?.class_resources?.used_bardic_inspiration,
-    player.abilities, // mod CHA
+    player.abilities,
   ]);
-
-  /* -------------------- Sorts: emplacements -------------------- */
 
   const handleSpellSlotChange = async (level: number, used: boolean) => {
     if (!player.spell_slots) return;
@@ -413,12 +403,9 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
     );
   };
 
-  /* -------------------- Ressources de classe -------------------- */
-
   const updateClassResource = async (resource: keyof ClassResources, value: number | boolean) => {
     let nextResources: ClassResources = { ...(player.class_resources || {}) };
 
-    // Inspiration bardique: borne "used" sur cap auto, ne pas écrire de total
     if (resource === 'used_bardic_inspiration' && typeof value === 'number') {
       const cap = getBardicCap(player);
       const upper = Math.max(0, cap);
@@ -519,7 +506,6 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
         break;
 
       case 'Barde': {
-        // Total strictement = modificateur de Charisme (auto)
         const total = getBardicCap(player);
         const upper = Math.max(0, total);
         const used = Math.min(classResources.used_bardic_inspiration || 0, upper);
@@ -532,10 +518,10 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
             total={total}
             used={used}
             onUse={() => updateClassResource('used_bardic_inspiration', used + 1)}
-            onUpdateTotal={() => {}} // pas d'édition du total (pas d'override)
+            onUpdateTotal={() => {}}
             onRestore={() => updateClassResource('used_bardic_inspiration', Math.max(0, used - 1))}
             color="purple"
-            hideEdit // supprime la roue "paramètres"
+            hideEdit
           />
         );
         break;
@@ -661,8 +647,18 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
         if (typeof classResources.lay_on_hands === 'number') {
           items.push(
             <ResourceBlock
-               key="lay_on_hands"
-               
+              key="lay_on_hands"
+              icon={<HandHeart size={20} />}
+              label="Imposition des mains"
+              total={classResources.lay_on_hands}
+              used={classResources.used_lay_on_hands || 0}
+              onUpdateTotal={(newTotal) => updateClassResource('lay_on_hands', newTotal)}
+              onUpdateUsed={(v) => updateClassResource('used_lay_on_hands', v)}
+              color="yellow"
+              useNumericInput
+              hideEdit={true}
+              minusOnly={true}
+              minusSize={26}
             />
           );
         }
@@ -720,13 +716,8 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
 
   return (
     <div className="space-y-8">
-      {/* Sorts connus */}
       <KnownSpellsSection player={player} onUpdate={onUpdate} />
-
-      {/* Emplacements de sorts */}
       {renderSpellSlots()}
-
-      {/* Grimoire */}
       <div className="stats-card">
         <div className="stat-header flex items-center gap-3">
           <Book className="w-5 h-5 text-blue-500" />
@@ -742,11 +733,7 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
           </button>
         </div>
       </div>
-
-      {/* Ressources de classe */}
       {renderClassResources()}
-
-      {/* Modals */}
       {showSpellbook && (
         <SpellbookModal
           isOpen={showSpellbook}
@@ -754,7 +741,6 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
           playerClass={player.class}
         />
       )}
-
       {showSpellSlotModal && spellSlotModalData && (
         <SpellSlotSelectionModal
           isOpen={showSpellSlotModal}
@@ -827,19 +813,23 @@ function ResourceBlock({
   color = 'purple',
   onDelete,
   hideEdit = false,
+  minusOnly = false,
+  minusSize = 18,
 }: {
   icon: React.ReactNode;
   label: string;
   total: number;
   used: number;
-  onUse: () => void;
-  onRestore: () => void;
+  onUse?: () => void;
+  onRestore?: () => void;
   onUpdateTotal: (newTotal: number) => void;
   onUpdateUsed?: (value: number) => void;
   useNumericInput?: boolean;
   color?: 'red' | 'purple' | 'yellow' | 'green' | 'blue';
   onDelete?: () => void;
   hideEdit?: boolean;
+  minusOnly?: boolean;
+  minusSize?: number;
 }) {
   const remaining = Math.max(0, total - used);
   const [isEditing, setIsEditing] = useState(false);
@@ -886,7 +876,7 @@ function ResourceBlock({
       </div>
 
       {useNumericInput ? (
-        <div className="flex-1 flex items-center gap-1">
+        <div className="flex-1 flex items-center gap-2">
           <input
             type="number"
             min="0"
@@ -905,22 +895,25 @@ function ResourceBlock({
             }}
             className="p-1 text-red-500 hover:bg-red-900/30 rounded-md transition-colors"
             title="Dépenser"
+            style={{ minWidth: 44, minHeight: 44 }}
           >
-            <Minus size={18} />
+            <Minus size={minusSize} />
           </button>
-          <button
-            onClick={() => {
-              const value = parseInt(amount) || 0;
-              if (value > 0) {
-                onUpdateUsed?.(Math.max(0, used - value));
-                setAmount('');
-              }
-            }}
-            className="p-1 text-green-500 hover:bg-green-900/30 rounded-md transition-colors"
-            title="Récupérer"
-          >
-            <Plus size={18} />
-          </button>
+          {!minusOnly && (
+            <button
+              onClick={() => {
+                const value = parseInt(amount) || 0;
+                if (value > 0) {
+                  onUpdateUsed?.(Math.max(0, used - value));
+                  setAmount('');
+                }
+              }}
+              className="p-1 text-green-500 hover:bg-green-900/30 rounded-md transition-colors"
+              title="Récupérer"
+            >
+              <Plus size={18} />
+            </button>
+          )}
         </div>
       ) : (
         <div className="flex gap-2">
@@ -951,7 +944,7 @@ function ResourceBlock({
             label={`Nombre total de ${label.toLowerCase()}`}
             total={total}
             onSave={(newTotal) => {
-              onRestore(); // reset “used”
+              onRestore && onRestore();
               onUpdateTotal(newTotal);
               setIsEditing(false);
             }}
