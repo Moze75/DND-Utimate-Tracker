@@ -4,7 +4,7 @@ import { supabase } from './lib/supabase';
 import type { Player } from './types/dnd';
 import { InstallPrompt } from './components/InstallPrompt';
 
-const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter';
+const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter'; // conserve la même clé qu'avant
 const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
 
 function App() {
@@ -17,7 +17,7 @@ function App() {
   const [CharacterSelectionPage, setCharacterSelectionPage] = useState<React.ComponentType<any> | null>(null);
   const [GamePage, setGamePage] = useState<React.ComponentType<any> | null>(null);
 
-  // Charger dynamiquement les pages avec fallback sur export default pour éviter le chargement infini
+  // Charger dynamiquement les pages (exports nommés)
   useEffect(() => {
     const loadComponents = async () => {
       try {
@@ -25,21 +25,9 @@ function App() {
         const characterSelectionModule = await import('./pages/CharacterSelectionPage');
         const gamePageModule = await import('./pages/GamePage');
 
-        const LoginComp =
-          (loginModule as any).LoginPage ??
-          (loginModule as any).default;
-
-        const CharacterSelectionComp =
-          (characterSelectionModule as any).CharacterSelectionPage ??
-          (characterSelectionModule as any).default;
-
-        const GameComp =
-          (gamePageModule as any).GamePage ??
-          (gamePageModule as any).default;
-
-        setLoginPage(() => LoginComp);
-        setCharacterSelectionPage(() => CharacterSelectionComp);
-        setGamePage(() => GameComp);
+        setLoginPage(() => loginModule.LoginPage);
+        setCharacterSelectionPage(() => characterSelectionModule.CharacterSelectionPage);
+        setGamePage(() => gamePageModule.GamePage);
       } catch (error) {
         console.error('Erreur lors du chargement des composants:', error);
       }
@@ -57,7 +45,7 @@ function App() {
         setSession(current);
 
         if (current) {
-          // Respecte le choix utilisateur de rester sur l'écran de sélection (flag one-shot)
+          // Respecter le choix utilisateur de rester sur l'écran de sélection (flag one-shot)
           if (sessionStorage.getItem(SKIP_AUTO_RESUME_ONCE) === '1') {
             sessionStorage.removeItem(SKIP_AUTO_RESUME_ONCE);
           } else {
@@ -71,7 +59,7 @@ function App() {
             }
           }
         } else {
-          // Pas de session -> on s’assure de ne pas garder un personnage sélectionné
+          // Pas de session -> purger la sélection en mémoire (on nettoie aussi le stockage côté onAuthStateChange)
           setSelectedCharacter(null);
         }
       } finally {
@@ -127,12 +115,17 @@ function App() {
   }, [selectedCharacter]);
 
   // Sauvegarder le personnage sélectionné dans localStorage (snapshot complet)
+  // IMPORTANT: on ne supprime plus le snapshot quand selectedCharacter redevient null
+  // (cela permet la reprise auto ultérieure), on le supprime seulement à la déconnexion.
   useEffect(() => {
     if (selectedCharacter) {
-      localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(selectedCharacter));
-    } else {
-      localStorage.removeItem(LAST_SELECTED_CHARACTER_SNAPSHOT);
+      try {
+        localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(selectedCharacter));
+      } catch {
+        // no-op
+      }
     }
+    // Intentionnellement aucun "else" ici pour NE PAS effacer le snapshot lors d'un simple retour à la sélection
   }, [selectedCharacter]);
 
   // Écran de chargement des composants dynamiques
@@ -198,7 +191,7 @@ function App() {
           session={session}
           selectedCharacter={selectedCharacter}
           onBackToSelection={() => {
-            // Empêche l'auto-resume une fois, quand l'utilisateur revient volontairement à la sélection
+            // Empêche l'auto-resume UNE FOIS, quand l'utilisateur revient volontairement à la sélection
             try {
               sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1');
             } catch {
