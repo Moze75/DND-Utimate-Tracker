@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { LogOut } from 'lucide-react';
 
@@ -42,6 +42,9 @@ export function GamePage({
 
   const [inventory, setInventory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('combat');
+
+  // Pour ne pas remettre le spinner en boucle: on ne ré-initialise que si l'ID change
+  const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
   // Centralise toutes les mises à jour du joueur
   const applyPlayerUpdate = useCallback(
@@ -97,6 +100,7 @@ export function GamePage({
     };
   }, [currentPlayer]);
 
+  // Initialisation: ne se relance que quand l'ID change (pas à chaque modification de champ)
   useEffect(() => {
     const initialize = async () => {
       try {
@@ -108,7 +112,7 @@ export function GamePage({
           throw new Error('Impossible de se connecter à la base de données');
         }
 
-        // Ne pas écraser l'état si on reste sur le même perso
+        // Si on reste sur le même perso, ne pas écraser l'état local
         setCurrentPlayer((prev) =>
           prev && prev.id === selectedCharacter.id ? prev : selectedCharacter
         );
@@ -124,8 +128,19 @@ export function GamePage({
       }
     };
 
-    initialize();
-  }, [selectedCharacter.id, selectedCharacter]);
+    // Ne relancer init que si l'ID a changé
+    if (prevPlayerId.current !== selectedCharacter.id) {
+      prevPlayerId.current = selectedCharacter.id;
+      initialize();
+    } else {
+      // Première montée: prev est null ou différent? Si c'est la toute première fois, on initialise
+      if (loading) {
+        initialize();
+      }
+      // Sinon, ne rien faire (évite le "saut" lors d'une simple mise à jour de valeur)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCharacter.id]); // dépend seulement de l'ID
 
   const handleBackToSelection = () => {
     try {
