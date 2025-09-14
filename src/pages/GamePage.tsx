@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { testConnection } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { Player } from '../types/dnd';
@@ -15,42 +15,28 @@ import { PlayerContext } from '../contexts/PlayerContext';
 import { inventoryService } from '../services/inventoryService';
 import { authService } from '../services/authService';
 
+type Currency = 'gold' | 'silver' | 'copper';
+type Money = Record<Currency, number>;
+
 interface GamePageProps {
   session: any;
   selectedCharacter: Player;
   onBackToSelection: () => void;
-  // Optionnel: si non fourni, on ne remonte pas au parent (pas de “recharge”)
-  onUpdateCharacter?: (player: Player) => void;
+  // On ne remonte plus les updates au parent pour éviter les remounts intempestifs
+  // onUpdateCharacter?: (player: Player) => void;
 }
 
-export function GamePage({ session, selectedCharacter, onBackToSelection, onUpdateCharacter }: GamePageProps) {
+export function GamePage({ session, selectedCharacter, onBackToSelection }: GamePageProps) {
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(selectedCharacter);
   const [inventory, setInventory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('combat');
 
-  // Debounce pour éviter de spam le parent et provoquer des remounts
-  const parentUpdateTimer = useRef<number | null>(null);
-  const scheduleParentUpdate = useCallback((updatedPlayer: Player) => {
-    if (typeof onUpdateCharacter !== 'function') return;
-    if (parentUpdateTimer.current) {
-      window.clearTimeout(parentUpdateTimer.current);
-    }
-    parentUpdateTimer.current = window.setTimeout(() => {
-      try {
-        onUpdateCharacter(updatedPlayer);
-      } catch (e) {
-        console.warn('[GamePage] onUpdateCharacter a levé une erreur:', e);
-      }
-    }, 250);
-  }, [onUpdateCharacter]);
-
-  // Helper central: met à jour localement, et remonte au parent (debounce) si dispo
+  // Source de vérité locale: toute mise à jour passe par ici
   const applyPlayerUpdate = useCallback((updatedPlayer: Player) => {
     setCurrentPlayer(updatedPlayer);
-    scheduleParentUpdate(updatedPlayer);
-  }, [scheduleParentUpdate]);
+  }, []);
 
   useEffect(() => {
     const initialize = async () => {
@@ -63,7 +49,7 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
           throw new Error('Impossible de se connecter à la base de données');
         }
 
-        // Ne pas écraser l’état si c’est le même personnage
+        // Ne pas écraser l'état si on reste sur le même perso
         setCurrentPlayer(prev => (prev && prev.id === selectedCharacter.id ? prev : selectedCharacter));
 
         const inventoryData = await inventoryService.getPlayerInventory(selectedCharacter.id);
@@ -77,18 +63,10 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
       }
     };
 
-    // Critique: dépendre de l'ID uniquement évite de se réinitialiser à chaque micro-maj
+    // Critique: dépendre uniquement de l'ID évite les réinit sur micro-updates
     initialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, selectedCharacter.id]);
-
-  useEffect(() => {
-    return () => {
-      if (parentUpdateTimer.current) {
-        window.clearTimeout(parentUpdateTimer.current);
-      }
-    };
-  }, []);
 
   const handleSignOut = async () => {
     try {
@@ -147,9 +125,9 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
         {currentPlayer && (
           <>
             <PlayerContext.Provider value={currentPlayer}>
-              <PlayerProfile
-                player={currentPlayer}
-                onUpdate={applyPlayerUpdate}
+              <PlayerProfile 
+                player={currentPlayer} 
+                onUpdate={applyPlayerUpdate} 
               />
 
               <TabNavigation
@@ -159,7 +137,7 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
 
               {activeTab === 'combat' && (
                 <CombatTab
-                  player={currentPlayer}
+                  player={currentPlayer} 
                   onUpdate={applyPlayerUpdate}
                 />
               )}
@@ -180,7 +158,7 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
 
               {activeTab === 'equipment' && (
                 <EquipmentTab
-                  player={currentPlayer}
+                  player={currentPlayer} 
                   inventory={inventory}
                   onPlayerUpdate={applyPlayerUpdate}
                   onInventoryUpdate={setInventory}
@@ -197,7 +175,7 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
           </>
         )}
       </div>
-
+      
       <div className="w-full max-w-md mx-auto mt-6 px-4">
         <button
           onClick={handleSignOut}
