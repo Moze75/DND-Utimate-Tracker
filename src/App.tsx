@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
 import { supabase } from './lib/supabase';
 import type { Player } from './types/dnd';
 import { InstallPrompt } from './components/InstallPrompt';
@@ -17,14 +17,10 @@ function App() {
   const [CharacterSelectionPage, setCharacterSelectionPage] = useState<React.ComponentType<any> | null>(null);
   const [GamePage, setGamePage] = useState<React.ComponentType<any> | null>(null);
 
-  // Popup de confirmation pour quitter l'app (depuis la racine login/sélection)
-  const [showExitConfirm, setShowExitConfirm] = useState(false);
-
   // Refs pour le handler "back"
+  const backPressRef = useRef<number>(0);
   const sessionRef = useRef<any>(null);
   const selectedCharacterRef = useRef<Player | null>(null);
-  const showExitConfirmRef = useRef<boolean>(false);
-  const onPopStateRef = useRef<((ev: PopStateEvent) => void) | null>(null);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -33,10 +29,6 @@ function App() {
   useEffect(() => {
     selectedCharacterRef.current = selectedCharacter;
   }, [selectedCharacter]);
-
-  useEffect(() => {
-    showExitConfirmRef.current = showExitConfirm;
-  }, [showExitConfirm]);
 
   // Charger dynamiquement les pages (exports nommés)
   useEffect(() => {
@@ -149,34 +141,18 @@ function App() {
     }
   }, [selectedCharacter]);
 
-  // Helpers historique
-  const pushSentinel = (times = 1) => {
+  // Gestion du bouton "retour" Android / navigateur:
+  // - Si on est en jeu, "retour" ramène à la sélection du personnage.
+  // - Sinon, activer "double appui pour quitter" (2e pression dans les 1.5s).
+  useEffect(() => {
     try {
-      for (let i = 0; i < times; i++) {
-        window.history.pushState({ ut: 'keepalive' }, '');
-      }
+      window.history.pushState({ ut: 'keepalive' }, '');
     } catch {
       // no-op
     }
-  };
-
-  // Gestion du bouton "retour" Android / navigateur (robuste PWA):
-  // - Armer 2 entrées au montage pour garantir un popstate capturable.
-  // - En jeu: retour => revenir à la sélection (comme votre version).
-  // - Racine (login/sélection): ouvrir un popup "Quitter l'application ?".
-  // - Popup ouvert: un retour ferme le popup.
-  useEffect(() => {
-    pushSentinel(2);
 
     const onPopState = (_ev: PopStateEvent) => {
-      // 1) Si le popup "Quitter" est ouvert -> le fermer
-      if (showExitConfirmRef.current) {
-        setShowExitConfirm(false);
-        pushSentinel(1);
-        return;
-      }
-
-      // 2) Si on est en jeu -> revenir à la sélection
+      // 1) En jeu -> retour interne à la sélection
       if (sessionRef.current && selectedCharacterRef.current) {
         try {
           sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1');
@@ -184,50 +160,37 @@ function App() {
           // no-op
         }
         setSelectedCharacter(null);
-        pushSentinel(1);
+        // Ré-armer l'entrée d'historique pour capturer le prochain "retour"
+        try {
+          window.history.pushState({ ut: 'keepalive' }, '');
+        } catch {
+          // no-op
+        }
         return;
       }
 
-      // 3) À la racine -> afficher le popup de confirmation de sortie
-      setShowExitConfirm(true);
-      pushSentinel(1);
+      // 2) À la racine (login ou sélection) -> double appui pour quitter
+      const now = Date.now();
+      if (now - (backPressRef.current ?? 0) < 1500) {
+        // Laisser quitter: enlever l'écouteur et effectuer un back supplémentaire
+        window.removeEventListener('popstate', onPopState);
+        window.history.back();
+      } else {
+        backPressRef.current = now;
+        toast('Appuyez à nouveau pour quitter', { icon: '↩️' });
+        try {
+          window.history.pushState({ ut: 'keepalive' }, '');
+        } catch {
+          // no-op
+        }
+      }
     };
 
-    onPopStateRef.current = onPopState;
     window.addEventListener('popstate', onPopState);
     return () => {
       window.removeEventListener('popstate', onPopState);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const confirmExitApp = () => {
-    setShowExitConfirm(false);
-    // Retirer l'écouteur avant de remonter l'historique pour laisser Android fermer l'app
-    const handler = onPopStateRef.current;
-    if (handler) {
-      try {
-        window.removeEventListener('popstate', handler);
-      } catch {
-        // no-op
-      }
-    }
-    // Remonter largement dans l'historique pour "sortir" de l'app/PWA
-    try {
-      window.history.go(-999);
-    } catch {
-      try {
-        window.history.back();
-      } catch {
-        // no-op
-      }
-    }
-  };
-
-  const cancelExitApp = () => {
-    setShowExitConfirm(false);
-    pushSentinel(1);
-  };
 
   // Écran de chargement des composants dynamiques
   if (!LoginPage || !CharacterSelectionPage || !GamePage) {
@@ -308,37 +271,6 @@ function App() {
             }
           }}
         />
-      )}
-
-      {/* Popup de confirmation de sortie (depuis login/sélection) */}
-      {showExitConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={cancelExitApp} />
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="relative z-10 w-11/12 max-w-sm rounded-lg bg-zinc-800 p-5 text-white shadow-lg"
-          >
-            <h2 className="text-lg font-semibold mb-2">Quitter l’application ?</h2>
-            <p className="text-sm text-zinc-300 mb-4">
-              Voulez-vous fermer l’application et revenir à l’écran d’accueil Android ?
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={cancelExitApp}
-                className="px-3 py-2 rounded bg-zinc-700 hover:bg-zinc-600"
-              >
-                Rester
-              </button>
-              <button
-                onClick={confirmExitApp}
-                className="px-3 py-2 rounded bg-red-600 hover:bg-red-500"
-              >
-                Quitter
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </>
   );
