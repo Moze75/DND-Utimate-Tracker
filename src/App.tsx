@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Toaster } from 'react-hot-toast';
 import { supabase } from './lib/supabase';
-import toast, { Toaster } from 'react-hot-toast';
-import { Player } from './types/dnd';
+import type { Player } from './types/dnd';
 import { InstallPrompt } from './components/InstallPrompt';
 
 function App() {
@@ -14,16 +14,7 @@ function App() {
   const [CharacterSelectionPage, setCharacterSelectionPage] = useState<React.ComponentType<any> | null>(null);
   const [GamePage, setGamePage] = useState<React.ComponentType<any> | null>(null);
 
-  // 🔑 Sauvegarder le personnage sélectionné dans localStorage
-  useEffect(() => {
-    if (selectedCharacter) {
-      localStorage.setItem('selectedCharacter', JSON.stringify(selectedCharacter));
-    } else {
-      localStorage.removeItem('selectedCharacter');
-    }
-  }, [selectedCharacter]);
-
-  // 🔄 Import dynamique des pages
+  // Charger dynamiquement les pages
   useEffect(() => {
     const loadComponents = async () => {
       try {
@@ -42,71 +33,84 @@ function App() {
     loadComponents();
   }, []);
 
-  // 🔄 Initialisation session + restauration personnage
+  // Initialisation session + restauration du personnage si session présente
   useEffect(() => {
     const initSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session) setSession(data.session);
+      try {
+        const { data } = await supabase.auth.getSession();
+        const current = data?.session ?? null;
+        setSession(current);
 
-      const savedChar = localStorage.getItem('selectedCharacter');
-      if (savedChar) {
-        try {
-          setSelectedCharacter(JSON.parse(savedChar));
-        } catch (e) {
-          console.error('Erreur parsing selectedCharacter:', e);
+        if (current) {
+          const savedChar = localStorage.getItem('selectedCharacter');
+          if (savedChar) {
+            try {
+              setSelectedCharacter(JSON.parse(savedChar));
+            } catch (e) {
+              console.error('Erreur parsing selectedCharacter:', e);
+            }
+          }
+        } else {
+          // Pas de session -> on s’assure de ne pas garder un personnage sélectionné
+          setSelectedCharacter(null);
         }
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     initSession();
+  }, []);
 
-    // 🔄 Écoute des changements d’auth
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+  // Écoute des changements d’état d’authentification
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
+      setSession(newSession);
+
       if (!newSession) {
-        // Tentative de refresh silencieux
-        setRefreshingSession(true);
-        const { data } = await supabase.auth.getSession();
-        if (data?.session) {
-          setSession(data.session);
-        } else {
-          // On ne reset pas l'UI, juste prévenir l'utilisateur
-          toast.error('Session expirée, reconnexion en cours...');
-          setSession(null); // facultatif, selon si tu veux bloquer certaines actions
-        }
-        setRefreshingSession(false);
+        // Déconnexion -> purger la sélection et le stockage local
+        setSelectedCharacter(null);
+        localStorage.removeItem('selectedCharacter');
       } else {
-        setSession(newSession);
+        // À la connexion (ou refresh), si aucun personnage sélectionné, tenter une restauration
+        if (!selectedCharacter) {
+          const savedChar = localStorage.getItem('selectedCharacter');
+          if (savedChar) {
+            try {
+              setSelectedCharacter(JSON.parse(savedChar));
+            } catch (e) {
+              console.error('Erreur parsing selectedCharacter (auth change):', e);
+            }
+          }
+        }
+      }
+
+      // Feedback visuel léger lors d’un refresh de token
+      if (event === 'TOKEN_REFRESHED') {
+        setRefreshingSession(true);
+        setTimeout(() => setRefreshingSession(false), 1200);
       }
     });
 
-    // 🔄 Listener pour restaurer session quand l'onglet redevient actif
-    const handleVisibility = async () => {
-      if (document.visibilityState === "visible") {
-        const { data } = await supabase.auth.getSession();
-        if (data?.session) setSession(data.session);
+    return () => {
+      try {
+        sub.subscription.unsubscribe();
+      } catch {
+        // no-op
       }
     };
-    document.addEventListener("visibilitychange", handleVisibility);
+  }, [selectedCharacter]);
 
-    return () => {
-      subscription?.subscription?.unsubscribe();
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, []);
+  // Sauvegarder le personnage sélectionné dans localStorage
+  useEffect(() => {
+    if (selectedCharacter) {
+      localStorage.setItem('selectedCharacter', JSON.stringify(selectedCharacter));
+    } else {
+      localStorage.removeItem('selectedCharacter');
+    }
+  }, [selectedCharacter]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto" />
-          <p className="text-gray-400">Restauration de la session...</p>
-        </div>
-      </div>
-    );
-  }
-
+  // Écran de chargement des composants dynamiques
   if (!LoginPage || !CharacterSelectionPage || !GamePage) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -118,12 +122,31 @@ function App() {
     );
   }
 
+  // Écran de chargement initial (session)
+  if (loading) {
+    return (
+      <>
+        <Toaster position="top-right" />
+        <InstallPrompt />
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto" />
+            <p className="text-gray-400">Chargement en cours...</p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // Rendu avec ordre correct:
+  // 1) Pas de session -> Login
+  // 2) Session sans personnage -> Sélection
+  // 3) Session + personnage -> Jeu
   return (
     <>
       <Toaster position="top-right" />
       <InstallPrompt />
 
-      {/* 🔔 Bandeau session expirée */}
       {refreshingSession && (
         <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-black text-center py-2 z-50">
           Tentative de reconnexion...
@@ -131,18 +154,7 @@ function App() {
       )}
 
       {!session ? (
-        !selectedCharacter ? (
-          <CharacterSelectionPage
-            session={session}
-            onCharacterSelect={setSelectedCharacter}
-          />
-        ) : (
-          <GamePage
-            session={session}
-            selectedCharacter={selectedCharacter}
-            onBackToSelection={() => setSelectedCharacter(null)}
-          />
-        )
+        <LoginPage />
       ) : !selectedCharacter ? (
         <CharacterSelectionPage
           session={session}
@@ -153,6 +165,7 @@ function App() {
           session={session}
           selectedCharacter={selectedCharacter}
           onBackToSelection={() => setSelectedCharacter(null)}
+          onUpdateCharacter={(p: Player) => setSelectedCharacter(p)}
         />
       )}
     </>
