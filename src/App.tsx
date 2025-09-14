@@ -17,10 +17,14 @@ function App() {
   const [CharacterSelectionPage, setCharacterSelectionPage] = useState<React.ComponentType<any> | null>(null);
   const [GamePage, setGamePage] = useState<React.ComponentType<any> | null>(null);
 
+  // État pour la confirmation de retour depuis la page Jeu
+  const [showBackConfirm, setShowBackConfirm] = useState(false);
+
   // Refs pour le handler "back"
   const backPressRef = useRef<number>(0);
   const sessionRef = useRef<any>(null);
   const selectedCharacterRef = useRef<Player | null>(null);
+  const showBackConfirmRef = useRef<boolean>(false);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -29,6 +33,10 @@ function App() {
   useEffect(() => {
     selectedCharacterRef.current = selectedCharacter;
   }, [selectedCharacter]);
+
+  useEffect(() => {
+    showBackConfirmRef.current = showBackConfirm;
+  }, [showBackConfirm]);
 
   // Charger dynamiquement les pages (exports nommés)
   useEffect(() => {
@@ -142,8 +150,9 @@ function App() {
   }, [selectedCharacter]);
 
   // Gestion du bouton "retour" Android / navigateur:
-  // - Si on est en jeu, "retour" ramène à la sélection du personnage.
-  // - Sinon, activer "double appui pour quitter" (2e pression dans les 1.5s).
+  // - Si on est en jeu, afficher un popup de confirmation pour revenir à la sélection.
+  // - Si le popup est déjà ouvert, un retour le ferme.
+  // - À la racine (login/sélection), activer "double appui pour quitter".
   useEffect(() => {
     try {
       window.history.pushState({ ut: 'keepalive' }, '');
@@ -152,14 +161,20 @@ function App() {
     }
 
     const onPopState = (_ev: PopStateEvent) => {
-      // 1) En jeu -> retour interne à la sélection
-      if (sessionRef.current && selectedCharacterRef.current) {
+      // Si le popup est ouvert -> fermer le popup
+      if (showBackConfirmRef.current) {
+        setShowBackConfirm(false);
         try {
-          sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1');
+          window.history.pushState({ ut: 'keepalive' }, '');
         } catch {
           // no-op
         }
-        setSelectedCharacter(null);
+        return;
+      }
+
+      // Si on est en jeu -> demander confirmation
+      if (sessionRef.current && selectedCharacterRef.current) {
+        setShowBackConfirm(true);
         // Ré-armer l'entrée d'historique pour capturer le prochain "retour"
         try {
           window.history.pushState({ ut: 'keepalive' }, '');
@@ -169,10 +184,9 @@ function App() {
         return;
       }
 
-      // 2) À la racine (login ou sélection) -> double appui pour quitter
+      // À la racine (login/sélection) -> double appui pour quitter
       const now = Date.now();
       if (now - (backPressRef.current ?? 0) < 1500) {
-        // Laisser quitter: enlever l'écouteur et effectuer un back supplémentaire
         window.removeEventListener('popstate', onPopState);
         window.history.back();
       } else {
@@ -191,6 +205,31 @@ function App() {
       window.removeEventListener('popstate', onPopState);
     };
   }, []);
+
+  const confirmReturnToSelection = () => {
+    try {
+      sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1');
+    } catch {
+      // no-op
+    }
+    setShowBackConfirm(false);
+    setSelectedCharacter(null);
+    // Ré-armer l'historique pour la suite
+    try {
+      window.history.pushState({ ut: 'keepalive' }, '');
+    } catch {
+      // no-op
+    }
+  };
+
+  const cancelReturnToSelection = () => {
+    setShowBackConfirm(false);
+    try {
+      window.history.pushState({ ut: 'keepalive' }, '');
+    } catch {
+      // no-op
+    }
+  };
 
   // Écran de chargement des composants dynamiques
   if (!LoginPage || !CharacterSelectionPage || !GamePage) {
@@ -271,6 +310,37 @@ function App() {
             }
           }}
         />
+      )}
+
+      {/* Popup de confirmation retour vers la page personnages */}
+      {showBackConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={cancelReturnToSelection} />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative z-10 w-11/12 max-w-sm rounded-lg bg-zinc-800 p-5 text-white shadow-lg"
+          >
+            <h2 className="text-lg font-semibold mb-2">Revenir aux personnages ?</h2>
+            <p className="text-sm text-zinc-300 mb-4">
+              Souhaitez-vous revenir à la page des personnages ? Votre progression est sauvegardée automatiquement.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={cancelReturnToSelection}
+                className="px-3 py-2 rounded bg-zinc-700 hover:bg-zinc-600"
+              >
+                Rester
+              </button>
+              <button
+                onClick={confirmReturnToSelection}
+                className="px-3 py-2 rounded bg-red-600 hover:bg-red-500"
+              >
+                Revenir
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
