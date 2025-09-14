@@ -1,17 +1,69 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Player } from '../types/dnd';
+import type { Player } from '../types/dnd';
+import { supabase } from '../lib/supabase';
 import { playerService } from '../services/playerService';
 
 const LAST_SELECTED_CHARACTER_ID = 'ut:lastCharacterId';
-const LAST_SELECTED_CHARACTER_SNAPSHOT = 'ut:lastCharacterSnapshot';
+const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter'; // aligne avec App.tsx
 const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
 
 interface CharacterSelectionPageProps {
-  onSelect: (player: Player) => void;
+  session: any;
+  onCharacterSelect: (player: Player) => void;
 }
 
-export default function CharacterSelectionPage({ onSelect }: CharacterSelectionPageProps) {
+async function loadViaPlayerService(session: any): Promise<Player[]> {
+  const svc: any = playerService as any;
+  // Essaie en priorité des méthodes usuelles
+  try {
+    if (svc?.getMyPlayers) return await svc.getMyPlayers();
+    if (svc?.listMyPlayers) return await svc.listMyPlayers();
+    if (svc?.listMine) return await svc.listMine();
+    if (svc?.getOwnedPlayers) return await svc.getOwnedPlayers();
+    if (svc?.listByUser && session?.user?.id) return await svc.listByUser(session.user.id);
+  } catch (e) {
+    console.warn('[CharacterSelection] playerService error:', e);
+  }
+  return [];
+}
+
+async function loadViaSupabase(session: any): Promise<Player[]> {
+  const uid = session?.user?.id;
+  if (!uid) return [];
+
+  // On essaye plusieurs colonnes possibles pour référencer le propriétaire
+  const ownerColumns = ['user_id', 'owner_id', 'created_by', 'owner'];
+  for (const col of ownerColumns) {
+    const { data, error } = await supabase.from('players').select('*').eq(col, uid);
+    if (error) {
+      // 42P01 = table inconnue: on continue la boucle
+      console.warn(`[CharacterSelection] Supabase query error on col "${col}":`, error);
+      continue;
+    }
+    if (Array.isArray(data) && data.length > 0) {
+      return data as Player[];
+    }
+  }
+
+  // Dernier recours: on récupère tout (si les colonnes ne matchent pas), puis on filtre côté client si un champ userId-like existe
+  const { data: all, error: allErr } = await supabase.from('players').select('*');
+  if (allErr) {
+    console.warn('[CharacterSelection] Supabase fallback all error:', allErr);
+    return [];
+  }
+  const rows = Array.isArray(all) ? (all as any[]) : [];
+  const filtered = rows.filter((p) => {
+    const candidates = [p.user_id, p.owner_id, p.created_by, p.owner, p.userId, p.ownerId];
+    return candidates.some((v) => v === uid);
+  });
+  return (filtered.length > 0 ? filtered : rows) as Player[];
+}
+
+export const CharacterSelectionPage: React.FC<CharacterSelectionPageProps> = ({
+  session,
+  onCharacterSelect,
+}) => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,46 +74,30 @@ export default function CharacterSelectionPage({ onSelect }: CharacterSelectionP
     []
   );
 
-  // Helper robuste pour charger la liste des personnages de l'utilisateur
-  const loadPlayers = async (): Promise<Player[]> => {
-    const svc: any = playerService as any;
+  const loadPlayers = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      if (svc?.getMyPlayers) return await svc.getMyPlayers();
-      if (svc?.listMyPlayers) return await svc.listMyPlayers();
-      if (svc?.listMine) return await svc.listMine();
-      if (svc?.listByUser) return await svc.listByUser();
-      if (svc?.getOwnedPlayers) return await svc.getOwnedPlayers();
-      return [];
-    } catch {
-      return [];
+      // 1) Essayer via playerService si dispo
+      let list = await loadViaPlayerService(session);
+      // 2) Sinon via Supabase
+      if (!Array.isArray(list) || list.length === 0) {
+        list = await loadViaSupabase(session);
+      }
+      setPlayers(Array.isArray(list) ? list : []);
+    } catch (e: any) {
+      console.error('[CharacterSelection] load error:', e);
+      setError(e?.message ?? 'Impossible de charger vos personnages.');
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    let aborted = false;
-
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const list = await loadPlayers();
-        if (!aborted) {
-          setPlayers(Array.isArray(list) ? list : []);
-        }
-      } catch (e: any) {
-        console.error('[CharacterSelection] load error:', e);
-        if (!aborted) {
-          setError(e?.message ?? 'Impossible de charger vos personnages.');
-        }
-      } finally {
-        if (!aborted) setLoading(false);
-      }
-    })();
-
-    return () => {
-      aborted = true;
-    };
-  }, []);
+    // recharge sur changement d’utilisateur
+    loadPlayers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
 
   const handleSelect = (p: Player) => {
     try {
@@ -72,7 +108,7 @@ export default function CharacterSelectionPage({ onSelect }: CharacterSelectionP
     } catch {
       // non critique
     }
-    onSelect(p);
+    onCharacterSelect(p);
   };
 
   const filtered = useMemo(() => {
@@ -91,20 +127,9 @@ export default function CharacterSelectionPage({ onSelect }: CharacterSelectionP
   }, [players, query]);
 
   const retry = () => {
-    setError(null);
-    setLoading(true);
-    (async () => {
-      try {
-        const list = await loadPlayers();
-        setPlayers(Array.isArray(list) ? list : []);
-      } catch (e: any) {
-        console.error('[CharacterSelection] retry error:', e);
-        setError(e?.message ?? 'Impossible de charger vos personnages.');
-        toast.error('Échec du rechargement');
-      } finally {
-        setLoading(false);
-      }
-    })();
+    loadPlayers().catch(() => {
+      toast.error('Échec du rechargement');
+    });
   };
 
   return (
@@ -113,7 +138,7 @@ export default function CharacterSelectionPage({ onSelect }: CharacterSelectionP
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h1 className="text-2xl sm:text-3xl font-bold">Sélection du personnage</h1>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <input
               type="text"
               value={query}
@@ -195,4 +220,7 @@ export default function CharacterSelectionPage({ onSelect }: CharacterSelectionP
       </div>
     </div>
   );
-}
+};
+
+// Pour rester compatible avec un import par défaut éventuel
+export default CharacterSelectionPage;
