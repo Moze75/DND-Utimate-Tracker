@@ -716,8 +716,49 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
     }
   };
 
+  // Récupère la sous-classe depuis plusieurs clés possibles
+  const getSubclass = (p: Player): string | null => {
+    const anyP: any = p as any;
+    const candidates = [
+      anyP?.subclass,
+      anyP?.sub_class,
+      anyP?.subClass,
+      anyP?.sousClasse,
+      anyP?.['sous-classe'],
+    ];
+    const found = candidates.find((v) => typeof v === 'string' && v.trim().length > 0);
+    return found ? (found as string).trim() : null;
+  };
+
+  const subclass = getSubclass(player);
+
   return (
     <div className="space-y-8">
+      {/* Profil: Classe / Sous-classe / Niveau */}
+      <div className="stats-card">
+        <div className="p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-3 py-1 rounded-md bg-gray-800/60 text-gray-200">
+              Classe: {player.class || '—'}
+            </span>
+
+            <span
+              className={`px-3 py-1 rounded-md ${
+                subclass
+                  ? 'bg-gray-800/60 text-gray-200'
+                  : 'bg-red-900/30 text-red-400 border border-red-600/40'
+              }`}
+            >
+              {subclass || 'Sélectionnez votre sous-classe dans les paramètres'}
+            </span>
+
+            <span className="px-3 py-1 rounded-md bg-gray-800/60 text-gray-200">
+              Niv. {player.level ?? 1}
+            </span>
+          </div>
+        </div>
+      </div>
+
       <KnownSpellsSection player={player} onUpdate={onUpdate} />
 
       {/* Section "Emplacements de sorts" masquée */}
