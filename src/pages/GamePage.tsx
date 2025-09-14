@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { testConnection } from '../lib/supabase';
+import React, { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { Player } from '../types/dnd';
 import { LogOut } from 'lucide-react';
+
+import { testConnection } from '../lib/supabase';
+import { Player } from '../types/dnd';
+
 import { PlayerProfile } from '../components/PlayerProfile';
 import { TabNavigation } from '../components/TabNavigation';
 import CombatTab from '../components/CombatTab';
@@ -13,30 +15,87 @@ import { ClassesTab } from '../components/ClassesTab';
 import { PlayerContext } from '../contexts/PlayerContext';
 
 import { inventoryService } from '../services/inventoryService';
-import { authService } from '../services/authService';
 
-type Currency = 'gold' | 'silver' | 'copper';
-type Money = Record<Currency, number>;
+type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class';
 
-interface GamePageProps {
+const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter';
+const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
+
+type GamePageProps = {
   session: any;
   selectedCharacter: Player;
   onBackToSelection: () => void;
-  // On ne remonte plus les updates au parent pour éviter les remounts intempestifs
-  // onUpdateCharacter?: (player: Player) => void;
-}
+  onUpdateCharacter?: (p: Player) => void;
+};
 
-export function GamePage({ session, selectedCharacter, onBackToSelection }: GamePageProps) {
+export function GamePage({
+  session,
+  selectedCharacter,
+  onBackToSelection,
+  onUpdateCharacter,
+}: GamePageProps) {
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(selectedCharacter);
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState('combat');
 
-  // Source de vérité locale: toute mise à jour passe par ici
-  const applyPlayerUpdate = useCallback((updatedPlayer: Player) => {
-    setCurrentPlayer(updatedPlayer);
-  }, []);
+  // Source de vérité locale pour le joueur courant (évite les "sauts" d'UI)
+  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(selectedCharacter);
+
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<TabKey>('combat');
+
+  // Centralise toutes les mises à jour du joueur
+  const applyPlayerUpdate = useCallback(
+    (updated: Player) => {
+      // 1) UI instantanée
+      setCurrentPlayer(updated);
+
+      // 2) Propage vers App (qui garde selectedCharacter synchronisé)
+      try {
+        onUpdateCharacter?.(updated);
+      } catch {
+        // no-op
+      }
+
+      // 3) Persiste immédiatement un snapshot pour le prochain reload
+      try {
+        localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(updated));
+      } catch {
+        // non critique
+      }
+    },
+    [onUpdateCharacter]
+  );
+
+  // Mémorise un snapshot dès l'entrée sur la page, et à chaque changement du joueur courant
+  useEffect(() => {
+    if (currentPlayer) {
+      try {
+        localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(currentPlayer));
+      } catch {
+        // non critique
+      }
+    }
+  }, [currentPlayer]);
+
+  // Sauvegarde aussi juste avant fermeture/changement d'onglet
+  useEffect(() => {
+    const persist = () => {
+      if (!currentPlayer) return;
+      try {
+        localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(currentPlayer));
+      } catch {
+        // non critique
+      }
+    };
+
+    window.addEventListener('visibilitychange', persist);
+    window.addEventListener('pagehide', persist);
+
+    return () => {
+      window.removeEventListener('visibilitychange', persist);
+      window.removeEventListener('pagehide', persist);
+    };
+  }, [currentPlayer]);
 
   useEffect(() => {
     const initialize = async () => {
@@ -50,7 +109,9 @@ export function GamePage({ session, selectedCharacter, onBackToSelection }: Game
         }
 
         // Ne pas écraser l'état si on reste sur le même perso
-        setCurrentPlayer(prev => (prev && prev.id === selectedCharacter.id ? prev : selectedCharacter));
+        setCurrentPlayer((prev) =>
+          prev && prev.id === selectedCharacter.id ? prev : selectedCharacter
+        );
 
         const inventoryData = await inventoryService.getPlayerInventory(selectedCharacter.id);
         setInventory(inventoryData);
@@ -58,29 +119,23 @@ export function GamePage({ session, selectedCharacter, onBackToSelection }: Game
         setLoading(false);
       } catch (error: any) {
         console.error("Erreur d'initialisation:", error);
-        setConnectionError(error.message);
+        setConnectionError(error?.message ?? 'Erreur inconnue');
         setLoading(false);
       }
     };
 
-    // Critique: dépendre uniquement de l'ID évite les réinit sur micro-updates
     initialize();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, selectedCharacter.id]);
+  }, [selectedCharacter.id, selectedCharacter]);
 
-  const handleSignOut = async () => {
+  const handleBackToSelection = () => {
     try {
-      if (onBackToSelection) {
-        onBackToSelection();
-        toast.success('Retour à la sélection des personnages');
-      } else {
-        await authService.signOut();
-        toast.success('Déconnexion réussie');
-      }
-    } catch (error: any) {
-      console.error('Erreur lors du retour à la sélection:', error);
-      toast.error('Erreur lors du retour à la sélection');
+      // Empêche l'auto-resume immédiatement après un retour volontaire à la sélection
+      sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1');
+    } catch {
+      // ignore
     }
+    onBackToSelection?.();
+    toast.success('Retour à la sélection des personnages');
   };
 
   if (loading) {
@@ -108,7 +163,22 @@ export function GamePage({ session, selectedCharacter, onBackToSelection }: Game
           <button
             onClick={() => {
               setConnectionError(null);
-              toast.loading('Tentative de reconnexion...');
+              // relance init
+              setLoading(true);
+              (async () => {
+                try {
+                  const isConnected = await testConnection();
+                  if (!isConnected.success) throw new Error('Impossible de se connecter');
+                  const inventoryData = await inventoryService.getPlayerInventory(selectedCharacter.id);
+                  setInventory(inventoryData);
+                  setCurrentPlayer(selectedCharacter);
+                  setLoading(false);
+                } catch (e: any) {
+                  console.error(e);
+                  setConnectionError(e?.message ?? 'Erreur inconnue');
+                  setLoading(false);
+                }
+              })();
             }}
             className="w-full btn-primary px-4 py-2 rounded-lg"
           >
@@ -123,62 +193,42 @@ export function GamePage({ session, selectedCharacter, onBackToSelection }: Game
     <div className="min-h-screen p-2 sm:p-4 md:p-6">
       <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6">
         {currentPlayer && (
-          <>
-            <PlayerContext.Provider value={currentPlayer}>
-              <PlayerProfile 
-                player={currentPlayer} 
-                onUpdate={applyPlayerUpdate} 
+          <PlayerContext.Provider value={currentPlayer}>
+            <PlayerProfile player={currentPlayer} onUpdate={applyPlayerUpdate} />
+
+            <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+
+            {activeTab === 'combat' && (
+              <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+            )}
+
+            {activeTab === 'abilities' && (
+              <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+            )}
+
+            {activeTab === 'stats' && (
+              <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+            )}
+
+            {activeTab === 'equipment' && (
+              <EquipmentTab
+                player={currentPlayer}
+                inventory={inventory}
+                onPlayerUpdate={applyPlayerUpdate}
+                onInventoryUpdate={setInventory}
               />
+            )}
 
-              <TabNavigation
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
-              />
-
-              {activeTab === 'combat' && (
-                <CombatTab
-                  player={currentPlayer} 
-                  onUpdate={applyPlayerUpdate}
-                />
-              )}
-
-              {activeTab === 'abilities' && (
-                <AbilitiesTab
-                  player={currentPlayer}
-                  onUpdate={applyPlayerUpdate}
-                />
-              )}
-
-              {activeTab === 'stats' && (
-                <StatsTab
-                  player={currentPlayer}
-                  onUpdate={applyPlayerUpdate}
-                />
-              )}
-
-              {activeTab === 'equipment' && (
-                <EquipmentTab
-                  player={currentPlayer} 
-                  inventory={inventory}
-                  onPlayerUpdate={applyPlayerUpdate}
-                  onInventoryUpdate={setInventory}
-                />
-              )}
-
-              {activeTab === 'class' && (
-                <ClassesTab
-                  player={currentPlayer}
-                  onUpdate={applyPlayerUpdate}
-                />
-              )}
-            </PlayerContext.Provider>
-          </>
+            {activeTab === 'class' && (
+              <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+            )}
+          </PlayerContext.Provider>
         )}
       </div>
-      
+
       <div className="w-full max-w-md mx-auto mt-6 px-4">
         <button
-          onClick={handleSignOut}
+          onClick={handleBackToSelection}
           className="w-full btn-secondary px-4 py-2 rounded-lg flex items-center justify-center gap-2"
         >
           <LogOut size={20} />
