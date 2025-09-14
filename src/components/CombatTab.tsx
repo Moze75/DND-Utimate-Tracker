@@ -623,8 +623,8 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
   // Calculs PV
   const totalHP = player.current_hp + player.temporary_hp;
   const hpPercentage = Math.max(0, (totalHP / player.max_hp) * 100);
-  // Seuil relevé à 15%
-  const isCriticalHealth = totalHP <= Math.floor(player.max_hp * 0.15);
+  // Seuil relevé à 20%
+  const isCriticalHealth = totalHP <= Math.floor(player.max_hp * 0.20);
 
   // Filtrage des attaques physiques (toutes les attaques de cet onglet)
   const physicalAttacks = attacks.filter((a) => (a.attack_type || 'physical') === 'physical');
