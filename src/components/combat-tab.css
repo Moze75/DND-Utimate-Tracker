@@ -1,0 +1,28 @@
+/* Animation heartbeat double: toum toum — toum toum */
+@keyframes ut-heartbeat-double {
+  0% { transform: scaleX(1) scaleY(1); filter: brightness(1); }
+  5% { transform: scaleX(1.015) scaleY(1.08); filter: brightness(1.12); }
+  9% { transform: scaleX(1) scaleY(1); filter: brightness(1); }
+
+  14% { transform: scaleX(1.015) scaleY(1.08); filter: brightness(1.12); }
+  18% { transform: scaleX(1) scaleY(1); filter: brightness(1); }
+
+  /* petit silence */
+  40% { transform: scaleX(1) scaleY(1); filter: brightness(1); }
+
+  /* deuxième paire de battements */
+  45% { transform: scaleX(1.015) scaleY(1.08); filter: brightness(1.12); }
+  49% { transform: scaleX(1) scaleY(1); filter: brightness(1); }
+
+  54% { transform: scaleX(1.015) scaleY(1.08); filter: brightness(1.12); }
+  58% { transform: scaleX(1) scaleY(1); filter: brightness(1); }
+
+  100% { transform: scaleX(1) scaleY(1); filter: brightness(1); }
+}
+
+/* Classe à appliquer sur la barre de PV principale quand critique */
+.heartbeat-animation {
+  animation: ut-heartbeat-double 2.2s ease-in-out infinite;
+  transform-origin: left center;          /* la barre grossit depuis la gauche */
+  will-change: transform, filter;         /* fluide sur mobile */
+}
