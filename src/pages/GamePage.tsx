@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { supabase, testConnection } from '../lib/supabase';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { testConnection } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { Player } from '../types/dnd';
 import { LogOut } from 'lucide-react';
@@ -12,19 +12,14 @@ import { StatsTab } from '../components/StatsTab';
 import { ClassesTab } from '../components/ClassesTab';
 import { PlayerContext } from '../contexts/PlayerContext';
 
-// Services (certains peuvent être inutilisés selon ta page)
-import { playerService } from '../services/playerService';
 import { inventoryService } from '../services/inventoryService';
 import { authService } from '../services/authService';
-
-type Currency = 'gold' | 'silver' | 'copper';
-type Money = Record<Currency, number>;
 
 interface GamePageProps {
   session: any;
   selectedCharacter: Player;
   onBackToSelection: () => void;
-  // Devient optionnel: la page ne crashe plus si le parent ne le fournit pas
+  // Optionnel: si non fourni, on ne remonte pas au parent (pas de “recharge”)
   onUpdateCharacter?: (player: Player) => void;
 }
 
@@ -35,18 +30,27 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
   const [inventory, setInventory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('combat');
 
-  // Helper central: met à jour l'état local et, si dispo, remonte au parent
-  const applyPlayerUpdate = useCallback((updatedPlayer: Player) => {
-    setCurrentPlayer(updatedPlayer);
-    if (typeof onUpdateCharacter === 'function') {
+  // Debounce pour éviter de spam le parent et provoquer des remounts
+  const parentUpdateTimer = useRef<number | null>(null);
+  const scheduleParentUpdate = useCallback((updatedPlayer: Player) => {
+    if (typeof onUpdateCharacter !== 'function') return;
+    if (parentUpdateTimer.current) {
+      window.clearTimeout(parentUpdateTimer.current);
+    }
+    parentUpdateTimer.current = window.setTimeout(() => {
       try {
         onUpdateCharacter(updatedPlayer);
       } catch (e) {
-        // On ne casse pas l'UI si le parent jette
         console.warn('[GamePage] onUpdateCharacter a levé une erreur:', e);
       }
-    }
+    }, 250);
   }, [onUpdateCharacter]);
+
+  // Helper central: met à jour localement, et remonte au parent (debounce) si dispo
+  const applyPlayerUpdate = useCallback((updatedPlayer: Player) => {
+    setCurrentPlayer(updatedPlayer);
+    scheduleParentUpdate(updatedPlayer);
+  }, [scheduleParentUpdate]);
 
   useEffect(() => {
     const initialize = async () => {
@@ -59,11 +63,8 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
           throw new Error('Impossible de se connecter à la base de données');
         }
 
-        // Important: ne pas écraser currentPlayer si on reste sur le même personnage
-        setCurrentPlayer(prev => {
-          if (!prev || prev.id !== selectedCharacter.id) return selectedCharacter;
-          return prev;
-        });
+        // Ne pas écraser l’état si c’est le même personnage
+        setCurrentPlayer(prev => (prev && prev.id === selectedCharacter.id ? prev : selectedCharacter));
 
         const inventoryData = await inventoryService.getPlayerInventory(selectedCharacter.id);
         setInventory(inventoryData);
@@ -76,44 +77,18 @@ export function GamePage({ session, selectedCharacter, onBackToSelection, onUpda
       }
     };
 
-    // Ne redéclenche que si l'identité du perso change (évite des resets visuels)
+    // Critique: dépendre de l'ID uniquement évite de se réinitialiser à chaque micro-maj
     initialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, selectedCharacter.id]);
 
-  // Abonnement temps réel: si le joueur est mis à jour en base (ex: ressources de classe),
-  // on met à jour l'état local et on notifie le parent.
   useEffect(() => {
-    if (!currentPlayer?.id) return;
-
-    const channel = supabase
-      .channel(`player:${currentPlayer.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'players', filter: `id=eq.${currentPlayer.id}` },
-        (payload) => {
-          try {
-            const next = payload.new as Player;
-            // Sécurité: ne remonte que si c'est bien la même entité
-            if (next?.id === currentPlayer.id) {
-              applyPlayerUpdate(next);
-            }
-          } catch (e) {
-            console.warn('[GamePage] realtime payload parsing error:', e);
-          }
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          // Optionnel: debug
-          // console.log('[GamePage] realtime subscribed for player', currentPlayer.id);
-        }
-      });
-
     return () => {
-      supabase.removeChannel(channel);
+      if (parentUpdateTimer.current) {
+        window.clearTimeout(parentUpdateTimer.current);
+      }
     };
-  }, [currentPlayer?.id, applyPlayerUpdate]);
+  }, []);
 
   const handleSignOut = async () => {
     try {
