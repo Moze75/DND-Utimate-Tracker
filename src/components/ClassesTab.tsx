@@ -173,6 +173,23 @@ function slug(s: string) {
 }
 
 /* ===========================================================
+   Helper sous-classe robuste (plusieurs noms possibles)
+   =========================================================== */
+
+function getSubclassFromPlayerLike(p?: any): string | null {
+  if (!p) return null;
+  const candidates = [
+    p?.subclass,
+    p?.sub_class,
+    p?.subClass,
+    p?.sousClasse,
+    p?.['sous-classe'],
+  ];
+  const found = candidates.find((v) => typeof v === 'string' && v.trim().length > 0);
+  return found ? String(found).trim() : null;
+}
+
+/* ===========================================================
    Helper robuste: modificateur de Charisme
    =========================================================== */
 
@@ -344,7 +361,9 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   };
 
   const rawClass = (player?.class ?? playerClass ?? className ?? '').trim();
-  const rawSubclass = (player?.subclass ?? subclassName) ?? null;
+  // Amélioration: détecter la sous-classe depuis plusieurs clés possibles sur le player,
+  // sinon utiliser la prop subclassName.
+  const rawSubclass = (getSubclassFromPlayerLike(player) ?? subclassName) ?? null;
 
   const displayClass = rawClass ? sentenceCase(rawClass) : '';
   const displaySubclass = rawSubclass ? sentenceCase(rawSubclass) : null;
@@ -619,15 +638,24 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   );
 
   const hasClass = !!displayClass;
+  const hasSubclass = !!displaySubclass;
 
   return (
     <>
       <div className="space-y-4">
         <div className="bg-gradient-to-r from-violet-700/30 via-fuchsia-600/20 to-amber-600/20 border border-white/10 rounded-2xl px-4 py-3 ring-1 ring-black/5 shadow-md shadow-black/20">
           <div className="flex items-center justify-between">
+            {/* Libellé classe / sous-classe avec message si manquante */}
             <span className="text-sm font-semibold text-white">
-              {hasClass ? displayClass : '—'}{displaySubclass ? ` - ${displaySubclass}` : ''}
+              {hasClass ? displayClass : '—'}
+              {hasClass && (
+                <span className={`ml-2 font-normal ${hasSubclass ? 'text-white/80' : 'text-red-400'}`}>
+                  {hasSubclass ? `- ${displaySubclass}` : 'Sélectionnez votre sous-classe dans les paramètres'}
+                </span>
+              )}
             </span>
+
+            {/* Niveau */}
             <span className="text-xs text-white/70">Niveau {finalLevel}</span>
           </div>
         </div>
