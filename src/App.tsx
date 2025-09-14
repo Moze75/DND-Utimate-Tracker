@@ -4,6 +4,9 @@ import { supabase } from './lib/supabase';
 import type { Player } from './types/dnd';
 import { InstallPrompt } from './components/InstallPrompt';
 
+const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter';
+const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
+
 function App() {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<any>(null);
@@ -14,7 +17,7 @@ function App() {
   const [CharacterSelectionPage, setCharacterSelectionPage] = useState<React.ComponentType<any> | null>(null);
   const [GamePage, setGamePage] = useState<React.ComponentType<any> | null>(null);
 
-  // Charger dynamiquement les pages
+  // Charger dynamiquement les pages (assurez-vous que les pages exportent des composants nommés)
   useEffect(() => {
     const loadComponents = async () => {
       try {
@@ -42,12 +45,17 @@ function App() {
         setSession(current);
 
         if (current) {
-          const savedChar = localStorage.getItem('selectedCharacter');
-          if (savedChar) {
-            try {
-              setSelectedCharacter(JSON.parse(savedChar));
-            } catch (e) {
-              console.error('Erreur parsing selectedCharacter:', e);
+          // Respecte le choix utilisateur de rester sur l'écran de sélection (flag one-shot)
+          if (sessionStorage.getItem(SKIP_AUTO_RESUME_ONCE) === '1') {
+            sessionStorage.removeItem(SKIP_AUTO_RESUME_ONCE);
+          } else {
+            const savedChar = localStorage.getItem(LAST_SELECTED_CHARACTER_SNAPSHOT);
+            if (savedChar) {
+              try {
+                setSelectedCharacter(JSON.parse(savedChar));
+              } catch (e) {
+                console.error('Erreur parsing selectedCharacter:', e);
+              }
             }
           }
         } else {
@@ -70,16 +78,21 @@ function App() {
       if (!newSession) {
         // Déconnexion -> purger la sélection et le stockage local
         setSelectedCharacter(null);
-        localStorage.removeItem('selectedCharacter');
+        localStorage.removeItem(LAST_SELECTED_CHARACTER_SNAPSHOT);
       } else {
         // À la connexion (ou refresh), si aucun personnage sélectionné, tenter une restauration
         if (!selectedCharacter) {
-          const savedChar = localStorage.getItem('selectedCharacter');
-          if (savedChar) {
-            try {
-              setSelectedCharacter(JSON.parse(savedChar));
-            } catch (e) {
-              console.error('Erreur parsing selectedCharacter (auth change):', e);
+          // Respecter le flag one-shot si présent
+          if (sessionStorage.getItem(SKIP_AUTO_RESUME_ONCE) === '1') {
+            sessionStorage.removeItem(SKIP_AUTO_RESUME_ONCE);
+          } else {
+            const savedChar = localStorage.getItem(LAST_SELECTED_CHARACTER_SNAPSHOT);
+            if (savedChar) {
+              try {
+                setSelectedCharacter(JSON.parse(savedChar));
+              } catch (e) {
+                console.error('Erreur parsing selectedCharacter (auth change):', e);
+              }
             }
           }
         }
@@ -101,12 +114,12 @@ function App() {
     };
   }, [selectedCharacter]);
 
-  // Sauvegarder le personnage sélectionné dans localStorage
+  // Sauvegarder le personnage sélectionné dans localStorage (snapshot complet)
   useEffect(() => {
     if (selectedCharacter) {
-      localStorage.setItem('selectedCharacter', JSON.stringify(selectedCharacter));
+      localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(selectedCharacter));
     } else {
-      localStorage.removeItem('selectedCharacter');
+      localStorage.removeItem(LAST_SELECTED_CHARACTER_SNAPSHOT);
     }
   }, [selectedCharacter]);
 
@@ -158,14 +171,32 @@ function App() {
       ) : !selectedCharacter ? (
         <CharacterSelectionPage
           session={session}
-          onCharacterSelect={setSelectedCharacter}
+          onCharacterSelect={(p: Player) => {
+            // Dès qu'on choisit un perso, on efface le flag d'anti-auto-resume
+            try {
+              sessionStorage.removeItem(SKIP_AUTO_RESUME_ONCE);
+            } catch {
+              // no-op
+            }
+            setSelectedCharacter(p);
+          }}
         />
       ) : (
         <GamePage
           session={session}
           selectedCharacter={selectedCharacter}
-          onBackToSelection={() => setSelectedCharacter(null)}
-          onUpdateCharacter={(p: Player) => setSelectedCharacter(p)}
+          onBackToSelection={() => {
+            // Empêche l'auto-resume une fois, quand l'utilisateur revient volontairement à la sélection
+            try {
+              sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1');
+            } catch {
+              // no-op
+            }
+            setSelectedCharacter(null);
+          }}
+          onUpdateCharacter={(p: Player) => {
+            setSelectedCharacter(p);
+          }}
         />
       )}
     </>
