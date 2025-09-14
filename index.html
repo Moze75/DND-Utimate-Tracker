@@ -8,20 +8,50 @@
     />
     <title>D&D Ultimate Tracker</title>
 
-    <!-- Icônes de l’onglet -->
+    <!-- Icônes d’onglet -->
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
 
     <!-- Icône pour le raccourci d’écran d’accueil (fallback Android/iOS) -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <!-- Optionnel: variante 192x192 si tu préfères -->
-    <!-- <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" /> -->
 
-    <!-- IMPORTANT: pas de <link rel="manifest">, pas de meta PWA -->
-    <!-- Pas de: mobile-web-app-capable, apple-mobile-web-app-capable, theme-color, etc. -->
+    <!-- IMPORTANT: aucun signal PWA -->
+    <!-- Pas de <link rel="manifest"> -->
+    <!-- Pas de meta mobile-web-app-capable / apple-mobile-web-app-capable / theme-color -->
+    <!-- Optionnel: éviter de réutiliser une page mise en cache pendant la migration -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="/src/main.tsx?v=disable-pwa"></script>
+
+    <!-- Script de migration: désenregistre les Service Workers et vide les caches. -->
+    <!-- Laisse-le quelques jours, puis tu pourras le retirer. -->
+    <script>
+      (async function disablePWA() {
+        try {
+          // Empêche l’invite d’installation si jamais elle se déclenche encore
+          window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            return false;
+          }, { once: true });
+
+          if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            for (const reg of regs) {
+              try { await reg.unregister(); } catch (_) {}
+            }
+          }
+          if (window.caches && caches.keys) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k)));
+          }
+        } catch (err) {
+          // silencieux
+        }
+      })();
+    </script>
   </body>
 </html>
