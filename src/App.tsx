@@ -1,233 +1,175 @@
 import React, { useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
+import { Toaster } from 'react-hot-toast';
 import { supabase } from './lib/supabase';
-import GamePage from './pages/GamePage';
-import { Player } from './types/dnd';
-import CharacterSelectionPage from './pages/CharacterSelectionPage';
-import { playerService } from './services/playerService';
+import type { Player } from './types/dnd';
+import { InstallPrompt } from './components/InstallPrompt';
 
-const LAST_SELECTED_CHARACTER_ID = 'ut:lastCharacterId';
-const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
-
-export default function App() {
-  const [session, setSession] = useState<any | null>(null);
-  const [initializing, setInitializing] = useState(true);
+function App() {
+  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<any>(null);
   const [selectedCharacter, setSelectedCharacter] = useState<Player | null>(null);
+  const [refreshingSession, setRefreshingSession] = useState(false);
 
-  // Initialisation et écoute des changements d'authentification
+  const [LoginPage, setLoginPage] = useState<React.ComponentType<any> | null>(null);
+  const [CharacterSelectionPage, setCharacterSelectionPage] = useState<React.ComponentType<any> | null>(null);
+  const [GamePage, setGamePage] = useState<React.ComponentType<any> | null>(null);
+
+  // Charger dynamiquement les pages
   useEffect(() => {
-    let unsub: (() => void) | null = null;
-
-    (async () => {
+    const loadComponents = async () => {
       try {
-        const { data } = await supabase.auth.getSession();
-        setSession(data.session ?? null);
+        const loginModule = await import('./pages/LoginPage');
+        const characterSelectionModule = await import('./pages/CharacterSelectionPage');
+        const gamePageModule = await import('./pages/GamePage');
 
-        const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-          setSession(s);
-          if (!s) {
-            setSelectedCharacter(null);
-            // Optionnel: nettoyer le dernier ID si tu veux
-            // localStorage.removeItem(LAST_SELECTED_CHARACTER_ID);
-          }
-        });
-
-        unsub = () => {
-          try {
-            sub?.subscription?.unsubscribe();
-          } catch {
-            // ignore
-          }
-        };
-      } catch (e) {
-        console.error('[App] init auth error:', e);
-      } finally {
-        setInitializing(false);
+        setLoginPage(() => loginModule.LoginPage);
+        setCharacterSelectionPage(() => characterSelectionModule.CharacterSelectionPage);
+        setGamePage(() => gamePageModule.GamePage);
+      } catch (error) {
+        console.error('Erreur lors du chargement des composants:', error);
       }
-    })();
-
-    return () => {
-      if (unsub) unsub();
     };
+
+    loadComponents();
   }, []);
 
-  // Auto-resume: si session OK et pas de personnage sélectionné, tente de recharger le dernier
+  // Initialisation session + restauration du personnage si session présente
   useEffect(() => {
-    if (!session) return; // Pas connecté
-    if (selectedCharacter) return; // Déjà un personnage
-    if (sessionStorage.getItem(SKIP_AUTO_RESUME_ONCE) === '1') {
-      sessionStorage.removeItem(SKIP_AUTO_RESUME_ONCE);
-      return;
-    }
-
-    const lastId = localStorage.getItem(LAST_SELECTED_CHARACTER_ID);
-    if (!lastId) return;
-
-    let aborted = false;
-
-    (async () => {
+    const initSession = async () => {
       try {
-        const player = await playerService.getPlayerById(lastId);
-        if (aborted) return;
-        if (player) {
-          setSelectedCharacter(player);
+        const { data } = await supabase.auth.getSession();
+        const current = data?.session ?? null;
+        setSession(current);
+
+        if (current) {
+          const savedChar = localStorage.getItem('selectedCharacter');
+          if (savedChar) {
+            try {
+              setSelectedCharacter(JSON.parse(savedChar));
+            } catch (e) {
+              console.error('Erreur parsing selectedCharacter:', e);
+            }
+          }
         } else {
-          localStorage.removeItem(LAST_SELECTED_CHARACTER_ID);
+          // Pas de session -> on s’assure de ne pas garder un personnage sélectionné
+          setSelectedCharacter(null);
         }
-      } catch (e) {
-        console.warn('[AutoResume] Échec de récupération du personnage:', e);
+      } finally {
+        setLoading(false);
       }
-    })();
+    };
+
+    initSession();
+  }, []);
+
+  // Écoute des changements d’état d’authentification
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
+      setSession(newSession);
+
+      if (!newSession) {
+        // Déconnexion -> purger la sélection et le stockage local
+        setSelectedCharacter(null);
+        localStorage.removeItem('selectedCharacter');
+      } else {
+        // À la connexion (ou refresh), si aucun personnage sélectionné, tenter une restauration
+        if (!selectedCharacter) {
+          const savedChar = localStorage.getItem('selectedCharacter');
+          if (savedChar) {
+            try {
+              setSelectedCharacter(JSON.parse(savedChar));
+            } catch (e) {
+              console.error('Erreur parsing selectedCharacter (auth change):', e);
+            }
+          }
+        }
+      }
+
+      // Feedback visuel léger lors d’un refresh de token
+      if (event === 'TOKEN_REFRESHED') {
+        setRefreshingSession(true);
+        setTimeout(() => setRefreshingSession(false), 1200);
+      }
+    });
 
     return () => {
-      aborted = true;
+      try {
+        sub.subscription.unsubscribe();
+      } catch {
+        // no-op
+      }
     };
-  }, [session, selectedCharacter]);
+  }, [selectedCharacter]);
 
-  const handleSelectCharacter = (player: Player) => {
-    try {
-      localStorage.setItem(LAST_SELECTED_CHARACTER_ID, player.id);
-      sessionStorage.removeItem(SKIP_AUTO_RESUME_ONCE);
-    } catch {
-      // stockage non critique
+  // Sauvegarder le personnage sélectionné dans localStorage
+  useEffect(() => {
+    if (selectedCharacter) {
+      localStorage.setItem('selectedCharacter', JSON.stringify(selectedCharacter));
+    } else {
+      localStorage.removeItem('selectedCharacter');
     }
-    setSelectedCharacter(player);
-  };
+  }, [selectedCharacter]);
 
-  const handleBackToSelection = () => {
-    sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1');
-    setSelectedCharacter(null);
-  };
-
-  if (initializing) {
+  // Écran de chargement des composants dynamiques
+  if (!LoginPage || !CharacterSelectionPage || !GamePage) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto"></div>
-          <p className="text-gray-400">Initialisation...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto" />
+          <p className="text-gray-400">Chargement des composants...</p>
         </div>
       </div>
     );
   }
 
-  if (!session) {
-    return <InlineLogin />;
-  }
-
-  if (selectedCharacter) {
+  // Écran de chargement initial (session)
+  if (loading) {
     return (
-      <GamePage
-        session={session}
-        selectedCharacter={selectedCharacter}
-        onBackToSelection={handleBackToSelection}
-      />
+      <>
+        <Toaster position="top-right" />
+        <InstallPrompt />
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto" />
+            <p className="text-gray-400">Chargement en cours...</p>
+          </div>
+        </div>
+      </>
     );
   }
 
-  return <CharacterSelectionPage onSelect={handleSelectCharacter} />;
-}
-
-/**
- * Panneau de connexion minimal (email OTP + OAuth GitHub).
- * Assure-toi d’avoir configuré:
- * - VITE_SUPABASE_URL
- * - VITE_SUPABASE_ANON_KEY
- * - (optionnel) OAuth GitHub dans Supabase et l’URL de redirection: window.location.origin
- */
-function InlineLogin() {
-  const [email, setEmail] = useState('');
-  const [loadingEmail, setLoadingEmail] = useState(false);
-  const [loadingGithub, setLoadingGithub] = useState(false);
-
-  const signInWithEmail = async () => {
-    if (!email) {
-      toast.error('Veuillez saisir un email.');
-      return;
-    }
-    setLoadingEmail(true);
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: window.location.origin,
-        },
-      });
-      if (error) throw error;
-      toast.success('Lien de connexion envoyé. Vérifiez votre email.');
-    } catch (e: any) {
-      console.error('[Auth] email OTP error:', e);
-      toast.error(e?.message ?? 'Échec de l’envoi du lien de connexion.');
-    } finally {
-      setLoadingEmail(false);
-    }
-  };
-
-  const signInWithGithub = async () => {
-    setLoadingGithub(true);
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'github',
-        options: {
-          redirectTo: window.location.origin,
-        },
-      });
-      if (error) throw error;
-      // Redirection gérée par Supabase
-    } catch (e: any) {
-      console.error('[Auth] github oauth error:', e);
-      toast.error(e?.message ?? 'Connexion GitHub impossible.');
-    } finally {
-      setLoadingGithub(false);
-    }
-  };
-
+  // Rendu avec ordre correct:
+  // 1) Pas de session -> Login
+  // 2) Session sans personnage -> Sélection
+  // 3) Session + personnage -> Jeu
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="max-w-md w-full space-y-6 stat-card p-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Ultimate Tracker</h1>
-          <p className="text-gray-400 mt-1">Connectez-vous pour continuer</p>
+    <>
+      <Toaster position="top-right" />
+      <InstallPrompt />
+
+      {refreshingSession && (
+        <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-black text-center py-2 z-50">
+          Tentative de reconnexion...
         </div>
+      )}
 
-        <div className="space-y-3">
-          <label className="block text-sm text-gray-300">Connexion par email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="votre@email.com"
-            className="w-full px-3 py-2 rounded-lg bg-gray-800/60 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500"
-          />
-          <button
-            onClick={signInWithEmail}
-            disabled={loadingEmail}
-            className="w-full btn-primary px-4 py-2 rounded-lg disabled:opacity-60"
-          >
-            {loadingEmail ? 'Envoi...' : 'Recevoir un lien de connexion'}
-          </button>
-        </div>
-
-        <div className="relative py-2">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-gray-700" />
-          </div>
-          <div className="relative flex justify-center text-xs">
-            <span className="px-2 bg-transparent text-gray-400">ou</span>
-          </div>
-        </div>
-
-        <button
-          onClick={signInWithGithub}
-          disabled={loadingGithub}
-          className="w-full btn-secondary px-4 py-2 rounded-lg disabled:opacity-60"
-        >
-          {loadingGithub ? 'Redirection...' : 'Se connecter avec GitHub'}
-        </button>
-
-        <p className="text-xs text-gray-500 text-center">
-          Conseil: en dev, configure la redirection OAuth à {window.location.origin} dans Supabase.
-        </p>
-      </div>
-    </div>
+      {!session ? (
+        <LoginPage />
+      ) : !selectedCharacter ? (
+        <CharacterSelectionPage
+          session={session}
+          onCharacterSelect={setSelectedCharacter}
+        />
+      ) : (
+        <GamePage
+          session={session}
+          selectedCharacter={selectedCharacter}
+          onBackToSelection={() => setSelectedCharacter(null)}
+          onUpdateCharacter={(p: Player) => setSelectedCharacter(p)}
+        />
+      )}
+    </>
   );
 }
+
+export default App;
