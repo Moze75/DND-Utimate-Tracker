@@ -7,6 +7,7 @@ import { DiceRoller } from '../components/DiceRoller';
 import { StandardActionsSection } from './StandardActionsSection';
 import { attackService } from '../services/attackService';
 import { supabase } from '../lib/supabase';
+import './combat-tab.css';
 
 interface CombatTabProps {
   player: Player;
@@ -608,7 +609,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
             Attaque : 1d20+{getAttackBonus(attack)}
           </button>
 
-        <button
+          <button
             onClick={() => rollDamage(attack)}
             className="flex-1 bg-orange-600/60 hover:bg-orange-500/60 text-white px-3 py-2 rounded-md transition-colors flex items-center justify-center"
           >
@@ -622,7 +623,8 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
   // Calculs PV
   const totalHP = player.current_hp + player.temporary_hp;
   const hpPercentage = Math.max(0, (totalHP / player.max_hp) * 100);
-  const isCriticalHealth = totalHP <= Math.floor(player.max_hp * 0.1);
+  // Seuil relevé à 15%
+  const isCriticalHealth = totalHP <= Math.floor(player.max_hp * 0.15);
 
   // Filtrage des attaques physiques (toutes les attaques de cet onglet)
   const physicalAttacks = attacks.filter((a) => (a.attack_type || 'physical') === 'physical');
@@ -654,7 +656,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
             {/* Barre de vie principale */}
             <div className="relative">
               {/* Affichage des PV directement sur la barre - TOUJOURS VISIBLE */}
-              <div className="absolute inset-0 flex items-center justify-center z-20">
+              <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none select-none">
                 <span className="text-white font-bold text-sm drop-shadow-lg">
                   {totalHP} / {player.max_hp}
                 </span>
