@@ -9,7 +9,7 @@
     <meta name="orientation" content="portrait" />
     <title>D&D Ultimate Tracker</title>
 
-    <!-- Icône d’onglet vite (inchangé si tu l’utilises) -->
+    <!-- Icône d’onglet vite (si tu l’utilises) -->
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
 
     <!-- PWA -->
@@ -20,31 +20,36 @@
     <meta name="apple-mobile-web-app-title" content="D&D Ultimate Tracker" />
     <meta name="color-scheme" content="dark light" />
 
-    <!-- theme-color par défaut; sera surchargé dynamiquement au runtime -->
+    <!-- theme-color par défaut; sera surchargé dynamiquement -->
     <meta name="theme-color" content="#000000" />
 
-    <!-- Manifeste: assure-toi qu’il est bien dans APP/public/ -->
+    <!-- Tentatives additionnelles pour la barre de navigation (supportées surtout par Samsung Internet) -->
+    <meta name="msapplication-navbutton-color" content="#000000" />
+    <meta name="navbutton-color" content="#000000" />
+
+    <!-- Manifest (dans APP/public/) -->
     <link rel="manifest" href="/manifest.webmanifest" />
 
-    <!-- iOS Home Screen icon (facultatif mais recommandé) -->
+    <!-- iOS Home Screen icon (recommandé) -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <style>
-      /* Ne change pas ta couleur de fond: juste garantir que le body couvre l’écran,
-         ce qui aide Android à colorer la barre de navigation avec la bonne teinte. */
+      /* Ne change pas ta couleur de fond.
+         Garantit juste que le body couvre l’écran (utile avec le clavier/gestes). */
       @supports (height: 100dvh) {
         body { min-height: 100dvh; }
       }
       @supports not (height: 100dvh) {
         body { min-height: 100vh; }
       }
+      html, body { margin: 0; }
     </style>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
 
-    <!-- Met à jour la theme-color pour qu’elle corresponde à TA vraie couleur de fond -->
+    <!-- Met à jour la theme-color pour qu’elle corresponde à la vraie couleur de fond de TA page -->
     <script>
       (function () {
         function ensureThemeMeta() {
@@ -56,50 +61,43 @@
           }
           return meta;
         }
-
+        function setExtraNavColors(hex) {
+          const m1 = document.querySelector('meta[name="msapplication-navbutton-color"]');
+          const m2 = document.querySelector('meta[name="navbutton-color"]');
+          if (m1) m1.setAttribute('content', hex);
+          if (m2) m2.setAttribute('content', hex);
+        }
         function rgbToHex(rgb) {
           const m = (rgb || '').match(/\d+/g);
           if (!m) return null;
           const [r, g, b] = m.map(Number);
           return (
             '#' +
-            [r, g, b]
-              .map((x) => x.toString(16).padStart(2, '0'))
-              .join('')
+            [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('')
           );
         }
-
         function getEffectiveBg() {
-          // 1) body
           let bg = getComputedStyle(document.body).backgroundColor;
-          // 2) #root si body est transparent
           if (!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') {
             const root = document.getElementById('root');
             if (root) bg = getComputedStyle(root).backgroundColor;
           }
           return rgbToHex(bg) || '#000000';
         }
-
         function updateThemeColor() {
           const meta = ensureThemeMeta();
           const hex = getEffectiveBg();
-          // Applique la couleur détectée
           meta.setAttribute('content', hex);
+          setExtraNavColors(hex);
         }
-
-        // Met à jour: au chargement, après le rendu app, et si le thème change
         updateThemeColor();
         window.addEventListener('load', updateThemeColor);
-
-        // Observe les changements de style/class qui pourraient changer le fond
         const obs = new MutationObserver(updateThemeColor);
         obs.observe(document.documentElement, {
           attributes: true,
           subtree: true,
           attributeFilter: ['class', 'style'],
         });
-
-        // Option: ajuste aussi sur changement de préférence système
         try {
           const mqDark = window.matchMedia('(prefers-color-scheme: dark)');
           mqDark.addEventListener('change', updateThemeColor);
