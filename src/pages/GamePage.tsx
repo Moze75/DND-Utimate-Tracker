@@ -20,6 +20,9 @@ type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class';
 
 const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter';
 const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
+const lastTabKeyFor = (playerId: string) => `ut:lastActiveTab:${playerId}`;
+const isValidTab = (t: string | null): t is TabKey =>
+  t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class';
 
 type GamePageProps = {
   session: any;
@@ -41,7 +44,17 @@ export function GamePage({
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(selectedCharacter);
 
   const [inventory, setInventory] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<TabKey>('combat');
+
+  // Restaure l'onglet actif dès l'init, de façon synchrone (aucun flash vers 'combat')
+  const initialTab: TabKey = (() => {
+    try {
+      const saved = localStorage.getItem(lastTabKeyFor(selectedCharacter.id));
+      return isValidTab(saved) ? saved : 'combat';
+    } catch {
+      return 'combat';
+    }
+  })();
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
   // Pour ne pas remettre le spinner en boucle: on ne ré-initialise que si l'ID change
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
@@ -89,6 +102,11 @@ export function GamePage({
       } catch {
         // non critique
       }
+      try {
+        localStorage.setItem(lastTabKeyFor(selectedCharacter.id), activeTab);
+      } catch {
+        // non critique
+      }
     };
 
     window.addEventListener('visibilitychange', persist);
@@ -98,7 +116,29 @@ export function GamePage({
       window.removeEventListener('visibilitychange', persist);
       window.removeEventListener('pagehide', persist);
     };
-  }, [currentPlayer]);
+  }, [currentPlayer, activeTab, selectedCharacter.id]);
+
+  // Persiste l'onglet à chaque changement
+  useEffect(() => {
+    try {
+      localStorage.setItem(lastTabKeyFor(selectedCharacter.id), activeTab);
+    } catch {
+      // non critique
+    }
+  }, [activeTab, selectedCharacter.id]);
+
+  // Si on change de personnage, restaurer l'onglet propre à ce personnage
+  useEffect(() => {
+    const saved = (() => {
+      try {
+        const v = localStorage.getItem(lastTabKeyFor(selectedCharacter.id));
+        return isValidTab(v) ? v : 'combat';
+      } catch {
+        return 'combat';
+      }
+    })();
+    setActiveTab(saved);
+  }, [selectedCharacter.id]);
 
   // Initialisation: ne se relance que quand l'ID change (pas à chaque modification de champ)
   useEffect(() => {
@@ -133,11 +173,10 @@ export function GamePage({
       prevPlayerId.current = selectedCharacter.id;
       initialize();
     } else {
-      // Première montée: prev est null ou différent? Si c'est la toute première fois, on initialise
+      // Première montée: si on n'a pas encore chargé, on initialise
       if (loading) {
         initialize();
       }
-      // Sinon, ne rien faire (évite le "saut" lors d'une simple mise à jour de valeur)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCharacter.id]); // dépend seulement de l'ID
