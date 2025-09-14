@@ -175,7 +175,6 @@ function slug(s: string) {
 /* ===========================================================
    Helper sous-classe robuste (plusieurs noms possibles)
    =========================================================== */
-
 function getSubclassFromPlayerLike(p?: any): string | null {
   if (!p) return null;
   const candidates = [
@@ -361,8 +360,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   };
 
   const rawClass = (player?.class ?? playerClass ?? className ?? '').trim();
-  // Amélioration: détecter la sous-classe depuis plusieurs clés possibles sur le player,
-  // sinon utiliser la prop subclassName.
+  // Utilise une détection plus robuste de la sous-classe sur l'objet player, sinon fallback sur la prop
   const rawSubclass = (getSubclassFromPlayerLike(player) ?? subclassName) ?? null;
 
   const displayClass = rawClass ? sentenceCase(rawClass) : '';
@@ -667,7 +665,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
             onUpdateResource={updateClassResource}
             player={player ?? undefined}
             level={finalLevel}
-            // nouveau: propage le ripple global
+            // propage le ripple global
             onPulseScreen={triggerScreenRippleFromEvent}
           />
         )}
