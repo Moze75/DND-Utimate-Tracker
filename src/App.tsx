@@ -4,7 +4,7 @@ import { supabase } from './lib/supabase';
 import type { Player } from './types/dnd';
 import { InstallPrompt } from './components/InstallPrompt';
 
-const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter'; // conserve la même clé qu'avant
+const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter'; // même clé qu'avant
 const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
 
 function App() {
@@ -25,9 +25,11 @@ function App() {
         const characterSelectionModule = await import('./pages/CharacterSelectionPage');
         const gamePageModule = await import('./pages/GamePage');
 
-        setLoginPage(() => loginModule.LoginPage);
-        setCharacterSelectionPage(() => characterSelectionModule.CharacterSelectionPage);
-        setGamePage(() => gamePageModule.GamePage);
+        setLoginPage(() => (loginModule as any).LoginPage ?? (loginModule as any).default);
+        setCharacterSelectionPage(
+          () => (characterSelectionModule as any).CharacterSelectionPage ?? (characterSelectionModule as any).default
+        );
+        setGamePage(() => (gamePageModule as any).GamePage ?? (gamePageModule as any).default);
       } catch (error) {
         console.error('Erreur lors du chargement des composants:', error);
       }
@@ -45,7 +47,7 @@ function App() {
         setSession(current);
 
         if (current) {
-          // Respecter le choix utilisateur de rester sur l'écran de sélection (flag one-shot)
+          // Respecter le choix utilisateur: ne pas auto-reprendre juste après retour volontaire
           if (sessionStorage.getItem(SKIP_AUTO_RESUME_ONCE) === '1') {
             sessionStorage.removeItem(SKIP_AUTO_RESUME_ONCE);
           } else {
@@ -59,7 +61,7 @@ function App() {
             }
           }
         } else {
-          // Pas de session -> purger la sélection en mémoire (on nettoie aussi le stockage côté onAuthStateChange)
+          // Pas de session -> purge mémoire (le snapshot sera supprimé lors de onAuthStateChange logout)
           setSelectedCharacter(null);
         }
       } finally {
@@ -82,7 +84,6 @@ function App() {
       } else {
         // À la connexion (ou refresh), si aucun personnage sélectionné, tenter une restauration
         if (!selectedCharacter) {
-          // Respecter le flag one-shot si présent
           if (sessionStorage.getItem(SKIP_AUTO_RESUME_ONCE) === '1') {
             sessionStorage.removeItem(SKIP_AUTO_RESUME_ONCE);
           } else {
@@ -115,8 +116,8 @@ function App() {
   }, [selectedCharacter]);
 
   // Sauvegarder le personnage sélectionné dans localStorage (snapshot complet)
-  // IMPORTANT: on ne supprime plus le snapshot quand selectedCharacter redevient null
-  // (cela permet la reprise auto ultérieure), on le supprime seulement à la déconnexion.
+  // IMPORTANT: on ne supprime PAS le snapshot quand selectedCharacter redevient null
+  // (pour permettre la reprise auto après un simple retour à la sélection).
   useEffect(() => {
     if (selectedCharacter) {
       try {
@@ -125,7 +126,6 @@ function App() {
         // no-op
       }
     }
-    // Intentionnellement aucun "else" ici pour NE PAS effacer le snapshot lors d'un simple retour à la sélection
   }, [selectedCharacter]);
 
   // Écran de chargement des composants dynamiques
@@ -177,7 +177,6 @@ function App() {
         <CharacterSelectionPage
           session={session}
           onCharacterSelect={(p: Player) => {
-            // Dès qu'on choisit un perso, on efface le flag d'anti-auto-resume
             try {
               sessionStorage.removeItem(SKIP_AUTO_RESUME_ONCE);
             } catch {
@@ -191,7 +190,6 @@ function App() {
           session={session}
           selectedCharacter={selectedCharacter}
           onBackToSelection={() => {
-            // Empêche l'auto-resume UNE FOIS, quand l'utilisateur revient volontairement à la sélection
             try {
               sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1');
             } catch {
@@ -201,6 +199,12 @@ function App() {
           }}
           onUpdateCharacter={(p: Player) => {
             setSelectedCharacter(p);
+            // App écrit aussi le snapshot pour sécuriser
+            try {
+              localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(p));
+            } catch {
+              // no-op
+            }
           }}
         />
       )}
