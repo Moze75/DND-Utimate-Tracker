@@ -2,8 +2,6 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-
-    <!-- Important pour PWA plein écran et zones sûres -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
@@ -15,47 +13,22 @@
     <!-- PWA / App-like -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <!-- iOS: barre de statut sombre et contenu sous la barre -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="application-name" content="D&D Ultimate Tracker" />
     <meta name="apple-mobile-web-app-title" content="D&D Ultimate Tracker" />
-
-    <!-- Couleurs système (Android status/navigation bar).
-         Deux balises pour gérer les thèmes clair/sombre.
-         Ici, on force la même teinte sombre dans les deux cas. -->
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#111827" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111827" />
-
-    <!-- Indique au navigateur que l’app gère un thème sombre -->
+    <meta name="theme-color" content="#111827" />
     <meta name="color-scheme" content="dark light" />
     <meta name="format-detection" content="telephone=no" />
 
-    <!-- Manifeste: doit se trouver dans APP/public/ -->
-    <link rel="manifest" href="/manifest.webmanifest?v=3" />
+    <!-- Manifest DOIT être dans APP/public/ -->
+    <link rel="manifest" href="/manifest.webmanifest" />
 
-    <!-- Favicons (optionnel pour onglet desktop) -->
+    <!-- Favicons (optionnels pour l’onglet desktop) -->
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
 
-    <!-- iOS Home Screen icon -->
+    <!-- iOS Home Screen Icon -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-
-    <!-- Styles minimum pour éviter les “flash” blancs autour du clavier et teinter la zone geste/home -->
-    <style>
-      :root {
-        color-scheme: dark;
-        --app-bg: #111827; /* même couleur que theme-color */
-      }
-      html, body {
-        height: 100%;
-        margin: 0;
-        background: var(--app-bg);
-      }
-      /* Pour iOS: s’assure que le fond couvre sous les encoches/home indicator */
-      body {
-        min-height: 100vh;
-      }
-    </style>
   </head>
   <body>
     <div id="root"></div>
