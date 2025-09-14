@@ -4,9 +4,6 @@ import { supabase } from './lib/supabase';
 import type { Player } from './types/dnd';
 import { InstallPrompt } from './components/InstallPrompt';
 
-const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter'; // conserve la même clé qu'avant
-const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
-
 function App() {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<any>(null);
@@ -17,7 +14,7 @@ function App() {
   const [CharacterSelectionPage, setCharacterSelectionPage] = useState<React.ComponentType<any> | null>(null);
   const [GamePage, setGamePage] = useState<React.ComponentType<any> | null>(null);
 
-  // Charger dynamiquement les pages (exports nommés)
+  // Charger dynamiquement les pages
   useEffect(() => {
     const loadComponents = async () => {
       try {
@@ -45,21 +42,16 @@ function App() {
         setSession(current);
 
         if (current) {
-          // Respecter le choix utilisateur de rester sur l'écran de sélection (flag one-shot)
-          if (sessionStorage.getItem(SKIP_AUTO_RESUME_ONCE) === '1') {
-            sessionStorage.removeItem(SKIP_AUTO_RESUME_ONCE);
-          } else {
-            const savedChar = localStorage.getItem(LAST_SELECTED_CHARACTER_SNAPSHOT);
-            if (savedChar) {
-              try {
-                setSelectedCharacter(JSON.parse(savedChar));
-              } catch (e) {
-                console.error('Erreur parsing selectedCharacter:', e);
-              }
+          const savedChar = localStorage.getItem('selectedCharacter');
+          if (savedChar) {
+            try {
+              setSelectedCharacter(JSON.parse(savedChar));
+            } catch (e) {
+              console.error('Erreur parsing selectedCharacter:', e);
             }
           }
         } else {
-          // Pas de session -> purger la sélection en mémoire (on nettoie aussi le stockage côté onAuthStateChange)
+          // Pas de session -> on s’assure de ne pas garder un personnage sélectionné
           setSelectedCharacter(null);
         }
       } finally {
@@ -78,21 +70,16 @@ function App() {
       if (!newSession) {
         // Déconnexion -> purger la sélection et le stockage local
         setSelectedCharacter(null);
-        localStorage.removeItem(LAST_SELECTED_CHARACTER_SNAPSHOT);
+        localStorage.removeItem('selectedCharacter');
       } else {
         // À la connexion (ou refresh), si aucun personnage sélectionné, tenter une restauration
         if (!selectedCharacter) {
-          // Respecter le flag one-shot si présent
-          if (sessionStorage.getItem(SKIP_AUTO_RESUME_ONCE) === '1') {
-            sessionStorage.removeItem(SKIP_AUTO_RESUME_ONCE);
-          } else {
-            const savedChar = localStorage.getItem(LAST_SELECTED_CHARACTER_SNAPSHOT);
-            if (savedChar) {
-              try {
-                setSelectedCharacter(JSON.parse(savedChar));
-              } catch (e) {
-                console.error('Erreur parsing selectedCharacter (auth change):', e);
-              }
+          const savedChar = localStorage.getItem('selectedCharacter');
+          if (savedChar) {
+            try {
+              setSelectedCharacter(JSON.parse(savedChar));
+            } catch (e) {
+              console.error('Erreur parsing selectedCharacter (auth change):', e);
             }
           }
         }
@@ -114,18 +101,13 @@ function App() {
     };
   }, [selectedCharacter]);
 
-  // Sauvegarder le personnage sélectionné dans localStorage (snapshot complet)
-  // IMPORTANT: on ne supprime plus le snapshot quand selectedCharacter redevient null
-  // (cela permet la reprise auto ultérieure), on le supprime seulement à la déconnexion.
+  // Sauvegarder le personnage sélectionné dans localStorage
   useEffect(() => {
     if (selectedCharacter) {
-      try {
-        localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(selectedCharacter));
-      } catch {
-        // no-op
-      }
+      localStorage.setItem('selectedCharacter', JSON.stringify(selectedCharacter));
+    } else {
+      localStorage.removeItem('selectedCharacter');
     }
-    // Intentionnellement aucun "else" ici pour NE PAS effacer le snapshot lors d'un simple retour à la sélection
   }, [selectedCharacter]);
 
   // Écran de chargement des composants dynamiques
@@ -176,32 +158,14 @@ function App() {
       ) : !selectedCharacter ? (
         <CharacterSelectionPage
           session={session}
-          onCharacterSelect={(p: Player) => {
-            // Dès qu'on choisit un perso, on efface le flag d'anti-auto-resume
-            try {
-              sessionStorage.removeItem(SKIP_AUTO_RESUME_ONCE);
-            } catch {
-              // no-op
-            }
-            setSelectedCharacter(p);
-          }}
+          onCharacterSelect={setSelectedCharacter}
         />
       ) : (
         <GamePage
           session={session}
           selectedCharacter={selectedCharacter}
-          onBackToSelection={() => {
-            // Empêche l'auto-resume UNE FOIS, quand l'utilisateur revient volontairement à la sélection
-            try {
-              sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1');
-            } catch {
-              // no-op
-            }
-            setSelectedCharacter(null);
-          }}
-          onUpdateCharacter={(p: Player) => {
-            setSelectedCharacter(p);
-          }}
+          onBackToSelection={() => setSelectedCharacter(null)}
+          onUpdateCharacter={(p: Player) => setSelectedCharacter(p)}
         />
       )}
     </>
