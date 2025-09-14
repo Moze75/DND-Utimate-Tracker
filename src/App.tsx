@@ -17,7 +17,7 @@ function App() {
   const [CharacterSelectionPage, setCharacterSelectionPage] = useState<React.ComponentType<any> | null>(null);
   const [GamePage, setGamePage] = useState<React.ComponentType<any> | null>(null);
 
-  // Charger dynamiquement les pages (assurez-vous que les pages exportent des composants nommés)
+  // Charger dynamiquement les pages avec fallback sur export default pour éviter le chargement infini
   useEffect(() => {
     const loadComponents = async () => {
       try {
@@ -25,9 +25,21 @@ function App() {
         const characterSelectionModule = await import('./pages/CharacterSelectionPage');
         const gamePageModule = await import('./pages/GamePage');
 
-        setLoginPage(() => loginModule.LoginPage);
-        setCharacterSelectionPage(() => characterSelectionModule.CharacterSelectionPage);
-        setGamePage(() => gamePageModule.GamePage);
+        const LoginComp =
+          (loginModule as any).LoginPage ??
+          (loginModule as any).default;
+
+        const CharacterSelectionComp =
+          (characterSelectionModule as any).CharacterSelectionPage ??
+          (characterSelectionModule as any).default;
+
+        const GameComp =
+          (gamePageModule as any).GamePage ??
+          (gamePageModule as any).default;
+
+        setLoginPage(() => LoginComp);
+        setCharacterSelectionPage(() => CharacterSelectionComp);
+        setGamePage(() => GameComp);
       } catch (error) {
         console.error('Erreur lors du chargement des composants:', error);
       }
