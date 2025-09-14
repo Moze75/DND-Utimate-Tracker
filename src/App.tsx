@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Toaster } from 'react-hot-toast';
+import React, { useEffect, useState, useRef } from 'react';
+import { Toaster, toast } from 'react-hot-toast';
 import { supabase } from './lib/supabase';
 import type { Player } from './types/dnd';
 import { InstallPrompt } from './components/InstallPrompt';
@@ -16,6 +16,19 @@ function App() {
   const [LoginPage, setLoginPage] = useState<React.ComponentType<any> | null>(null);
   const [CharacterSelectionPage, setCharacterSelectionPage] = useState<React.ComponentType<any> | null>(null);
   const [GamePage, setGamePage] = useState<React.ComponentType<any> | null>(null);
+
+  // Refs pour le handler "back"
+  const backPressRef = useRef<number>(0);
+  const sessionRef = useRef<any>(null);
+  const selectedCharacterRef = useRef<Player | null>(null);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
+  useEffect(() => {
+    selectedCharacterRef.current = selectedCharacter;
+  }, [selectedCharacter]);
 
   // Charger dynamiquement les pages (exports nommés)
   useEffect(() => {
@@ -127,6 +140,57 @@ function App() {
       }
     }
   }, [selectedCharacter]);
+
+  // Gestion du bouton "retour" Android / navigateur:
+  // - Si on est en jeu, "retour" ramène à la sélection du personnage.
+  // - Sinon, activer "double appui pour quitter" (2e pression dans les 1.5s).
+  useEffect(() => {
+    try {
+      window.history.pushState({ ut: 'keepalive' }, '');
+    } catch {
+      // no-op
+    }
+
+    const onPopState = (_ev: PopStateEvent) => {
+      // 1) En jeu -> retour interne à la sélection
+      if (sessionRef.current && selectedCharacterRef.current) {
+        try {
+          sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1');
+        } catch {
+          // no-op
+        }
+        setSelectedCharacter(null);
+        // Ré-armer l'entrée d'historique pour capturer le prochain "retour"
+        try {
+          window.history.pushState({ ut: 'keepalive' }, '');
+        } catch {
+          // no-op
+        }
+        return;
+      }
+
+      // 2) À la racine (login ou sélection) -> double appui pour quitter
+      const now = Date.now();
+      if (now - (backPressRef.current ?? 0) < 1500) {
+        // Laisser quitter: enlever l'écouteur et effectuer un back supplémentaire
+        window.removeEventListener('popstate', onPopState);
+        window.history.back();
+      } else {
+        backPressRef.current = now;
+        toast('Appuyez à nouveau pour quitter', { icon: '↩️' });
+        try {
+          window.history.pushState({ ut: 'keepalive' }, '');
+        } catch {
+          // no-op
+        }
+      }
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+    };
+  }, []);
 
   // Écran de chargement des composants dynamiques
   if (!LoginPage || !CharacterSelectionPage || !GamePage) {
