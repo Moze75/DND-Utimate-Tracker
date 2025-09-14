@@ -149,54 +149,59 @@ function App() {
     }
   }, [selectedCharacter]);
 
-  // Gestion du bouton "retour" Android / navigateur:
-  // - Si on est en jeu, afficher un popup de confirmation pour revenir à la sélection.
-  // - Si le popup est déjà ouvert, un retour le ferme.
-  // - À la racine (login/sélection), activer "double appui pour quitter".
-  useEffect(() => {
+  // Helpers historique
+  const pushSentinel = (times = 1) => {
     try {
-      window.history.pushState({ ut: 'keepalive' }, '');
+      for (let i = 0; i < times; i++) {
+        window.history.pushState({ ut: 'keepalive' }, '');
+      }
     } catch {
       // no-op
     }
+  };
+
+  // Gestion du bouton "retour" Android / navigateur (robuste PWA):
+  // - Armer 2 entrées au montage pour garantir un popstate capturable.
+  // - En jeu: ouvrir un popup de confirmation (ne pas sortir).
+  // - Popup ouvert: un retour ferme le popup.
+  // - À la racine: double appui pour quitter; au 2e appui on consomme nos 2 entrées et on laisse Android fermer.
+  useEffect(() => {
+    pushSentinel(2);
 
     const onPopState = (_ev: PopStateEvent) => {
-      // Si le popup est ouvert -> fermer le popup
+      // 1) Si le popup est ouvert -> le fermer et rester
       if (showBackConfirmRef.current) {
         setShowBackConfirm(false);
-        try {
-          window.history.pushState({ ut: 'keepalive' }, '');
-        } catch {
-          // no-op
-        }
+        pushSentinel(1);
         return;
       }
 
-      // Si on est en jeu -> demander confirmation
+      // 2) Si on est en jeu -> demander confirmation et rester
       if (sessionRef.current && selectedCharacterRef.current) {
         setShowBackConfirm(true);
-        // Ré-armer l'entrée d'historique pour capturer le prochain "retour"
-        try {
-          window.history.pushState({ ut: 'keepalive' }, '');
-        } catch {
-          // no-op
-        }
+        pushSentinel(1);
         return;
       }
 
-      // À la racine (login/sélection) -> double appui pour quitter
+      // 3) Racine (login/sélection) -> double appui pour quitter
       const now = Date.now();
       if (now - (backPressRef.current ?? 0) < 1500) {
+        // 2e appui: consommer nos 2 entrées et laisser Android fermer l'app
         window.removeEventListener('popstate', onPopState);
-        window.history.back();
+        try {
+          window.history.go(-2);
+        } catch {
+          // fallback
+          try {
+            window.history.back();
+          } catch {
+            // no-op
+          }
+        }
       } else {
         backPressRef.current = now;
         toast('Appuyez à nouveau pour quitter', { icon: '↩️' });
-        try {
-          window.history.pushState({ ut: 'keepalive' }, '');
-        } catch {
-          // no-op
-        }
+        pushSentinel(1);
       }
     };
 
@@ -204,6 +209,7 @@ function App() {
     return () => {
       window.removeEventListener('popstate', onPopState);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const confirmReturnToSelection = () => {
@@ -214,21 +220,12 @@ function App() {
     }
     setShowBackConfirm(false);
     setSelectedCharacter(null);
-    // Ré-armer l'historique pour la suite
-    try {
-      window.history.pushState({ ut: 'keepalive' }, '');
-    } catch {
-      // no-op
-    }
+    pushSentinel(1);
   };
 
   const cancelReturnToSelection = () => {
     setShowBackConfirm(false);
-    try {
-      window.history.pushState({ ut: 'keepalive' }, '');
-    } catch {
-      // no-op
-    }
+    pushSentinel(1);
   };
 
   // Écran de chargement des composants dynamiques
