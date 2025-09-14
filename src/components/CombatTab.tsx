@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Heart, Plus, Sword, Swords, Shield, Settings, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Heart, Plus, Sword, Swords, Shield, Settings, Trash2 } from 'lucide-react';
 import { Player, Attack } from '../types/dnd';
 import toast from 'react-hot-toast';
 import { ConditionsSection } from './ConditionsSection';
@@ -249,10 +249,6 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     diceFormula: string;
     modifier: number;
   } | null>(null);
-
-  const [expandedCategories, setExpandedCategories] = useState<{ [key: string]: boolean }>({
-    physical: false
-  });
 
   React.useEffect(() => {
     fetchAttacks();
@@ -572,29 +568,6 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     setDiceRollerOpen(true);
   };
 
-  // Grouper seulement les attaques physiques (on masque toute attaque de type "spell")
-  const groupAttacksByCategory = () => {
-    const groups: { [key: string]: Attack[] } = { physical: [] };
-
-    attacks.forEach((attack) => {
-      const attackType = attack.attack_type || 'physical';
-      if (attackType === 'physical') {
-        groups.physical.push(attack);
-      }
-    });
-
-    return groups;
-  };
-
-  const getCategoryTitle = () => 'Attaques physiques';
-
-  const toggleCategory = (key: string) => {
-    setExpandedCategories((prev) => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
-
   const renderAttackCard = (attack: Attack) => {
     const dmgBonus = getDamageBonus(attack);
     const dmgLabel = `${attack.damage_dice}${dmgBonus !== 0 ? (dmgBonus > 0 ? `+${dmgBonus}` : `${dmgBonus}`) : ''}`;
@@ -635,7 +608,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
             Attaque : 1d20+{getAttackBonus(attack)}
           </button>
 
-          <button
+        <button
             onClick={() => rollDamage(attack)}
             className="flex-1 bg-orange-600/60 hover:bg-orange-500/60 text-white px-3 py-2 rounded-md transition-colors flex items-center justify-center"
           >
@@ -646,9 +619,13 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     );
   };
 
+  // Calculs PV
   const totalHP = player.current_hp + player.temporary_hp;
   const hpPercentage = Math.max(0, (totalHP / player.max_hp) * 100);
   const isCriticalHealth = totalHP <= Math.floor(player.max_hp * 0.1);
+
+  // Filtrage des attaques physiques (toutes les attaques de cet onglet)
+  const physicalAttacks = attacks.filter((a) => (a.attack_type || 'physical') === 'physical');
 
   return (
     <div className="space-y-6">
@@ -838,46 +815,15 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
           </button>
         </div>
         <div className="p-4 space-y-2">
-          {(() => {
-            const groupedAttacks = groupAttacksByCategory();
-            const categoryKey = 'physical';
-            const categoryAttacks = groupedAttacks[categoryKey];
-
-            if (!categoryAttacks || categoryAttacks.length === 0) {
-              return (
-                <>
-                  <div className="text-center py-8 text-gray-400">
-                    <Sword className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                    <p>Aucune attaque configurée</p>
-                    <p className="text-sm">Cliquez sur + pour ajouter une attaque</p>
-                  </div>
-                </>
-              );
-            }
-
-            const isExpanded = expandedCategories[categoryKey];
-
-            return (
-              <div className="mb-4">
-                <button
-                  onClick={() => toggleCategory(categoryKey)}
-                  className="w-full flex items-center justify-between p-3 bg-gray-700/50 hover:bg-gray-700/70 rounded-lg transition-colors mb-2"
-                >
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="font-medium text-gray-200">{getCategoryTitle()}</span>
-                    <span className="text-sm text-gray-400">({categoryAttacks.length})</span>
-                  </div>
-                  {isExpanded ? (
-                    <ChevronDown className="w-5 h-5 text-gray-400" />
-                  ) : (
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
-                  )}
-                </button>
-
-                {isExpanded && <div className="space-y-2 ml-2">{categoryAttacks.map(renderAttackCard)}</div>}
-              </div>
-            );
-          })()}
+          {physicalAttacks.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">
+              <Sword className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>Aucune attaque configurée</p>
+              <p className="text-sm">Cliquez sur + pour ajouter une attaque</p>
+            </div>
+          ) : (
+            <div className="space-y-2">{physicalAttacks.map(renderAttackCard)}</div>
+          )}
         </div>
       </div>
 
