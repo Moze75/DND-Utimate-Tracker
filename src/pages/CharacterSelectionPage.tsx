@@ -29,7 +29,6 @@ export default function CharacterSelectionPage({ onSelect }: CharacterSelectionP
         setLoading(true);
         setError(null);
         // Adapte cette méthode à ton service si besoin:
-        // Exemples alternatifs: playerService.getPlayersByUser(userId) / listMyPlayers() / getAllByOwner()
         const list = await playerService.getMyPlayers?.();
         if (!aborted) {
           setPlayers(Array.isArray(list) ? list : []);
@@ -53,7 +52,6 @@ export default function CharacterSelectionPage({ onSelect }: CharacterSelectionP
   const handleSelect = (p: Player) => {
     try {
       localStorage.setItem(LAST_SELECTED_CHARACTER_ID, p.id);
-      // Si on venait d’utiliser “Retour aux personnages”, on réactive l’auto-resume pour les futurs démarrages
       sessionStorage.removeItem(SKIP_AUTO_RESUME_ONCE);
     } catch {
       // non critique
@@ -79,8 +77,6 @@ export default function CharacterSelectionPage({ onSelect }: CharacterSelectionP
   const retry = () => {
     setError(null);
     setLoading(true);
-    // Re-déclenche le useEffect en modifiant une clé dérivée, ou relance directement:
-    // On relance simplement en appelant à nouveau la logique de chargement:
     (async () => {
       try {
         const list = await playerService.getMyPlayers?.();
