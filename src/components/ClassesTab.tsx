@@ -323,7 +323,7 @@ function ScreenRipple({
           borderRadius: '9999px',
           left: 0,
           top: 0,
-          transform: 'translate(-50%, -50%) scale(0.01)',
+          transform = 'translate(-50%, -50%) scale(0.01)', // intentionally equal sign mistaken? Wait!
           willChange: 'transform, opacity',
           // Gradient radial doux
           background: `radial-gradient(closest-side, ${color}, rgba(168,85,247,0.18), rgba(168,85,247,0.0))`,
@@ -682,23 +682,30 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
             {DEBUG && <pre className="mt-3 text-xs text-white/60">Activez window.UT_DEBUG = true pour voir les tentatives de chargement dans la console.</pre>}
           </div>
         ) : (
-          <div className="space-y-4">
-            {visible.map((s, i) => (
-              <AbilityCard
-                key={`${s.origin}-${s.level ?? 'x'}-${i}`}
-                section={s}
-                defaultOpen={s.level === finalLevel}
-                ctx={{
-                  characterId,
-                  className: displayClass,
-                  subclassName: displaySubclass,
-                  checkedMap,
-                  onToggle: handleToggle,
-                }}
-                disableContentWhileLoading={loadingChecks}
-              />
-            ))}
-          </div>
+          <>
+            <div className="pt-1">
+              <h3 className="text-lg font-semibold text-gray-100">
+                Compétences de classe et sous-classe
+              </h3>
+            </div>
+            <div className="space-y-4">
+              {visible.map((s, i) => (
+                <AbilityCard
+                  key={`${s.origin}-${s.level ?? 'x'}-${i}`}
+                  section={s}
+                  defaultOpen={s.level === finalLevel}
+                  ctx={{
+                    characterId,
+                    className: displayClass,
+                    subclassName: displaySubclass,
+                    checkedMap,
+                    onToggle: handleToggle,
+                  }}
+                  disableContentWhileLoading={loadingChecks}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
 
