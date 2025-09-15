@@ -483,7 +483,8 @@ export function ClassResourcesSection({ player, onUpdate }: ClassResourcesSectio
       }
       break;
 
-    case 'Paladin':
+    case 'Paladin': {
+      // Imposition des mains
       if (typeof cr.lay_on_hands === 'number') {
         items.push(
           <ResourceBlock
@@ -499,7 +500,29 @@ export function ClassResourcesSection({ player, onUpdate }: ClassResourcesSectio
           />
         );
       }
+
+      // Conduits divins (N3+)
+      const lvl = player.level ?? 0;
+      if (lvl >= 3) {
+        const cap = lvl >= 11 ? 3 : 2;
+        const used = cr.used_channel_divinity || 0;
+        items.push(
+          <ResourceBlock
+            key="paladin_channel_divinity"
+            icon={<Cross size={20} />}
+            label="Conduits divins"
+            total={cap}
+            used={used}
+            onUse={() => updateClassResource('used_channel_divinity', Math.min(used + 1, cap))}
+            onUpdateTotal={() => { /* cap calculé -> non éditable */ }}
+            onRestore={() => updateClassResource('used_channel_divinity', Math.max(0, used - 1))}
+            color="yellow"
+            hideEdit
+          />
+        );
+      }
       break;
+    }
 
     case 'Rôdeur':
       if (typeof cr.favored_foe === 'number') {
