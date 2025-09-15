@@ -1379,7 +1379,32 @@ function ClassResourcesCard({
     </div>
   );
 } 
+<>
+  <div className="stat-header flex items-center gap-3 pt-1">
+    <ListChecks className="w-5 h-5 text-sky-500" />
+    <h3 className="text-lg font-semibold text-gray-100">
+      Compétences de classe et sous-classe
+    </h3>
+  </div>
 
+  <div className="space-y-4">
+    {visible.map((s, i) => (
+      <AbilityCard
+        key={`${s.origin}-${s.level ?? 'x'}-${i}`}
+        section={s}
+        defaultOpen={s.level === finalLevel}
+        ctx={{
+          characterId,
+          className: displayClass,
+          subclassName: displaySubclass,
+          checkedMap,
+          onToggle: handleToggle,
+        }}
+        disableContentWhileLoading={loadingChecks}
+      />
+    ))}
+  </div>
+</>
 export default ClassesTab;
 export { ClassesTab };
 
