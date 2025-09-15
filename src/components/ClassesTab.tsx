@@ -323,7 +323,7 @@ function ScreenRipple({
           borderRadius: '9999px',
           left: 0,
           top: 0,
-          transform = 'translate(-50%, -50%) scale(0.01)', // intentionally equal sign mistaken? Wait!
+          transform: 'translate(-50%, -50%) scale(0.01)', // intentionally equal sign mistaken? Wait!
           willChange: 'transform, opacity',
           // Gradient radial doux
           background: `radial-gradient(closest-side, ${color}, rgba(168,85,247,0.18), rgba(168,85,247,0.0))`,
