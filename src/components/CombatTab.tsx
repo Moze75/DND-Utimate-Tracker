@@ -21,6 +21,30 @@ interface AttackEditModalProps {
   onDelete?: () => void;
 }
 
+// Icône locale "Bow" (style Lucide)
+const BowIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+    {...props}
+  >
+    {/* Arc */}
+    <path d="M4 20c6-4 6-12 0-16" />
+    {/* Corde */}
+    <path d="M4 4l8 8L4 20" />
+    {/* Flèche */}
+    <path d="M22 2l-8 8" />
+    <path d="M22 2l-4 2" />
+    <path d="M22 2l-2 4" />
+  </svg>
+);
+
+// Types de dégâts physiques uniquement
 const PHYSICAL_DAMAGE_TYPES = ['Tranchant', 'Perforant', 'Contondant'] as const;
 type PhysicalDamage = typeof PHYSICAL_DAMAGE_TYPES[number];
 
@@ -63,7 +87,7 @@ const AttackEditModal = ({ attack, onClose, onSave, onDelete }: AttackEditModalP
     manual_attack_bonus: attack?.manual_attack_bonus ?? null,
     manual_damage_bonus: attack?.manual_damage_bonus ?? null,
     expertise: attack?.expertise || false,
-    ammo_type: (attack?.ammo_type as string) || ''
+    ammo_type: (attack as any)?.ammo_type || ''
   });
 
   const handleSave = () => {
@@ -144,7 +168,7 @@ const AttackEditModal = ({ attack, onClose, onSave, onDelete }: AttackEditModalP
             </select>
           </div>
 
-          {/* Nouveau: Type de munition */}
+          {/* Type de munition */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Type de munition (optionnel)</label>
             <input
@@ -304,7 +328,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
           ...attackData,
           attack_type: 'physical',
           spell_level: null,
-          ammo_count: 0 // init
+          ammo_count: 0
         });
 
         if (newAttack) {
@@ -420,7 +444,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     setDiceRollerOpen(true);
   };
 
-  // Maj en base des munitions
+  // Mise à jour en base des munitions
   const setAmmoCount = async (attack: Attack, next: number) => {
     const clamped = Math.max(0, Math.floor(next || 0));
     try {
@@ -441,8 +465,8 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
   const renderAttackCard = (attack: Attack) => {
     const dmgBonus = getDamageBonus(attack);
     const dmgLabel = `${attack.damage_dice}${dmgBonus !== 0 ? (dmgBonus > 0 ? `+${dmgBonus}` : `${dmgBonus}`) : ''}`;
-    const ammoType = attack.ammo_type || '';
-    const ammoCount = attack.ammo_count ?? 0;
+    const ammoType = (attack as any).ammo_type || '';
+    const ammoCount = (attack as any).ammo_count ?? 0;
 
     return (
       <div key={attack.id} className="bg-gray-800/50 rounded-lg p-3 border border-gray-700/50">
@@ -474,22 +498,31 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
           </div>
         </div>
 
-        <div className="flex gap-2 text-sm">
-          {/* Colonne Attaque + type de munition */}
-          <div className="flex-1 flex flex-col items-stretch">
+        <div className="flex gap-2 text-sm items-stretch">
+          {/* Colonne Attaque + indication munitions (même gabarit que bouton, mais fond transparent) */}
+          <div className="flex-1 flex flex-col">
             <button
               onClick={() => rollAttack(attack)}
               className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-md transition-colors flex items-center justify-center"
             >
               Attaque : 1d20+{getAttackBonus(attack)}
             </button>
+
             {ammoType ? (
-              <div className="mt-1 text-xs text-gray-400 text-center">{ammoType}</div>
-            ) : null}
+              <div
+                className="mt-2 px-3 py-2 rounded-md flex items-center justify-center gap-2 bg-transparent"
+                aria-hidden
+              >
+                <BowIcon className="w-5 h-5 text-amber-400" />
+                <span className="text-sm font-medium text-gray-100">{ammoType}</span>
+              </div>
+            ) : (
+              <div className="mt-2" />
+            )}
           </div>
 
           {/* Colonne Dégâts + contrôles munitions */}
-          <div className="flex-1 flex flex-col items-stretch">
+          <div className="flex-1 flex flex-col">
             <button
               onClick={() => rollDamage(attack)}
               className="bg-orange-600/60 hover:bg-orange-500/60 text-white px-3 py-2 rounded-md transition-colors flex items-center justify-center"
@@ -497,7 +530,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
               Dégâts : {dmgLabel}
             </button>
             {ammoType ? (
-              <div className="mt-1 flex items-center justify-center gap-2">
+              <div className="mt-2 flex items-center justify-center gap-2">
                 <button
                   onClick={() => changeAmmoCount(attack, -1)}
                   disabled={(ammoCount ?? 0) <= 0}
@@ -521,7 +554,9 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
                   +
                 </button>
               </div>
-            ) : null}
+            ) : (
+              <div className="mt-2" />
+            )}
           </div>
         </div>
       </div>
@@ -573,6 +608,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     let newCurrentHP = player.current_hp;
     let newTempHP = player.temporary_hp;
 
+    // Les dégâts touchent d'abord les PV temporaires
     if (newTempHP > 0) {
       if (damage >= newTempHP) {
         const remainingDamage = damage - newTempHP;
@@ -643,7 +679,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     }
   };
 
-  // Filtrage des attaques physiques (toutes les attaques de cet onglet)
+  // Filtrage des attaques physiques
   const physicalAttacks = attacks.filter((a) => (a.attack_type || 'physical') === 'physical');
 
   return (
@@ -670,6 +706,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
         </div>
         <div className="p-4">
           <div className="space-y-4">
+            {/* Barre de vie */}
             <div className="relative">
               <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none select-none">
                 <span className="text-white font-bold text-sm drop-shadow-lg">
@@ -802,18 +839,14 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
           </button>
         </div>
         <div className="p-4 space-y-2">
-          {attacks.filter((a) => (a.attack_type || 'physical') === 'physical').length === 0 ? (
+          {physicalAttacks.length === 0 ? (
             <div className="text-center py-8 text-gray-400">
               <Sword className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>Aucune attaque configurée</p>
               <p className="text-sm">Cliquez sur + pour ajouter une attaque</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {attacks
-                .filter((a) => (a.attack_type || 'physical') === 'physical')
-                .map((a) => renderAttackCard(a))}
-            </div>
+            <div className="space-y-2">{physicalAttacks.map(renderAttackCard)}</div>
           )}
         </div>
       </div>
