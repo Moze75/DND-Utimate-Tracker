@@ -17,7 +17,7 @@ interface CombatTabProps {
 interface AttackEditModalProps {
   attack: Attack | null;
   onClose: () => void;
-  onSave: (attack: Partial<Attack>) => void;
+  onSave: (attack: Partial<Attack> & { ammo_type?: string | null }) => void;
   onDelete?: () => void;
 }
 
@@ -42,6 +42,8 @@ const RANGES = [
   '90 m'
 ];
 
+const localAmmoKey = (attackId: string) => `ammoCount:${attackId}`;
+
 const AttackEditModal = ({ attack, onClose, onSave, onDelete }: AttackEditModalProps) => {
   const [formData, setFormData] = useState<{
     name: string;
@@ -52,6 +54,7 @@ const AttackEditModal = ({ attack, onClose, onSave, onDelete }: AttackEditModalP
     manual_attack_bonus: number | null;
     manual_damage_bonus: number | null;
     expertise: boolean;
+    ammo_type: string; // nouveau: type de munition (optionnel)
   }>({
     name: attack?.name || '',
     damage_dice: attack?.damage_dice || '1d8',
@@ -61,9 +64,10 @@ const AttackEditModal = ({ attack, onClose, onSave, onDelete }: AttackEditModalP
       : 'Tranchant',
     range: attack?.range || 'Corps à corps',
     properties: attack?.properties || '',
-    manual_attack_bonus: attack?.manual_attack_bonus ?? null,
-    manual_damage_bonus: attack?.manual_damage_bonus ?? null,
-    expertise: attack?.expertise || false
+    manual_attack_bonus: (attack as any)?.manual_attack_bonus ?? null,
+    manual_damage_bonus: (attack as any)?.manual_damage_bonus ?? null,
+    expertise: (attack as any)?.expertise || false,
+    ammo_type: (attack as any)?.ammo_type || ''
   });
 
   const handleSave = () => {
@@ -71,7 +75,17 @@ const AttackEditModal = ({ attack, onClose, onSave, onDelete }: AttackEditModalP
       toast.error("Le nom de l'attaque est obligatoire");
       return;
     }
-    onSave(formData);
+    onSave({
+      name: formData.name,
+      damage_dice: formData.damage_dice,
+      damage_type: formData.damage_type,
+      range: formData.range,
+      properties: formData.properties,
+      manual_attack_bonus: formData.manual_attack_bonus,
+      manual_damage_bonus: formData.manual_damage_bonus,
+      expertise: formData.expertise,
+      ammo_type: formData.ammo_type.trim() || null
+    });
   };
 
   return (
@@ -135,6 +149,18 @@ const AttackEditModal = ({ attack, onClose, onSave, onDelete }: AttackEditModalP
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Nouveau champ: Type de munition */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Type de munition (optionnel)</label>
+            <input
+              type="text"
+              value={formData.ammo_type}
+              onChange={(e) => setFormData({ ...formData, ammo_type: e.target.value })}
+              className="input-dark w-full px-3 py-2 rounded-md border border-gray-600 focus:border-red-500"
+              placeholder="Ex: Flèche, Balle, Carreau"
+            />
           </div>
 
           <div>
@@ -251,9 +277,46 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     modifier: number;
   } | null>(null);
 
+  // Etat local pour les munitions par attaque (persisté via localStorage)
+  const [ammoCounts, setAmmoCounts] = useState<Record<string, number>>({});
+
   React.useEffect(() => {
     fetchAttacks();
   }, [player.id]);
+
+  React.useEffect(() => {
+    // Charger/améliorer les compteurs depuis localStorage à chaque fois que la liste change
+    setAmmoCounts((prev) => {
+      const next: Record<string, number> = { ...prev };
+      for (const a of attacks) {
+        const key = localAmmoKey((a as any).id);
+        const stored = typeof window !== 'undefined' ? window.localStorage.getItem(key) : null;
+        const parsed = stored !== null ? Number(stored) : NaN;
+        if (!Number.isFinite(parsed)) {
+          // init à 0 si non défini
+          if (next[(a as any).id] === undefined) next[(a as any).id] = 0;
+        } else {
+          next[(a as any).id] = parsed;
+        }
+      }
+      return next;
+    });
+  }, [attacks]);
+
+  const setAmmoCount = (attackId: string, value: number) => {
+    const v = Math.max(0, Math.floor(value || 0));
+    setAmmoCounts((prev) => ({ ...prev, [attackId]: v }));
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(localAmmoKey(attackId), String(v));
+      }
+    } catch {}
+  };
+
+  const changeAmmoCount = (attackId: string, delta: number) => {
+    const current = ammoCounts[attackId] ?? 0;
+    setAmmoCount(attackId, current + delta);
+  };
 
   const fetchAttacks = async () => {
     try {
@@ -265,29 +328,29 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     }
   };
 
-  const saveAttack = async (attackData: Partial<Attack>) => {
+  const saveAttack = async (attackData: Partial<Attack> & { ammo_type?: string | null }) => {
     try {
       if (editingAttack) {
         // Mise à jour d'une attaque existante (forcée en physique)
         const updatedAttack = await attackService.updateAttack({
           ...attackData,
-          id: editingAttack.id,
+          id: (editingAttack as any).id,
           attack_type: 'physical',
           spell_level: null
-        });
+        } as any);
 
         if (updatedAttack) {
-          setAttacks(attacks.map((attack) => (attack.id === editingAttack.id ? updatedAttack : attack)));
+          setAttacks(attacks.map((attack) => ((attack as any).id === (editingAttack as any).id ? updatedAttack : attack)));
           toast.success('Attaque modifiée');
         }
       } else {
         // Création d'une attaque (forcée en physique)
         const newAttack = await attackService.addAttack({
-          player_id: player.id,
+          player_id: (player as any).id,
           ...attackData,
           attack_type: 'physical',
           spell_level: null
-        });
+        } as any);
 
         if (newAttack) {
           setAttacks([...attacks, newAttack]);
@@ -310,9 +373,15 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
       const success = await attackService.removeAttack(attackId);
 
       if (success) {
-        setAttacks(attacks.filter((attack) => attack.id !== attackId));
+        setAttacks(attacks.filter((attack) => ((attack as any).id !== attackId)));
         setEditingAttack(null);
         setShowAttackModal(false);
+        // Nettoyer le compteur local
+        try {
+          if (typeof window !== 'undefined') {
+            window.localStorage.removeItem(localAmmoKey(attackId));
+          }
+        } catch {}
         toast.success('Attaque supprimée');
       } else {
         throw new Error('Échec de la suppression');
@@ -440,7 +509,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
         Object.assign(updateData, { temporary_hp: clampedTempHP });
       }
 
-      const { error } = await supabase.from('players').update(updateData).eq('id', player.id);
+      const { error } = await supabase.from('players').update(updateData).eq('id', (player as any).id);
 
       if (error) throw error;
 
@@ -468,7 +537,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
           max_hp: clampedMaxHP,
           current_hp: adjustedCurrentHP
         })
-        .eq('id', player.id);
+        .eq('id', (player as any).id);
 
       if (error) throw error;
 
@@ -487,8 +556,8 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
   };
 
   const getAttackBonus = (attack: Attack): number => {
-    if (attack.manual_attack_bonus !== null && attack.manual_attack_bonus !== undefined) {
-      return attack.manual_attack_bonus;
+    if ((attack as any).manual_attack_bonus !== null && (attack as any).manual_attack_bonus !== undefined) {
+      return (attack as any).manual_attack_bonus;
     }
 
     const proficiencyBonus = player.stats?.proficiency_bonus || 2;
@@ -506,7 +575,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
         abilityModifier = dexAbility?.modifier || 0;
       } else {
         // Par défaut, Force pour CàC, Dextérité à distance
-        if (attack.range?.toLowerCase().includes('distance') || attack.range?.toLowerCase().includes('portée')) {
+        if ((attack as any).range?.toLowerCase().includes('distance') || (attack as any).range?.toLowerCase().includes('portée')) {
           const dexAbility = player.abilities.find((a) => a.name === 'Dextérité');
           abilityModifier = dexAbility?.modifier || 0;
         } else {
@@ -516,13 +585,13 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
       }
     }
 
-    const masteryBonus = attack.expertise ? proficiencyBonus : 0;
+    const masteryBonus = (attack as any).expertise ? proficiencyBonus : 0;
     return abilityModifier + masteryBonus;
   };
 
   const getDamageBonus = (attack: Attack): number => {
-    if (attack.manual_damage_bonus !== null && attack.manual_damage_bonus !== undefined) {
-      return attack.manual_damage_bonus;
+    if ((attack as any).manual_damage_bonus !== null && (attack as any).manual_damage_bonus !== undefined) {
+      return (attack as any).manual_damage_bonus;
     }
 
     let abilityModifier = 0;
@@ -534,7 +603,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
         const dexAbility = player.abilities.find((a) => a.name === 'Dextérité');
         abilityModifier = dexAbility?.modifier || 0;
       } else {
-        if (attack.range?.toLowerCase().includes('distance') || attack.range?.toLowerCase().includes('portée')) {
+        if ((attack as any).range?.toLowerCase().includes('distance') || (attack as any).range?.toLowerCase().includes('portée')) {
           const dexAbility = player.abilities.find((a) => a.name === 'Dextérité');
           abilityModifier = dexAbility?.modifier || 0;
         } else {
@@ -551,7 +620,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     const attackBonus = getAttackBonus(attack);
     setRollData({
       type: 'attack',
-      attackName: attack.name,
+      attackName: (attack as any).name,
       diceFormula: '1d20',
       modifier: attackBonus
     });
@@ -562,8 +631,8 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     const damageBonus = getDamageBonus(attack);
     setRollData({
       type: 'damage',
-      attackName: attack.name,
-      diceFormula: attack.damage_dice,
+      attackName: (attack as any).name,
+      diceFormula: (attack as any).damage_dice,
       modifier: damageBonus
     });
     setDiceRollerOpen(true);
@@ -571,15 +640,19 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
 
   const renderAttackCard = (attack: Attack) => {
     const dmgBonus = getDamageBonus(attack);
-    const dmgLabel = `${attack.damage_dice}${dmgBonus !== 0 ? (dmgBonus > 0 ? `+${dmgBonus}` : `${dmgBonus}`) : ''}`;
+    const dmgLabel = `${(attack as any).damage_dice}${dmgBonus !== 0 ? (dmgBonus > 0 ? `+${dmgBonus}` : `${dmgBonus}`) : ''}`;
+
+    const attackId = (attack as any).id as string;
+    const ammoType = (attack as any).ammo_type as string | undefined;
+    const ammoCount = ammoCounts[attackId] ?? 0;
 
     return (
-      <div key={attack.id} className="bg-gray-800/50 rounded-lg p-3 border border-gray-700/50">
+      <div key={attackId} className="bg-gray-800/50 rounded-lg p-3 border border-gray-700/50">
         <div className="flex items-start justify-between mb-1">
           <div>
-            <h4 className="font-medium text-gray-100 text-base">{attack.name}</h4>
+            <h4 className="font-medium text-gray-100 text-base">{(attack as any).name}</h4>
             <p className="text-sm text-gray-400">
-              {attack.damage_type} • {attack.range}
+              {(attack as any).damage_type} • {(attack as any).range}
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -589,32 +662,72 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
                 setShowAttackModal(true);
               }}
               className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-300 hover:bg-gray-700/50 rounded transition-colors"
+              title="Modifier l'attaque"
             >
               <Settings size={16} />
             </button>
             <button
-              onClick={() => deleteAttack(attack.id)}
+              onClick={() => deleteAttack(attackId)}
               className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-900/30 rounded transition-colors"
+              title="Supprimer l'attaque"
             >
               <Trash2 size={16} />
             </button>
           </div>
         </div>
 
+        {/* Deux colonnes: chaque bouton avec sa ligne "sous" correspondante */}
         <div className="flex gap-2 text-sm">
-          <button
-            onClick={() => rollAttack(attack)}
-            className="flex-1 bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-md transition-colors flex items-center justify-center"
-          >
-            Attaque : 1d20+{getAttackBonus(attack)}
-          </button>
+          {/* Colonne Attaque + type de munition */}
+          <div className="flex-1 flex flex-col items-stretch">
+            <button
+              onClick={() => rollAttack(attack)}
+              className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-md transition-colors flex items-center justify-center"
+            >
+              Attaque : 1d20+{getAttackBonus(attack)}
+            </button>
+            {ammoType ? (
+              <div className="mt-1 text-xs text-gray-400 text-center">
+                {ammoType}
+              </div>
+            ) : null}
+          </div>
 
-          <button
-            onClick={() => rollDamage(attack)}
-            className="flex-1 bg-orange-600/60 hover:bg-orange-500/60 text-white px-3 py-2 rounded-md transition-colors flex items-center justify-center"
-          >
-            Dégâts : {dmgLabel}
-          </button>
+          {/* Colonne Dégâts + contrôles munitions */}
+          <div className="flex-1 flex flex-col items-stretch">
+            <button
+              onClick={() => rollDamage(attack)}
+              className="bg-orange-600/60 hover:bg-orange-500/60 text-white px-3 py-2 rounded-md transition-colors flex items-center justify-center"
+            >
+              Dégâts : {dmgLabel}
+            </button>
+            {ammoType ? (
+              <div className="mt-1 flex items-center justify-center gap-2">
+                <button
+                  onClick={() => changeAmmoCount(attackId, -1)}
+                  disabled={(ammoCounts[attackId] ?? 0) <= 0}
+                  className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-200"
+                  title="Retirer une munition"
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  value={ammoCount}
+                  min={0}
+                  onChange={(e) => setAmmoCount(attackId, Number(e.target.value))}
+                  className="w-16 text-center input-dark px-2 py-1 rounded-md border border-gray-600 focus:border-red-500"
+                />
+                <button
+                  onClick={() => changeAmmoCount(attackId, +1)}
+                  className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-200"
+                  title="Ajouter une munition"
+                >
+                  +
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     );
@@ -627,7 +740,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
   const isCriticalHealth = totalHP <= Math.floor(player.max_hp * 0.20);
 
   // Filtrage des attaques physiques (toutes les attaques de cet onglet)
-  const physicalAttacks = attacks.filter((a) => (a.attack_type || 'physical') === 'physical');
+  const physicalAttacks = attacks.filter((a) => ((a as any).attack_type || 'physical') === 'physical');
 
   return (
     <div className="space-y-6">
@@ -812,6 +925,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
               setShowAttackModal(true);
             }}
             className="p-2 text-gray-400 hover:bg-gray-700/50 rounded-lg transition-colors"
+            title="Ajouter une attaque"
           >
             <Plus size={20} />
           </button>
@@ -838,7 +952,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
             setEditingAttack(null);
           }}
           onSave={saveAttack}
-          onDelete={editingAttack ? () => deleteAttack(editingAttack.id) : undefined}
+          onDelete={editingAttack ? () => deleteAttack((editingAttack as any).id) : undefined}
         />
       )}
 
