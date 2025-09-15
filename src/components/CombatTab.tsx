@@ -17,11 +17,10 @@ interface CombatTabProps {
 interface AttackEditModalProps {
   attack: Attack | null;
   onClose: () => void;
-  onSave: (attack: Partial<Attack> & { ammo_type?: string | null }) => void;
+  onSave: (attack: Partial<Attack>) => void;
   onDelete?: () => void;
 }
 
-// Types de dégâts physiques uniquement
 const PHYSICAL_DAMAGE_TYPES = ['Tranchant', 'Perforant', 'Contondant'] as const;
 type PhysicalDamage = typeof PHYSICAL_DAMAGE_TYPES[number];
 
@@ -42,8 +41,6 @@ const RANGES = [
   '90 m'
 ];
 
-const localAmmoKey = (attackId: string) => `ammoCount:${attackId}`;
-
 const AttackEditModal = ({ attack, onClose, onSave, onDelete }: AttackEditModalProps) => {
   const [formData, setFormData] = useState<{
     name: string;
@@ -54,20 +51,19 @@ const AttackEditModal = ({ attack, onClose, onSave, onDelete }: AttackEditModalP
     manual_attack_bonus: number | null;
     manual_damage_bonus: number | null;
     expertise: boolean;
-    ammo_type: string; // nouveau: type de munition (optionnel)
+    ammo_type: string;
   }>({
     name: attack?.name || '',
     damage_dice: attack?.damage_dice || '1d8',
-    // si l'ancien type n'est pas physique, on force 'Tranchant' par défaut
     damage_type: (PHYSICAL_DAMAGE_TYPES as readonly string[]).includes(attack?.damage_type || '')
       ? (attack?.damage_type as PhysicalDamage)
       : 'Tranchant',
     range: attack?.range || 'Corps à corps',
     properties: attack?.properties || '',
-    manual_attack_bonus: (attack as any)?.manual_attack_bonus ?? null,
-    manual_damage_bonus: (attack as any)?.manual_damage_bonus ?? null,
-    expertise: (attack as any)?.expertise || false,
-    ammo_type: (attack as any)?.ammo_type || ''
+    manual_attack_bonus: attack?.manual_attack_bonus ?? null,
+    manual_damage_bonus: attack?.manual_damage_bonus ?? null,
+    expertise: attack?.expertise || false,
+    ammo_type: (attack?.ammo_type as string) || ''
   });
 
   const handleSave = () => {
@@ -106,9 +102,6 @@ const AttackEditModal = ({ attack, onClose, onSave, onDelete }: AttackEditModalP
               placeholder="Ex: Épée longue"
             />
           </div>
-
-          {/* Plus de champ "Type d'attaque" (physique imposé) */}
-          {/* Plus de champ "Niveau du sort" */}
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Dés de dégâts</label>
@@ -151,7 +144,7 @@ const AttackEditModal = ({ attack, onClose, onSave, onDelete }: AttackEditModalP
             </select>
           </div>
 
-          {/* Nouveau champ: Type de munition */}
+          {/* Nouveau: Type de munition */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Type de munition (optionnel)</label>
             <input
@@ -277,46 +270,9 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     modifier: number;
   } | null>(null);
 
-  // Etat local pour les munitions par attaque (persisté via localStorage)
-  const [ammoCounts, setAmmoCounts] = useState<Record<string, number>>({});
-
   React.useEffect(() => {
     fetchAttacks();
   }, [player.id]);
-
-  React.useEffect(() => {
-    // Charger/améliorer les compteurs depuis localStorage à chaque fois que la liste change
-    setAmmoCounts((prev) => {
-      const next: Record<string, number> = { ...prev };
-      for (const a of attacks) {
-        const key = localAmmoKey((a as any).id);
-        const stored = typeof window !== 'undefined' ? window.localStorage.getItem(key) : null;
-        const parsed = stored !== null ? Number(stored) : NaN;
-        if (!Number.isFinite(parsed)) {
-          // init à 0 si non défini
-          if (next[(a as any).id] === undefined) next[(a as any).id] = 0;
-        } else {
-          next[(a as any).id] = parsed;
-        }
-      }
-      return next;
-    });
-  }, [attacks]);
-
-  const setAmmoCount = (attackId: string, value: number) => {
-    const v = Math.max(0, Math.floor(value || 0));
-    setAmmoCounts((prev) => ({ ...prev, [attackId]: v }));
-    try {
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(localAmmoKey(attackId), String(v));
-      }
-    } catch {}
-  };
-
-  const changeAmmoCount = (attackId: string, delta: number) => {
-    const current = ammoCounts[attackId] ?? 0;
-    setAmmoCount(attackId, current + delta);
-  };
 
   const fetchAttacks = async () => {
     try {
@@ -328,29 +284,28 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     }
   };
 
-  const saveAttack = async (attackData: Partial<Attack> & { ammo_type?: string | null }) => {
+  const saveAttack = async (attackData: Partial<Attack>) => {
     try {
       if (editingAttack) {
-        // Mise à jour d'une attaque existante (forcée en physique)
         const updatedAttack = await attackService.updateAttack({
           ...attackData,
-          id: (editingAttack as any).id,
+          id: editingAttack.id,
           attack_type: 'physical',
           spell_level: null
-        } as any);
+        });
 
         if (updatedAttack) {
-          setAttacks(attacks.map((attack) => ((attack as any).id === (editingAttack as any).id ? updatedAttack : attack)));
+          setAttacks(attacks.map((attack) => (attack.id === editingAttack.id ? updatedAttack : attack)));
           toast.success('Attaque modifiée');
         }
       } else {
-        // Création d'une attaque (forcée en physique)
         const newAttack = await attackService.addAttack({
-          player_id: (player as any).id,
+          player_id: player.id,
           ...attackData,
           attack_type: 'physical',
-          spell_level: null
-        } as any);
+          spell_level: null,
+          ammo_count: 0 // init
+        });
 
         if (newAttack) {
           setAttacks([...attacks, newAttack]);
@@ -373,15 +328,9 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
       const success = await attackService.removeAttack(attackId);
 
       if (success) {
-        setAttacks(attacks.filter((attack) => ((attack as any).id !== attackId)));
+        setAttacks(attacks.filter((attack) => attack.id !== attackId));
         setEditingAttack(null);
         setShowAttackModal(false);
-        // Nettoyer le compteur local
-        try {
-          if (typeof window !== 'undefined') {
-            window.localStorage.removeItem(localAmmoKey(attackId));
-          }
-        } catch {}
         toast.success('Attaque supprimée');
       } else {
         throw new Error('Échec de la suppression');
@@ -392,11 +341,201 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     }
   };
 
-  const getWoundLevel = () => {
-    const currentTotal = player.current_hp + player.temporary_hp;
-    const percentage = (currentTotal / player.max_hp) * 100;
+  const getAttackBonus = (attack: Attack): number => {
+    if (attack.manual_attack_bonus !== null && attack.manual_attack_bonus !== undefined) {
+      return attack.manual_attack_bonus;
+    }
 
-    if (currentTotal <= 0) return 'Mort';
+    const proficiencyBonus = player.stats?.proficiency_bonus || 2;
+
+    let abilityModifier = 0;
+    if (player.abilities) {
+      if (player.class === 'Ensorceleur' || player.class === 'Barde' || player.class === 'Paladin') {
+        const chaAbility = player.abilities.find((a) => a.name === 'Charisme');
+        abilityModifier = chaAbility?.modifier || 0;
+      } else if (player.class === 'Moine' || player.class === 'Roublard') {
+        const dexAbility = player.abilities.find((a) => a.name === 'Dextérité');
+        abilityModifier = dexAbility?.modifier || 0;
+      } else {
+        if (attack.range?.toLowerCase().includes('distance') || attack.range?.toLowerCase().includes('portée')) {
+          const dexAbility = player.abilities.find((a) => a.name === 'Dextérité');
+          abilityModifier = dexAbility?.modifier || 0;
+        } else {
+          const strAbility = player.abilities.find((a) => a.name === 'Force');
+          abilityModifier = strAbility?.modifier || 0;
+        }
+      }
+    }
+
+    const masteryBonus = attack.expertise ? proficiencyBonus : 0;
+    return abilityModifier + masteryBonus;
+  };
+
+  const getDamageBonus = (attack: Attack): number => {
+    if (attack.manual_damage_bonus !== null && attack.manual_damage_bonus !== undefined) {
+      return attack.manual_damage_bonus;
+    }
+
+    let abilityModifier = 0;
+    if (player.abilities) {
+      if (player.class === 'Ensorceleur' || player.class === 'Barde' || player.class === 'Paladin') {
+        const chaAbility = player.abilities.find((a) => a.name === 'Charisme');
+        abilityModifier = chaAbility?.modifier || 0;
+      } else if (player.class === 'Moine' || player.class === 'Roublard') {
+        const dexAbility = player.abilities.find((a) => a.name === 'Dextérité');
+        abilityModifier = dexAbility?.modifier || 0;
+      } else {
+        if (attack.range?.toLowerCase().includes('distance') || attack.range?.toLowerCase().includes('portée')) {
+          const dexAbility = player.abilities.find((a) => a.name === 'Dextérité');
+          abilityModifier = dexAbility?.modifier || 0;
+        } else {
+          const strAbility = player.abilities.find((a) => a.name === 'Force');
+          abilityModifier = strAbility?.modifier || 0;
+        }
+      }
+    }
+
+    return abilityModifier;
+  };
+
+  const rollAttack = (attack: Attack) => {
+    const attackBonus = getAttackBonus(attack);
+    setRollData({
+      type: 'attack',
+      attackName: attack.name,
+      diceFormula: '1d20',
+      modifier: attackBonus
+    });
+    setDiceRollerOpen(true);
+  };
+
+  const rollDamage = (attack: Attack) => {
+    const damageBonus = getDamageBonus(attack);
+    setRollData({
+      type: 'damage',
+      attackName: attack.name,
+      diceFormula: attack.damage_dice,
+      modifier: damageBonus
+    });
+    setDiceRollerOpen(true);
+  };
+
+  // Maj en base des munitions
+  const setAmmoCount = async (attack: Attack, next: number) => {
+    const clamped = Math.max(0, Math.floor(next || 0));
+    try {
+      const updated = await attackService.updateAttack({ id: attack.id, ammo_count: clamped });
+      if (!updated) throw new Error('update failed');
+      setAttacks((prev) => prev.map((a) => (a.id === attack.id ? { ...a, ammo_count: clamped } : a)));
+    } catch (e) {
+      console.error('Erreur maj munitions:', e);
+      toast.error('Erreur lors de la mise à jour des munitions');
+    }
+  };
+
+  const changeAmmoCount = (attack: Attack, delta: number) => {
+    const current = attack.ammo_count ?? 0;
+    setAmmoCount(attack, current + delta);
+  };
+
+  const renderAttackCard = (attack: Attack) => {
+    const dmgBonus = getDamageBonus(attack);
+    const dmgLabel = `${attack.damage_dice}${dmgBonus !== 0 ? (dmgBonus > 0 ? `+${dmgBonus}` : `${dmgBonus}`) : ''}`;
+    const ammoType = attack.ammo_type || '';
+    const ammoCount = attack.ammo_count ?? 0;
+
+    return (
+      <div key={attack.id} className="bg-gray-800/50 rounded-lg p-3 border border-gray-700/50">
+        <div className="flex items-start justify-between mb-1">
+          <div>
+            <h4 className="font-medium text-gray-100 text-base">{attack.name}</h4>
+            <p className="text-sm text-gray-400">
+              {attack.damage_type} • {attack.range}
+            </p>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                setEditingAttack(attack);
+                setShowAttackModal(true);
+              }}
+              className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-300 hover:bg-gray-700/50 rounded transition-colors"
+              title="Modifier l'attaque"
+            >
+              <Settings size={16} />
+            </button>
+            <button
+              onClick={() => deleteAttack(attack.id)}
+              className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-900/30 rounded transition-colors"
+              title="Supprimer l'attaque"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex gap-2 text-sm">
+          {/* Colonne Attaque + type de munition */}
+          <div className="flex-1 flex flex-col items-stretch">
+            <button
+              onClick={() => rollAttack(attack)}
+              className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-md transition-colors flex items-center justify-center"
+            >
+              Attaque : 1d20+{getAttackBonus(attack)}
+            </button>
+            {ammoType ? (
+              <div className="mt-1 text-xs text-gray-400 text-center">{ammoType}</div>
+            ) : null}
+          </div>
+
+          {/* Colonne Dégâts + contrôles munitions */}
+          <div className="flex-1 flex flex-col items-stretch">
+            <button
+              onClick={() => rollDamage(attack)}
+              className="bg-orange-600/60 hover:bg-orange-500/60 text-white px-3 py-2 rounded-md transition-colors flex items-center justify-center"
+            >
+              Dégâts : {dmgLabel}
+            </button>
+            {ammoType ? (
+              <div className="mt-1 flex items-center justify-center gap-2">
+                <button
+                  onClick={() => changeAmmoCount(attack, -1)}
+                  disabled={(ammoCount ?? 0) <= 0}
+                  className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-200"
+                  title="Retirer une munition"
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  value={ammoCount}
+                  min={0}
+                  onChange={(e) => setAmmoCount(attack, Number(e.target.value))}
+                  className="w-16 text-center input-dark px-2 py-1 rounded-md border border-gray-600 focus:border-red-500"
+                />
+                <button
+                  onClick={() => changeAmmoCount(attack, +1)}
+                  className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-200"
+                  title="Ajouter une munition"
+                >
+                  +
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Calculs PV
+  const totalHP = player.current_hp + player.temporary_hp;
+  const hpPercentage = Math.max(0, (totalHP / player.max_hp) * 100);
+  const isCriticalHealth = totalHP <= Math.floor(player.max_hp * 0.20);
+
+  const getWoundLevel = () => {
+    const percentage = (totalHP / player.max_hp) * 100;
+    if (totalHP <= 0) return 'Mort';
     if (percentage >= 1 && percentage <= 30) return 'Blessures critiques';
     if (percentage > 30 && percentage <= 60) return 'Blessures importantes';
     if (percentage > 60 && percentage <= 75) return 'Blessures';
@@ -406,10 +545,8 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
   };
 
   const getWoundColor = () => {
-    const currentTotal = player.current_hp + player.temporary_hp;
-    const percentage = (currentTotal / player.max_hp) * 100;
-
-    if (currentTotal <= 0) return 'text-black';
+    const percentage = (totalHP / player.max_hp) * 100;
+    if (totalHP <= 0) return 'text-black';
     if (percentage >= 1 && percentage <= 30) return 'text-red-600';
     if (percentage > 30 && percentage <= 60) return 'text-red-500';
     if (percentage > 60 && percentage <= 75) return 'text-orange-500';
@@ -419,10 +556,8 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
   };
 
   const getHPBarColor = () => {
-    const currentTotal = player.current_hp + player.temporary_hp;
-    const percentage = (currentTotal / player.max_hp) * 100;
-
-    if (currentTotal <= 0) return 'from-black to-gray-800';
+    const percentage = (player.current_hp / player.max_hp) * 100;
+    if (totalHP <= 0) return 'from-black to-gray-800';
     if (percentage >= 1 && percentage <= 30) return 'from-red-600 to-red-700';
     if (percentage > 30 && percentage <= 60) return 'from-red-500 to-red-600';
     if (percentage > 60 && percentage <= 75) return 'from-orange-500 to-red-500';
@@ -438,7 +573,6 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     let newCurrentHP = player.current_hp;
     let newTempHP = player.temporary_hp;
 
-    // Les dégâts touchent d'abord les PV temporaires
     if (newTempHP > 0) {
       if (damage >= newTempHP) {
         const remainingDamage = damage - newTempHP;
@@ -454,7 +588,6 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     await updateHP(newCurrentHP, newTempHP);
     setDamageValue('');
 
-    // Animation de dégâts
     const hpElement = document.querySelector('.hp-bar');
     if (hpElement) {
       hpElement.classList.add('damage-animation');
@@ -472,7 +605,6 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     await updateHP(newCurrentHP);
     setHealValue('');
 
-    // Animation de soins
     const hpElement = document.querySelector('.hp-bar');
     if (hpElement) {
       hpElement.classList.add('heal-animation');
@@ -486,7 +618,6 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     const tempHP = parseInt(tempHpValue) || 0;
     if (tempHP <= 0) return;
 
-    // Les PV temporaires ne s'accumulent pas, on prend le maximum
     const newTempHP = Math.max(player.temporary_hp, tempHP);
     await updateHP(player.current_hp, newTempHP);
     setTempHpValue('');
@@ -499,248 +630,21 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     const clampedTempHP = Math.max(0, newTempHP ?? player.temporary_hp);
 
     try {
-      // Mise à jour directe des PV via update standard
-      const updateData: any = {
-        current_hp: clampedHP
-      };
+      const updateData: any = { current_hp: clampedHP };
+      if (newTempHP !== undefined) updateData.temporary_hp = clampedTempHP;
 
-      // Ajouter les PV temporaires seulement si spécifiés
-      if (newTempHP !== undefined) {
-        Object.assign(updateData, { temporary_hp: clampedTempHP });
-      }
-
-      const { error } = await supabase.from('players').update(updateData).eq('id', (player as any).id);
-
+      const { error } = await supabase.from('players').update(updateData).eq('id', player.id);
       if (error) throw error;
 
-      // Mise à jour locale de l'état
-      onUpdate({
-        ...player,
-        current_hp: clampedHP,
-        temporary_hp: clampedTempHP
-      });
+      onUpdate({ ...player, current_hp: clampedHP, temporary_hp: clampedTempHP });
     } catch (error) {
       console.error('Erreur lors de la mise à jour des PV:', error);
       toast.error('Erreur lors de la mise à jour des PV');
     }
   };
 
-  const updateMaxHP = async () => {
-    const newMax = parseInt(newMaxHp) || 1;
-    const clampedMaxHP = Math.max(1, newMax);
-    const adjustedCurrentHP = Math.min(player.current_hp, clampedMaxHP);
-
-    try {
-      const { error } = await supabase
-        .from('players')
-        .update({
-          max_hp: clampedMaxHP,
-          current_hp: adjustedCurrentHP
-        })
-        .eq('id', (player as any).id);
-
-      if (error) throw error;
-
-      onUpdate({
-        ...player,
-        max_hp: clampedMaxHP,
-        current_hp: adjustedCurrentHP
-      });
-
-      setShowMaxHpModal(false);
-      toast.success('PV maximum mis à jour');
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour des PV max:', error);
-      toast.error('Erreur lors de la mise à jour');
-    }
-  };
-
-  const getAttackBonus = (attack: Attack): number => {
-    if ((attack as any).manual_attack_bonus !== null && (attack as any).manual_attack_bonus !== undefined) {
-      return (attack as any).manual_attack_bonus;
-    }
-
-    const proficiencyBonus = player.stats?.proficiency_bonus || 2;
-
-    // Détermine le modificateur de caractéristique
-    let abilityModifier = 0;
-    if (player.abilities) {
-      if (player.class === 'Ensorceleur' || player.class === 'Barde' || player.class === 'Paladin') {
-        // Utilise le Charisme
-        const chaAbility = player.abilities.find((a) => a.name === 'Charisme');
-        abilityModifier = chaAbility?.modifier || 0;
-      } else if (player.class === 'Moine' || player.class === 'Roublard') {
-        // Utilise la Dextérité
-        const dexAbility = player.abilities.find((a) => a.name === 'Dextérité');
-        abilityModifier = dexAbility?.modifier || 0;
-      } else {
-        // Par défaut, Force pour CàC, Dextérité à distance
-        if ((attack as any).range?.toLowerCase().includes('distance') || (attack as any).range?.toLowerCase().includes('portée')) {
-          const dexAbility = player.abilities.find((a) => a.name === 'Dextérité');
-          abilityModifier = dexAbility?.modifier || 0;
-        } else {
-          const strAbility = player.abilities.find((a) => a.name === 'Force');
-          abilityModifier = strAbility?.modifier || 0;
-        }
-      }
-    }
-
-    const masteryBonus = (attack as any).expertise ? proficiencyBonus : 0;
-    return abilityModifier + masteryBonus;
-  };
-
-  const getDamageBonus = (attack: Attack): number => {
-    if ((attack as any).manual_damage_bonus !== null && (attack as any).manual_damage_bonus !== undefined) {
-      return (attack as any).manual_damage_bonus;
-    }
-
-    let abilityModifier = 0;
-    if (player.abilities) {
-      if (player.class === 'Ensorceleur' || player.class === 'Barde' || player.class === 'Paladin') {
-        const chaAbility = player.abilities.find((a) => a.name === 'Charisme');
-        abilityModifier = chaAbility?.modifier || 0;
-      } else if (player.class === 'Moine' || player.class === 'Roublard') {
-        const dexAbility = player.abilities.find((a) => a.name === 'Dextérité');
-        abilityModifier = dexAbility?.modifier || 0;
-      } else {
-        if ((attack as any).range?.toLowerCase().includes('distance') || (attack as any).range?.toLowerCase().includes('portée')) {
-          const dexAbility = player.abilities.find((a) => a.name === 'Dextérité');
-          abilityModifier = dexAbility?.modifier || 0;
-        } else {
-          const strAbility = player.abilities.find((a) => a.name === 'Force');
-          abilityModifier = strAbility?.modifier || 0;
-        }
-      }
-    }
-
-    return abilityModifier;
-  };
-
-  const rollAttack = (attack: Attack) => {
-    const attackBonus = getAttackBonus(attack);
-    setRollData({
-      type: 'attack',
-      attackName: (attack as any).name,
-      diceFormula: '1d20',
-      modifier: attackBonus
-    });
-    setDiceRollerOpen(true);
-  };
-
-  const rollDamage = (attack: Attack) => {
-    const damageBonus = getDamageBonus(attack);
-    setRollData({
-      type: 'damage',
-      attackName: (attack as any).name,
-      diceFormula: (attack as any).damage_dice,
-      modifier: damageBonus
-    });
-    setDiceRollerOpen(true);
-  };
-
-  const renderAttackCard = (attack: Attack) => {
-    const dmgBonus = getDamageBonus(attack);
-    const dmgLabel = `${(attack as any).damage_dice}${dmgBonus !== 0 ? (dmgBonus > 0 ? `+${dmgBonus}` : `${dmgBonus}`) : ''}`;
-
-    const attackId = (attack as any).id as string;
-    const ammoType = (attack as any).ammo_type as string | undefined;
-    const ammoCount = ammoCounts[attackId] ?? 0;
-
-    return (
-      <div key={attackId} className="bg-gray-800/50 rounded-lg p-3 border border-gray-700/50">
-        <div className="flex items-start justify-between mb-1">
-          <div>
-            <h4 className="font-medium text-gray-100 text-base">{(attack as any).name}</h4>
-            <p className="text-sm text-gray-400">
-              {(attack as any).damage_type} • {(attack as any).range}
-            </p>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => {
-                setEditingAttack(attack);
-                setShowAttackModal(true);
-              }}
-              className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-300 hover:bg-gray-700/50 rounded transition-colors"
-              title="Modifier l'attaque"
-            >
-              <Settings size={16} />
-            </button>
-            <button
-              onClick={() => deleteAttack(attackId)}
-              className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-900/30 rounded transition-colors"
-              title="Supprimer l'attaque"
-            >
-              <Trash2 size={16} />
-            </button>
-          </div>
-        </div>
-
-        {/* Deux colonnes: chaque bouton avec sa ligne "sous" correspondante */}
-        <div className="flex gap-2 text-sm">
-          {/* Colonne Attaque + type de munition */}
-          <div className="flex-1 flex flex-col items-stretch">
-            <button
-              onClick={() => rollAttack(attack)}
-              className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-md transition-colors flex items-center justify-center"
-            >
-              Attaque : 1d20+{getAttackBonus(attack)}
-            </button>
-            {ammoType ? (
-              <div className="mt-1 text-xs text-gray-400 text-center">
-                {ammoType}
-              </div>
-            ) : null}
-          </div>
-
-          {/* Colonne Dégâts + contrôles munitions */}
-          <div className="flex-1 flex flex-col items-stretch">
-            <button
-              onClick={() => rollDamage(attack)}
-              className="bg-orange-600/60 hover:bg-orange-500/60 text-white px-3 py-2 rounded-md transition-colors flex items-center justify-center"
-            >
-              Dégâts : {dmgLabel}
-            </button>
-            {ammoType ? (
-              <div className="mt-1 flex items-center justify-center gap-2">
-                <button
-                  onClick={() => changeAmmoCount(attackId, -1)}
-                  disabled={(ammoCounts[attackId] ?? 0) <= 0}
-                  className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-200"
-                  title="Retirer une munition"
-                >
-                  −
-                </button>
-                <input
-                  type="number"
-                  value={ammoCount}
-                  min={0}
-                  onChange={(e) => setAmmoCount(attackId, Number(e.target.value))}
-                  className="w-16 text-center input-dark px-2 py-1 rounded-md border border-gray-600 focus:border-red-500"
-                />
-                <button
-                  onClick={() => changeAmmoCount(attackId, +1)}
-                  className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-200"
-                  title="Ajouter une munition"
-                >
-                  +
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Calculs PV
-  const totalHP = player.current_hp + player.temporary_hp;
-  const hpPercentage = Math.max(0, (totalHP / player.max_hp) * 100);
-  // Seuil relevé à 20%
-  const isCriticalHealth = totalHP <= Math.floor(player.max_hp * 0.20);
-
   // Filtrage des attaques physiques (toutes les attaques de cet onglet)
-  const physicalAttacks = attacks.filter((a) => ((a as any).attack_type || 'physical') === 'physical');
+  const physicalAttacks = attacks.filter((a) => (a.attack_type || 'physical') === 'physical');
 
   return (
     <div className="space-y-6">
@@ -766,9 +670,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
         </div>
         <div className="p-4">
           <div className="space-y-4">
-            {/* Barre de vie principale */}
             <div className="relative">
-              {/* Affichage des PV directement sur la barre - TOUJOURS VISIBLE */}
               <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none select-none">
                 <span className="text-white font-bold text-sm drop-shadow-lg">
                   {totalHP} / {player.max_hp}
@@ -776,14 +678,12 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
               </div>
 
               <div className="w-full bg-gray-700 rounded-full h-8 overflow-hidden relative">
-                {/* Barre de PV principale */}
                 <div
                   className={`hp-bar hp-bar-main h-full transition-all duration-500 bg-gradient-to-r ${getHPBarColor()} ${
                     isCriticalHealth ? 'heartbeat-animation' : ''
                   }`}
                   style={{ width: `${Math.min(100, (player.current_hp / player.max_hp) * 100)}%` }}
                 />
-                {/* Barre de PV temporaires */}
                 {player.temporary_hp > 0 && (
                   <div
                     className="hp-bar-temp absolute top-0 h-full bg-gradient-to-r from-blue-500 to-blue-400"
@@ -799,7 +699,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
               </div>
             </div>
 
-            {/* Contrôles de gestion des PV */}
+            {/* Contrôles PV */}
             <div className="grid grid-cols-3 gap-4">
               {/* Dégâts */}
               <div className="flex flex-col items-center space-y-2">
@@ -883,36 +783,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
         </div>
       </div>
 
-      {/* Modal de modification des PV max */}
-      {showMaxHpModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-lg p-6 max-w-sm w-full">
-            <h3 className="text-lg font-semibold text-gray-100 mb-4">Modifier les PV maximum</h3>
-
-            <div className="space-y-4">
-              <input
-                type="number"
-                value={newMaxHp}
-                onChange={(e) => setNewMaxHp(e.target.value)}
-                className="input-dark w-full px-3 py-2 rounded-md text-center"
-                min="1"
-                autoFocus
-              />
-
-              <div className="flex gap-3">
-                <button onClick={updateMaxHP} className="btn-primary flex-1 px-4 py-2 rounded-lg">
-                  Confirmer
-                </button>
-                <button onClick={() => setShowMaxHpModal(false)} className="btn-secondary px-4 py-2 rounded-lg">
-                  Annuler
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Attaques (physiques uniquement) */}
+      {/* Attaques */}
       <div className="stat-card">
         <div className="stat-header flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -931,14 +802,18 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
           </button>
         </div>
         <div className="p-4 space-y-2">
-          {physicalAttacks.length === 0 ? (
+          {attacks.filter((a) => (a.attack_type || 'physical') === 'physical').length === 0 ? (
             <div className="text-center py-8 text-gray-400">
               <Sword className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>Aucune attaque configurée</p>
               <p className="text-sm">Cliquez sur + pour ajouter une attaque</p>
             </div>
           ) : (
-            <div className="space-y-2">{physicalAttacks.map(renderAttackCard)}</div>
+            <div className="space-y-2">
+              {attacks
+                .filter((a) => (a.attack_type || 'physical') === 'physical')
+                .map((a) => renderAttackCard(a))}
+            </div>
           )}
         </div>
       </div>
@@ -952,15 +827,13 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
             setEditingAttack(null);
           }}
           onSave={saveAttack}
-          onDelete={editingAttack ? () => deleteAttack((editingAttack as any).id) : undefined}
+          onDelete={editingAttack ? () => deleteAttack(editingAttack.id) : undefined}
         />
       )}
 
       <StandardActionsSection player={player} onUpdate={onUpdate} />
-
       <ConditionsSection player={player} onUpdate={onUpdate} />
 
-      {/* Dice Roller Modal */}
       <DiceRoller isOpen={diceRollerOpen} onClose={() => setDiceRollerOpen(false)} rollData={rollData} />
     </div>
   );
