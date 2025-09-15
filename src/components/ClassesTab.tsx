@@ -367,7 +367,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   const displaySubclass = rawSubclass ? sentenceCase(rawSubclass) : null;
 
   const finalLevelRaw = player?.level ?? characterLevel ?? 1;
-  const finalLevel = Math.max(1, Number(finalLevelRaw) || 1);
+  the const finalLevel = Math.max(1, Number(finalLevelRaw) || 1);
   const characterId = player?.id ?? null;
 
   useEffect(() => {
@@ -1280,7 +1280,8 @@ function ClassResourcesCard({
       break;
     }
 
-    case 'Paladin':
+    case 'Paladin': {
+      // Imposition des mains
       if (typeof resources.lay_on_hands === 'number') {
         items.push(
           <ResourceBlock
@@ -1297,7 +1298,30 @@ function ClassResourcesCard({
           />
         );
       }
+
+      // Conduits divins (N3+)
+      const lvl = level ?? 0;
+      if (lvl >= 3) {
+        const cap = lvl >= 11 ? 3 : 2;
+        const used = resources.used_channel_divinity || 0;
+        items.push(
+          <ResourceBlock
+            key="paladin_channel_divinity"
+            icon={<Cross size={20} />}
+            label="Conduits divins"
+            total={cap}
+            used={used}
+            onUse={() => onUpdateResource('used_channel_divinity', Math.min(used + 1, cap))}
+            onUpdateTotal={() => { /* cap calculé par niveau -> non éditable */ }}
+            onRestore={() => onUpdateResource('used_channel_divinity', Math.max(0, used - 1))}
+            color="yellow"
+            hideEdit
+            onGlobalPulse={onPulseScreen}
+          />
+        );
+      }
       break;
+    }
 
     case 'Rôdeur':
       if (typeof resources.favored_foe === 'number') {
@@ -1374,8 +1398,14 @@ function buildDefaultsForClass(cls: string, level: number, player?: PlayerLike |
       return { arcane_recovery: true, used_arcane_recovery: false };
     case 'Moine':
       return { credo_points: level, used_credo_points: 0, ki_points: level, used_ki_points: 0 } as any;
-    case 'Paladin':
-      return { lay_on_hands: level * 5, used_lay_on_hands: 0 };
+    case 'Paladin': {
+      const base: any = { lay_on_hands: level * 5, used_lay_on_hands: 0 };
+      if (level >= 3) {
+        base.channel_divinity = level >= 11 ? 3 : 2;
+        base.used_channel_divinity = 0;
+      }
+      return base;
+    }
     case 'Rôdeur':
       return { favored_foe: Math.max(1, Math.floor((level + 3) / 4)), used_favored_foe: 0 };
     case 'Roublard':
