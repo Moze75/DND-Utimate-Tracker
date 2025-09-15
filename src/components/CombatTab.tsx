@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Heart, Plus, Sword, Swords, Shield, Settings, Trash2, ArrowRight } from 'lucide-react';
+import { Heart, Plus, Sword, Swords, Shield, Settings, Trash2, ArrowRightCircle } from 'lucide-react';
 import { Player, Attack } from '../types/dnd';
 import toast from 'react-hot-toast';
 import { ConditionsSection } from './ConditionsSection';
@@ -486,7 +486,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
         </div>
 
         <div className="flex gap-2 text-sm items-stretch">
-          {/* Colonne Attaque + type de munition */}
+          {/* Colonne Attaque + faux bouton de munition */}
           <div className="flex-1 flex flex-col">
             <button
               onClick={() => rollAttack(attack)}
@@ -494,13 +494,18 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
             >
               Attaque : 1d20+{getAttackBonus(attack)}
             </button>
+
+            {/* Indication de munition sous forme de "faux bouton" centré */}
             {ammoType ? (
-              <div className="mt-2 flex items-center justify-center gap-2 min-h-[44px]">
-                <ArrowRight className="w-5 h-5 text-gray-300" />
-                <span className="text-base font-medium text-gray-200">{ammoType}</span>
+              <div
+                className="mt-2 bg-gray-600/90 text-white px-3 py-2 rounded-md flex items-center justify-center gap-2 select-none cursor-default"
+                aria-hidden
+              >
+                <ArrowRightCircle className="w-5 h-5 text-white/90" />
+                <span className="text-base font-medium">{ammoType}</span>
               </div>
             ) : (
-              <div className="min-h-[44px]" />
+              <div className="mt-2 h-[40px]" />
             )}
           </div>
 
@@ -538,7 +543,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
                 </button>
               </div>
             ) : (
-              <div className="min-h-[44px]" />
+              <div className="mt-2 h-[40px]" />
             )}
           </div>
         </div>
@@ -830,7 +835,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
             <Swords className="w-5 h-5 text-red-500" />
             <h3 className="text-lg font-semibold text-gray-100">Attaques</h3>
           </div>
-        <button
+          <button
             onClick={() => {
               setEditingAttack(null);
               setShowAttackModal(true);
