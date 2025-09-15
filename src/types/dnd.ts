@@ -172,4 +172,23 @@ export interface InventoryItem {
   name: string;
   description?: string | null;
   created_at: string;
+
+  export interface Attack {
+  id: string;
+  player_id: string;
+  name: string;
+  damage_dice: string;
+  damage_type: string;
+  range: string;
+  properties?: string;
+  expertise: boolean;
+  created_at: string;
+  manual_attack_bonus?: number | null;
+  manual_damage_bonus?: number | null;
+  attack_type?: 'physical' | 'spell';
+  spell_level?: number | null;
+
+  // Nouveau: munitions
+  ammo_type?: string | null;
+  ammo_count?: number | null;
 }
