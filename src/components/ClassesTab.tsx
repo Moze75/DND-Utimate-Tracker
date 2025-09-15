@@ -367,7 +367,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   const displaySubclass = rawSubclass ? sentenceCase(rawSubclass) : null;
 
   const finalLevelRaw = player?.level ?? characterLevel ?? 1;
-  the const finalLevel = Math.max(1, Number(finalLevelRaw) || 1);
+  const finalLevel = Math.max(1, Number(finalLevelRaw) || 1);
   const characterId = player?.id ?? null;
 
   useEffect(() => {
