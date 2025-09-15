@@ -261,6 +261,15 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
       const constitutionMod = player.abilities?.find(a => a.name === 'Constitution')?.modifier || 0;
       const healing = Math.max(1, roll + constitutionMod);
 
+      // Restaure 1 Conduit divin au Paladin (si utilisé)
+      const nextCR: any = { ...(player.class_resources || {}) };
+      let recoveredLabel = '';
+      if (player.class === 'Paladin' && typeof nextCR.used_channel_divinity === 'number') {
+        const before = nextCR.used_channel_divinity || 0;
+        nextCR.used_channel_divinity = Math.max(0, before - 1);
+        if (before > 0) recoveredLabel = ' (+1 Conduit divin récupéré)';
+      }
+
       const { error } = await supabase
         .from('players')
         .update({
@@ -268,7 +277,8 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           hit_dice: {
             ...player.hit_dice,
             used: player.hit_dice.used + 1
-          }
+          },
+          class_resources: nextCR
         })
         .eq('id', player.id);
 
@@ -280,10 +290,11 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
         hit_dice: {
           ...player.hit_dice,
           used: player.hit_dice.used + 1
-        }
+        },
+        class_resources: nextCR
       });
 
-      toast.success(`Repos court : +${healing} PV`);
+      toast.success(`Repos court : +${healing} PV${recoveredLabel}`);
     } catch (error) {
       console.error('Erreur lors du repos court:', error);
       toast.error('Erreur lors du repos');
@@ -292,6 +303,21 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
 
   const handleLongRest = async () => {
     try {
+      // Prépare une restauration complète des ressources consommées
+      const nextCR: any = { ...(player.class_resources || {}) };
+      nextCR.used_rage = 0;
+      nextCR.used_bardic_inspiration = 0;
+      nextCR.used_channel_divinity = 0; // Clerc & Paladin
+      nextCR.used_wild_shape = 0;
+      nextCR.used_sorcery_points = 0;
+      nextCR.used_action_surge = 0;
+      nextCR.used_arcane_recovery = false;
+      // Compat Moine selon clé utilisée dans la base
+      nextCR.used_credo_points = 0;
+      nextCR.used_ki_points = 0;
+      nextCR.used_lay_on_hands = 0;
+      nextCR.used_favored_foe = 0;
+
       const { error } = await supabase
         .from('players')
         .update({
@@ -301,24 +327,14 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
             total: player.level,
             used: Math.max(0, player.hit_dice?.used - Math.floor(player.level / 2) || 0)
           },
-          class_resources: {
-            ...player.class_resources,
-            used_rage: 0,
-            used_bardic_inspiration: 0,
-            used_channel_divinity: 0,
-            used_wild_shape: 0,
-            used_sorcery_points: 0,
-            used_action_surge: 0,
-            used_arcane_recovery: false,
-            used_credo_points: 0,
-            used_lay_on_hands: 0,
-            used_favored_foe: 0
-          },
+          class_resources: nextCR,
           spell_slots: {
             ...player.spell_slots,
             used1: 0, used2: 0, used3: 0, used4: 0,
             used5: 0, used6: 0, used7: 0, used8: 0, used9: 0
-          }
+          },
+          is_concentrating: false,
+          concentration_spell: null
         })
         .eq('id', player.id);
 
@@ -332,27 +348,17 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           total: player.level,
           used: Math.max(0, player.hit_dice?.used - Math.floor(player.level / 2) || 0)
         },
-        class_resources: {
-          ...player.class_resources,
-          used_rage: 0,
-          used_bardic_inspiration: 0,
-          used_channel_divinity: 0,
-          used_wild_shape: 0,
-          used_sorcery_points: 0,
-          used_action_surge: 0,
-          used_arcane_recovery: false,
-          used_ki_points: 0,
-          used_lay_on_hands: 0,
-          used_favored_foe: 0
-        },
+        class_resources: nextCR,
         spell_slots: {
           ...player.spell_slots,
           used1: 0, used2: 0, used3: 0, used4: 0,
           used5: 0, used6: 0, used7: 0, used8: 0, used9: 0
-        }
+        },
+        is_concentrating: false,
+        concentration_spell: null
       });
 
-      toast.success('Repos long effectué');
+      toast.success('Repos long effectué (toutes les ressources restaurées)');
     } catch (error) {
       console.error('Erreur lors du repos long:', error);
       toast.error('Erreur lors du repos');
@@ -454,7 +460,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
                 {/* Bouton paramètres en overlay en haut à droite */}
                 <button
                   onClick={() => setEditing(true)}
-                  className="absolute top-2 right-2 w-9 h-9 rounded-full bg-gray-900/40 backdrop-blur-sm text-white hover:bg-gray-800/50 hover:text-white flex items-center justify-center z-10 transition-all duration-200"
+                  className="absolute top-2 right-2 w-9 h-9 rounded-full bg-gray-900/40 backdrop-blur-sm text-white hover:bg-gray-800/50 hover:text-white flex items-center justify-center z-10 transition-all duration-150"
                 >
                   <Settings className="w-5 h-5" />
                 </button>
@@ -632,7 +638,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               {activeTooltip === 'ac' && (
                 <>
                   <div className="tooltip-overlay" onClick={() => setActiveTooltip(null)} />
-                  <div className="invisible tooltip-visible fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg shadow-lg z-50 w-96 border border-gray-700/50">
+                  <div className="invisible tooltip-visible fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[92%] z-50">
                     <h4 className="font-semibold text-gray-100 mb-1">Classe d'Armure</h4>
                     <p className="mb-2">Détermine la difficulté pour vous toucher en combat.</p>
                     <p className="text-gray-400">Calcul de base :</p>
@@ -660,7 +666,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               {activeTooltip === 'speed' && (
                 <>
                   <div className="tooltip-overlay" onClick={() => setActiveTooltip(null)} />
-                  <div className="invisible tooltip-visible fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg shadow-lg z-50 w-96 border border-gray-700/50">
+                  <div className="invisible tooltip-visible fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[92%] z-50">
                     <h4 className="font-semibold text-gray-100 mb-1">Vitesse</h4>
                     <p className="mb-2">Distance que vous pouvez parcourir en un tour.</p>
                     <div className="text-gray-400">
@@ -689,7 +695,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               {activeTooltip === 'initiative' && (
                 <>
                   <div className="tooltip-overlay" onClick={() => setActiveTooltip(null)} />
-                  <div className="invisible tooltip-visible fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg shadow-lg z-50 w-96 border border-gray-700/50">
+                  <div className="invisible tooltip-visible fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[92%] z-50">
                     <h4 className="font-semibold text-gray-100 mb-1">Initiative</h4>
                     <p className="mb-2">Détermine l'ordre d'action en combat.</p>
                     <div className="text-gray-400">
@@ -718,7 +724,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               {activeTooltip === 'proficiency' && (
                 <>
                   <div className="tooltip-overlay" onClick={() => setActiveTooltip(null)} />
-                  <div className="invisible tooltip-visible fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg shadow-lg z-50 w-96 border border-gray-700/50">
+                  <div className="invisible tooltip-visible fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[92%] z-50">
                     <h4 className="font-semibold text-gray-100 mb-1">Bonus de Maîtrise</h4>
                     <p>Représente votre expertise générale.</p>
                     <div className="text-gray-400">
@@ -817,7 +823,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
 
               <button
                 onClick={() => setShowLevelUp(true)}
-                className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg shadow-green-900/20 hover:shadow-green-900/40 flex items-center justify-center gap-2"
+                className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg flex items-center justify-center gap-2"
               >
                 <TrendingUp size={20} />
                 Passer au niveau {level + 1}
