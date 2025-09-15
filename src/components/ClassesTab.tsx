@@ -20,6 +20,7 @@ import {
   X,
   Plus,
   Minus,
+  ListChecks,
 } from 'lucide-react';
 
 import toast from 'react-hot-toast';
