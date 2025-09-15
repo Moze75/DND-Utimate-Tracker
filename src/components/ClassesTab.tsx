@@ -1371,8 +1371,6 @@ function ClassResourcesCard({
 
   return (
     <div className="stats-card">
-  return (
-    <div className="stats-card">
       <div className="stat-header flex items-center gap-3">
         <Sparkles className="w-5 h-5 text-yellow-500" />
         <h3 className="text-lg font-semibold text-gray-100">Ressources de classe</h3>
@@ -1380,7 +1378,7 @@ function ClassResourcesCard({
       <div className="p-4 space-y-4">{items}</div>
     </div>
   );
-}
+} 
 
 export default ClassesTab;
 export { ClassesTab };
