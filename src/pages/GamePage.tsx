@@ -31,6 +31,43 @@ type GamePageProps = {
   onUpdateCharacter?: (p: Player) => void;
 };
 
+// Gèle le scroll (préserve la position) pendant un changement d’onglet
+function freezeScroll(): number {
+  const y = window.scrollY || window.pageYOffset || 0;
+  const body = document.body;
+  // Sauvegarde pour restauration
+  (body as any).__scrollY = y;
+  body.style.position = 'fixed';
+  body.style.top = `-${y}px`;
+  body.style.left = '0';
+  body.style.right = '0';
+  body.style.width = '100%';
+  return y;
+}
+function unfreezeScroll() {
+  const body = document.body;
+  const y = (body as any).__scrollY || 0;
+  // Reset styles
+  body.style.position = '';
+  body.style.top = '';
+  body.style.left = '';
+  body.style.right = '';
+  body.style.width = '';
+  // Restaure la position exacte
+  window.scrollTo(0, y);
+  delete (body as any).__scrollY;
+}
+
+// Maintient la position pendant quelques frames pour contrer les reflows tardifs
+function stabilizeScroll(y: number, durationMs = 350) {
+  const start = performance.now();
+  const tick = (now: number) => {
+    window.scrollTo(0, y);
+    if (now - start < durationMs) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
 export function GamePage({
   session,
   selectedCharacter,
@@ -62,17 +99,12 @@ export function GamePage({
   // Centralise toutes les mises à jour du joueur
   const applyPlayerUpdate = useCallback(
     (updated: Player) => {
-      // 1) UI instantanée
       setCurrentPlayer(updated);
-
-      // 2) Propage vers App (qui garde selectedCharacter synchronisé)
       try {
         onUpdateCharacter?.(updated);
       } catch {
         // no-op
       }
-
-      // 3) Persiste immédiatement un snapshot pour le prochain reload
       try {
         localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(updated));
       } catch {
@@ -82,7 +114,6 @@ export function GamePage({
     [onUpdateCharacter]
   );
 
-  // Mémorise un snapshot dès l'entrée sur la page, et à chaque changement du joueur courant
   useEffect(() => {
     if (currentPlayer) {
       try {
@@ -93,41 +124,31 @@ export function GamePage({
     }
   }, [currentPlayer]);
 
-  // Sauvegarde aussi juste avant fermeture/changement d'onglet
   useEffect(() => {
     const persist = () => {
       if (!currentPlayer) return;
       try {
         localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(currentPlayer));
-      } catch {
-        // non critique
-      }
+      } catch {}
       try {
         localStorage.setItem(lastTabKeyFor(selectedCharacter.id), activeTab);
-      } catch {
-        // non critique
-      }
+      } catch {}
     };
 
     window.addEventListener('visibilitychange', persist);
     window.addEventListener('pagehide', persist);
-
     return () => {
       window.removeEventListener('visibilitychange', persist);
       window.removeEventListener('pagehide', persist);
     };
   }, [currentPlayer, activeTab, selectedCharacter.id]);
 
-  // Persiste l'onglet à chaque changement
   useEffect(() => {
     try {
       localStorage.setItem(lastTabKeyFor(selectedCharacter.id), activeTab);
-    } catch {
-      // non critique
-    }
+    } catch {}
   }, [activeTab, selectedCharacter.id]);
 
-  // Si on change de personnage, restaurer l'onglet propre à ce personnage
   useEffect(() => {
     const saved = (() => {
       try {
@@ -140,7 +161,6 @@ export function GamePage({
     setActiveTab(saved);
   }, [selectedCharacter.id]);
 
-  // Initialisation: ne se relance que quand l'ID change (pas à chaque modification de champ)
   useEffect(() => {
     const initialize = async () => {
       try {
@@ -152,7 +172,6 @@ export function GamePage({
           throw new Error('Impossible de se connecter à la base de données');
         }
 
-        // Si on reste sur le même perso, ne pas écraser l'état local
         setCurrentPlayer((prev) =>
           prev && prev.id === selectedCharacter.id ? prev : selectedCharacter
         );
@@ -168,46 +187,44 @@ export function GamePage({
       }
     };
 
-    // Ne relancer init que si l'ID a changé
     if (prevPlayerId.current !== selectedCharacter.id) {
       prevPlayerId.current = selectedCharacter.id;
       initialize();
     } else {
-      // Première montée: si on n'a pas encore chargé, on initialise
       if (loading) {
         initialize();
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCharacter.id]); // dépend seulement de l'ID
+  }, [selectedCharacter.id]);
 
   // Empêche le "saut" de page lors du changement d’onglet (ex: Sorts, Classe)
   const handleTabChange = useCallback((tab: string) => {
-    const y = window.scrollY;
+    // Gèle scroll (aucun mouvement pendant les reflows)
+    const y = freezeScroll();
+
+    // Désactive temporairement le smooth scroll global pour éviter l’animation
     const root = document.documentElement;
     const prevBehavior = root.style.scrollBehavior;
-
-    // Désactive temporairement le smooth scroll pour une restauration instantanée
     root.style.scrollBehavior = 'auto';
 
     setActiveTab(tab as TabKey);
 
-    // Restaure la position de scroll immédiatement après le switch
+    // Laisse React peindre, puis restaure le scroll et stabilise pendant quelques frames
     requestAnimationFrame(() => {
-      window.scrollTo(0, y);
-      requestAnimationFrame(() => {
+      unfreezeScroll();         // rétablit la position exacte
+      stabilizeScroll(y, 400);  // maintient la position ~0.4s contre les reflows tardifs
+      // Restaure le scroll-behavior précédent après stabilisation
+      setTimeout(() => {
         root.style.scrollBehavior = prevBehavior;
-      });
+      }, 420);
     });
   }, []);
 
   const handleBackToSelection = () => {
     try {
-      // Empêche l'auto-resume immédiatement après un retour volontaire à la sélection
       sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1');
-    } catch {
-      // ignore
-    }
+    } catch {}
     onBackToSelection?.();
     toast.success('Retour à la sélection des personnages');
   };
@@ -237,7 +254,6 @@ export function GamePage({
           <button
             onClick={() => {
               setConnectionError(null);
-              // relance init
               setLoading(true);
               (async () => {
                 try {
@@ -264,7 +280,8 @@ export function GamePage({
   }
 
   return (
-    <div className="min-h-screen p-2 sm:p-4 md:p-6">
+    // Ajoute la classe utilitaire pour neutraliser l'overflow anchoring
+    <div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor">
       <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6">
         {currentPlayer && (
           <PlayerContext.Provider value={currentPlayer}>
