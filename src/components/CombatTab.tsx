@@ -176,7 +176,7 @@ const AttackEditModal = ({ attack, onClose, onSave, onDelete }: AttackEditModalP
               value={formData.ammo_type}
               onChange={(e) => setFormData({ ...formData, ammo_type: e.target.value })}
               className="input-dark w-full px-3 py-2 rounded-md border border-gray-600 focus:border-red-500"
-              placeholder="Ex: Flèche, Balle, Carreau"
+              placeholder="Ex: Flèches, Balles, Carreaux"
             />
           </div>
 
