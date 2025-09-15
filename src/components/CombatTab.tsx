@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Heart, Plus, Sword, Swords, Shield, Settings, Trash2, ArrowRightCircle } from 'lucide-react';
+import { Heart, Plus, Sword, Swords, Shield, Settings, Trash2, Bow } from 'lucide-react';
 import { Player, Attack } from '../types/dnd';
 import toast from 'react-hot-toast';
 import { ConditionsSection } from './ConditionsSection';
@@ -65,7 +65,7 @@ const AttackEditModal = ({ attack, onClose, onSave, onDelete }: AttackEditModalP
     manual_attack_bonus: attack?.manual_attack_bonus ?? null,
     manual_damage_bonus: attack?.manual_damage_bonus ?? null,
     expertise: attack?.expertise || false,
-    ammo_type: attack?.ammo_type || ''
+    ammo_type: (attack as any)?.ammo_type || ''
   });
 
   const handleSave = () => {
@@ -106,7 +106,6 @@ const AttackEditModal = ({ attack, onClose, onSave, onDelete }: AttackEditModalP
           </div>
 
           {/* Plus de champ "Type d'attaque" (physique imposé) */}
-          {/* Plus de champ "Niveau du sort" */}
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Dés de dégâts</label>
@@ -486,7 +485,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
         </div>
 
         <div className="flex gap-2 text-sm items-stretch">
-          {/* Colonne Attaque + faux bouton de munition */}
+          {/* Colonne Attaque + indication munitions (conteneur identique au bouton, mais invisible) */}
           <div className="flex-1 flex flex-col">
             <button
               onClick={() => rollAttack(attack)}
@@ -495,14 +494,13 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
               Attaque : 1d20+{getAttackBonus(attack)}
             </button>
 
-            {/* Indication de munition sous forme de "faux bouton" centré */}
             {ammoType ? (
               <div
-                className="mt-2 bg-gray-600/90 text-white px-3 py-2 rounded-md flex items-center justify-center gap-2 select-none cursor-default"
+                className="mt-2 px-3 py-2 rounded-md flex items-center justify-center gap-2 bg-transparent"
                 aria-hidden
               >
-                <ArrowRightCircle className="w-5 h-5 text-white/90" />
-                <span className="text-base font-medium">{ammoType}</span>
+                <Bow className="w-5 h-5 text-amber-400" />
+                <span className="text-sm font-medium text-gray-100">{ammoType}</span>
               </div>
             ) : (
               <div className="mt-2 h-[40px]" />
@@ -659,25 +657,13 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
 
     try {
       // Mise à jour directe des PV via update standard
-      const updateData: any = {
-        current_hp: clampedHP
-      };
-
-      // Ajouter les PV temporaires seulement si spécifiés
-      if (newTempHP !== undefined) {
-        Object.assign(updateData, { temporary_hp: clampedTempHP });
-      }
+      const updateData: any = { current_hp: clampedHP };
+      if (newTempHP !== undefined) updateData.temporary_hp = clampedTempHP;
 
       const { error } = await supabase.from('players').update(updateData).eq('id', player.id);
-
       if (error) throw error;
 
-      // Mise à jour locale de l'état
-      onUpdate({
-        ...player,
-        current_hp: clampedHP,
-        temporary_hp: clampedTempHP
-      });
+      onUpdate({ ...player, current_hp: clampedHP, temporary_hp: clampedTempHP });
     } catch (error) {
       console.error('Erreur lors de la mise à jour des PV:', error);
       toast.error('Erreur lors de la mise à jour des PV');
@@ -711,9 +697,8 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
         </div>
         <div className="p-4">
           <div className="space-y-4">
-            {/* Barre de vie principale */}
+            {/* Barre de vie */}
             <div className="relative">
-              {/* Affichage des PV directement sur la barre - TOUJOURS VISIBLE */}
               <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none select-none">
                 <span className="text-white font-bold text-sm drop-shadow-lg">
                   {totalHP} / {player.max_hp}
@@ -721,14 +706,12 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
               </div>
 
               <div className="w-full bg-gray-700 rounded-full h-8 overflow-hidden relative">
-                {/* Barre de PV principale */}
                 <div
                   className={`hp-bar hp-bar-main h-full transition-all duration-500 bg-gradient-to-r ${getHPBarColor()} ${
                     isCriticalHealth ? 'heartbeat-animation' : ''
                   }`}
                   style={{ width: `${Math.min(100, (player.current_hp / player.max_hp) * 100)}%` }}
                 />
-                {/* Barre de PV temporaires */}
                 {player.temporary_hp > 0 && (
                   <div
                     className="hp-bar-temp absolute top-0 h-full bg-gradient-to-r from-blue-500 to-blue-400"
@@ -744,7 +727,7 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
               </div>
             </div>
 
-            {/* Contrôles de gestion des PV */}
+            {/* Contrôles PV */}
             <div className="grid grid-cols-3 gap-4">
               {/* Dégâts */}
               <div className="flex flex-col items-center space-y-2">
