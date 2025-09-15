@@ -56,6 +56,8 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
+
+  
   // Pour ne pas remettre le spinner en boucle: on ne ré-initialise que si l'ID change
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
@@ -181,32 +183,6 @@ export function GamePage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCharacter.id]); // dépend seulement de l'ID
 
-  // Empêche le "saut" de page lors du changement d’onglet (ex: Sorts/Classe)
-  const handleTabChange = useCallback((tab: string) => {
-    const y = window.scrollY;
-    const body = document.body;
-
-    // Lock du scroll (technique modale)
-    const prevPosition = body.style.position;
-    const prevTop = body.style.top;
-    const prevWidth = body.style.width;
-
-    body.style.position = 'fixed';
-    body.style.top = `-${y}px`;
-    body.style.width = '100%';
-
-    setActiveTab(tab as TabKey);
-
-    // Laisse le nouveau contenu se monter puis restaure la position
-    const UNLOCK_DELAY_MS = 450; // ajuste si besoin (350–600ms)
-    window.setTimeout(() => {
-      body.style.position = prevPosition;
-      body.style.top = prevTop;
-      body.style.width = prevWidth;
-      window.scrollTo(0, y);
-    }, UNLOCK_DELAY_MS);
-  }, []);
-
   const handleBackToSelection = () => {
     try {
       // Empêche l'auto-resume immédiatement après un retour volontaire à la sélection
@@ -276,7 +252,7 @@ export function GamePage({
           <PlayerContext.Provider value={currentPlayer}>
             <PlayerProfile player={currentPlayer} onUpdate={applyPlayerUpdate} />
 
-            <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
+            <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
 
             {activeTab === 'combat' && (
               <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
