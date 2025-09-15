@@ -56,6 +56,8 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
+
+  
   // Pour ne pas remettre le spinner en boucle: on ne ré-initialise que si l'ID change
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
