@@ -67,19 +67,24 @@ const getProficiencyBonusForLevel = (level: number): number => {
   if (level >= 5) return 3;
   return 2;
 };
+
+const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+// Correction 2024: reconnaitre explicitement Occultiste (Warlock) en plus de Sorcier/Warlock
 const getSpellcastingAbilityName = (cls?: string): 'Charisme' | 'Sagesse' | 'Intelligence' | null => {
   if (!cls) return null;
-  const c = cls.toLowerCase();
+  const c = normalize(cls);
   if (c.includes('barde') || c.includes('bard')) return 'Charisme';
   if (c.includes('clerc') || c.includes('cleric')) return 'Sagesse';
   if (c.includes('druide') || c.includes('druid')) return 'Sagesse';
   if (c.includes('ensorceleur') || c.includes('sorcerer')) return 'Charisme';
-  if (c.includes('magicien') || c.includes('wizard')) return 'Intelligence';
+  if (c.includes('magicien') || c.includes('wizard') || c.includes('mage')) return 'Intelligence';
   if (c.includes('paladin')) return 'Charisme';
-  if (c.includes('rôdeur') || c.includes('rodeur') || c.includes('ranger')) return 'Sagesse';
-  if (c.includes('sorcier') || c.includes('warlock')) return 'Charisme';
+  if (c.includes('ranger') || c.includes('rodeur') || c.includes('rôdeur')) return 'Sagesse';
+  if (c.includes('warlock') || c.includes('sorcier') || c.includes('occultiste')) return 'Charisme';
   return null;
 };
+
 const getAbilityModFromPlayer = (player: Player, abilityNameFr: 'Charisme' | 'Sagesse' | 'Intelligence'): number => {
   const ability = player.abilities?.find(a => a.name === abilityNameFr);
   if (!ability) return 0;
@@ -99,7 +104,7 @@ const magicalAnimationCSS = `
 
 /* ===== Règles d’affichage des niveaux de slots D&D 5e (bornage par classe/niveau) ===== */
 type CasterType = 'full' | 'half' | 'warlock' | 'none';
-const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
 const getCasterType = (cls?: string): CasterType => {
   if (!cls) return 'none';
   const c = normalize(cls);
@@ -111,9 +116,11 @@ const getCasterType = (cls?: string): CasterType => {
   if (['paladin'].some(k => c.includes(k))) return 'half';
   if (['ranger','rodeur','rôdeur'].some(k => c.includes(k))) return 'half';
   if (['artificer','artificier'].some(k => c.includes(k))) return 'half';
-  if (['warlock','sorcier'].some(k => c.includes(k))) return 'warlock';
+  // Correction 2024: inclure 'occultiste' comme caster de type 'warlock'
+  if (['warlock','sorcier','occultiste'].some(k => c.includes(k))) return 'warlock';
   return 'none';
 };
+
 const getWarlockPactSlotLevel = (level: number): number => {
   if (level <= 2) return 1;
   if (level <= 4) return 2;
@@ -121,6 +128,7 @@ const getWarlockPactSlotLevel = (level: number): number => {
   if (level <= 8) return 4;
   return 5;
 };
+
 const getHighestAllowedSlotLevel = (casterType: CasterType, level: number): number => {
   if (casterType === 'warlock') return getWarlockPactSlotLevel(level);
   if (casterType === 'full') return Math.min(9, Math.ceil(level / 2));
@@ -130,6 +138,7 @@ const getHighestAllowedSlotLevel = (casterType: CasterType, level: number): numb
   }
   return 0;
 };
+
 const getCharacterLevel = (player: Player): number => Number((player as any).level ?? 1) || 1;
 
 /* ====== Composants ====== */
@@ -302,7 +311,7 @@ function SpellCard({
             e.stopPropagation();
             onTogglePrepared(spell.id, spell.is_prepared);
           }}
-          className={`w-6 h-6 rounded-lg ${spell.is_prepared ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-gray-700/50 text-gray-400 hover:bg-gray-600/50'} flex items-center justify-center transition-colors`}
+          className={`w-6 h-6 rounded-lg ${spell.is_prepared ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-gray-700/50 text-gray-400 hover:bg-gray-600/50'} flex items-center justify-center`}
           title={spell.is_prepared ? 'Dépréparer' : 'Préparer'}
         >
           <Check size={16} />
@@ -612,7 +621,7 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
         </div>
         <button
           onClick={() => setShowSpellbook(true)}
-          className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-3 py-1.5 rounded-lg font-medium transition-all duration-200 shadow-lg shadow-blue-900/20 flex items-center gap-2"
+          className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-3 py-1.5 rounded-lg font-medium transition-all duration-200 shadow-lg"
         >
           <Plus size={16} />
           Ajouter
