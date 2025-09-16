@@ -1,73 +1,79 @@
 import React, { useState } from 'react';
 import {
-  Save,
-  X,
-  Minus,
-  Plus,
-  Flame,
-  Music,
-  Cross,
-  Leaf,
-  Wand2,
-  Swords,
-  BookOpen,
-  Footprints,
-  HandHeart,
-  Target,
-  Skull,
-  Sparkles,
+  BookOpen, Sparkles, Plus, Minus, Settings, Flame, Music, Cross, Leaf,
+  Wand2, Swords, Footprints, HandHeart, Target, Skull, Trash2, Save, X
 } from 'lucide-react';
-import toast from 'react-hot-toast';
-import { supabase } from '../lib/supabase';
 import { Player, ClassResources } from '../types/dnd';
+import { supabase } from '../lib/supabase';
+import toast from 'react-hot-toast';
 
-/* ============================ Helpers ============================ */
+interface ClassResourcesSectionProps {
+  player: Player;
+  onUpdate: (player: Player) => void;
+}
 
-type AbilityLike = {
-  score?: number | string;
-  total?: number | string;
-  base?: number | string;
-  modifier?: number | string;
-  mod?: number | string;
-  modValue?: number | string;
-  value?: number | string;
-};
+interface ResourceBlockProps {
+  icon: React.ReactNode;
+  label: string;
+  total: number;
+  used: number;
+  onUse: () => void;
+  onRestore: () => void;
+  onUpdateTotal: (newTotal: number) => void;
+  onUpdateUsed?: (value: number) => void;
+  useNumericInput?: boolean;
+  color?: 'red' | 'purple' | 'yellow' | 'green' | 'blue';
+  onDelete?: () => void;
+  hideEdit?: boolean; // nouveau: permet de masquer la roue des paramètres
+}
 
-const toNum = (v: unknown): number | null => {
-  if (v === null || v === undefined) return null;
-  const n = typeof v === 'string' ? parseFloat(v) : (v as number);
-  return Number.isFinite(n) ? n : null;
-};
+interface ResourceEditModalProps {
+  label: string;
+  total: number;
+  onSave: (newTotal: number) => void;
+  onCancel: () => void;
+}
 
-function getChaModFromPlayer(player: Player): number {
-  const abilities: any = (player as any).abilities;
-  let cha: AbilityLike | null = null;
+/* --------- Helpers --------- */
 
-  const getFromObj = (obj: Record<string, any>): AbilityLike | null => {
-    const candidates = ['charisme', 'charisma', 'cha', 'car'];
-    for (const k of candidates) {
-      const key = Object.keys(obj).find((o) => o.toLowerCase() === k);
-      if (key && obj[key]) return obj[key];
+// Lecture robuste du modificateur de Charisme
+const getChaModFromPlayer = (p: Player): number => {
+  const abilities: any = (p as any)?.abilities;
+
+  const toNum = (v: any): number | null => {
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string') {
+      const n = Number(v.replace(/[^\d+-]/g, ''));
+      return Number.isFinite(n) ? n : null;
     }
     return null;
   };
 
+  const getFromObj = (obj: any): any | null => {
+    if (!obj || typeof obj !== 'object') return null;
+    const keys = Object.keys(obj);
+    const matchKey =
+      keys.find(k => {
+        const kk = k.toLowerCase();
+        return kk === 'charisme' || kk === 'charisma' || kk === 'cha' || kk === 'car';
+      }) ??
+      keys.find(k => k.toLowerCase().includes('charis') || k.toLowerCase() === 'cha' || k.toLowerCase() === 'car');
+    return matchKey ? obj[matchKey] : null;
+  };
+
+  let cha: any = null;
+
   if (Array.isArray(abilities)) {
-    const found = abilities.find((a: any) => {
-      const n = (a?.name || a?.label || '').toString().trim().toLowerCase();
+    cha = abilities.find((a: any) => {
+      const n = (a?.name || a?.abbr || a?.key || a?.code || '').toString().toLowerCase();
       return n === 'charisme' || n === 'charisma' || n === 'cha' || n === 'car';
     });
-    cha = found || null;
   } else if (abilities && typeof abilities === 'object') {
     cha = getFromObj(abilities);
   }
 
   if (cha) {
-    const mod =
-      toNum(cha.modifier) ??
-      toNum(cha.mod) ??
-      toNum(cha.modValue) ??
-      toNum(cha.value);
+    const mod = toNum(cha.modifier) ?? toNum(cha.mod) ?? toNum(cha.modValue) ?? toNum(cha.value);
     if (mod != null) return mod;
 
     const score = toNum(cha.score) ?? toNum(cha.total) ?? toNum(cha.base);
@@ -75,16 +81,9 @@ function getChaModFromPlayer(player: Player): number {
   }
 
   return 0;
-}
-
-/* ============================ UI: Modale édition simple ============================ */
-
-type ResourceEditModalProps = {
-  label: string;
-  total: number;
-  onSave: (newTotal: number) => void;
-  onCancel: () => void;
 };
+
+/* --------- UI --------- */
 
 const ResourceEditModal = ({ label, total, onSave, onCancel }: ResourceEditModalProps) => {
   const [value, setValue] = useState<string>(total.toString());
@@ -107,17 +106,11 @@ const ResourceEditModal = ({ label, total, onSave, onCancel }: ResourceEditModal
         />
       </div>
       <div className="flex gap-2">
-        <button
-          onClick={handleSave}
-          className="btn-primary flex-1 px-4 py-2 rounded-lg flex items-center justify-center gap-2"
-        >
+        <button onClick={handleSave} className="btn-primary flex-1 px-4 py-2 rounded-lg flex items-center justify-center gap-2">
           <Save size={16} />
           Sauvegarder
         </button>
-        <button
-          onClick={onCancel}
-          className="btn-secondary px-4 py-2 rounded-lg flex items-center justify-center gap-2"
-        >
+        <button onClick={onCancel} className="btn-secondary px-4 py-2 rounded-lg flex items-center justify-center gap-2">
           <X size={16} />
           Annuler
         </button>
@@ -126,33 +119,10 @@ const ResourceEditModal = ({ label, total, onSave, onCancel }: ResourceEditModal
   );
 };
 
-/* ============================ UI: Bloc Ressource ============================ */
-
-function ResourceBlock({
-  icon,
-  label,
-  total,
-  used,
-  onUse,
-  onRestore,
-  onUpdateTotal,
-  onUpdateUsed,
-  useNumericInput = false,
-  color = 'purple',
-  hideEdit = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  total: number;
-  used: number;
-  onUse: () => void;
-  onRestore?: () => void; // optionnel et sécurisé
-  onUpdateTotal: (newTotal: number) => void;
-  onUpdateUsed?: (value: number) => void;
-  useNumericInput?: boolean;
-  color?: 'red' | 'purple' | 'yellow' | 'green' | 'blue';
-  hideEdit?: boolean;
-}) {
+const ResourceBlock = ({
+  icon, label, total, used, onUse, onRestore, onUpdateTotal, onUpdateUsed,
+  useNumericInput = false, color = 'purple', onDelete, hideEdit = false
+}: ResourceBlockProps) => {
   const remaining = Math.max(0, total - used);
   const [isEditing, setIsEditing] = useState(false);
   const [amount, setAmount] = useState<string>('');
@@ -162,7 +132,7 @@ function ResourceBlock({
     purple: 'text-purple-500 hover:bg-purple-900/30',
     yellow: 'text-yellow-500 hover:bg-yellow-900/30',
     green: 'text-green-500 hover:bg-green-900/30',
-    blue: 'text-blue-500 hover:bg-blue-900/30',
+    blue: 'text-blue-500 hover:bg-blue-900/30'
   };
 
   return (
@@ -172,8 +142,28 @@ function ResourceBlock({
           <div className={`${colorClasses[color]}`}>{icon}</div>
           <span className="text-sm font-medium text-gray-300">{label}</span>
         </div>
-        <div className="text-sm text-gray-400 bg-gray-800/50 px-3 py-1 rounded-md min-w-[64px] text-center">
-          {remaining}/{total}
+        <div className="flex items-center gap-2">
+          <div className="text-sm text-gray-400 bg-gray-800/50 px-3 py-1 rounded-md min-w-[64px] text-center">
+            {remaining}/{total}
+          </div>
+          {!hideEdit && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-blue-500 hover:bg-blue-900/30 rounded-full transition-colors"
+              title="Modifier"
+            >
+              <Settings size={16} />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-900/30 rounded-full transition-colors"
+              title="Supprimer"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -217,23 +207,16 @@ function ResourceBlock({
       ) : (
         <div className="flex gap-2">
           <button
-            onClick={() => {
-              const rem = Math.max(0, total - used);
-              if (rem <= 0) return;
-              onUse();
-            }}
-            disabled={Math.max(0, total - used) <= 0}
+            onClick={onUse}
+            disabled={remaining <= 0}
             className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
-              Math.max(0, total - used) > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
+              remaining > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
             }`}
           >
             <Minus size={16} className="mx-auto" />
           </button>
           <button
-            onClick={() => {
-              if (used <= 0) return;
-              onRestore?.(); // sécurisé
-            }}
+            onClick={onRestore}
             disabled={used <= 0}
             className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
               used > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
@@ -244,57 +227,52 @@ function ResourceBlock({
         </div>
       )}
 
-}
+      {isEditing && !hideEdit && (
+        <div className="mt-4 border-t border-gray-700/50 pt-4">
+          <ResourceEditModal
+            label={`Nombre total de ${label.toLowerCase()}`}
+            total={total}
+            onSave={(newTotal) => {
+              onRestore(); // reset used
+              onUpdateTotal(newTotal);
+              setIsEditing(false);
+            }}
+            onCancel={() => setIsEditing(false)}
+          />
+        </div>
+      )}
     </div>
   );
-}
-
-/* ============================ Section principale ============================ */
-
-type Props = {
-  player: Player;
-  onUpdate: (player: Player) => void;
 };
 
-export function ClassResourcesSection({ player, onUpdate }: Props) {
+export function ClassResourcesSection({ player, onUpdate }: ClassResourcesSectionProps) {
   if (!player.class_resources || !player.class) return null;
 
   const updateClassResource = async (
     resource: keyof ClassResources,
     value: number | boolean
   ) => {
-    if (!player?.id) return;
+    if (!player.class_resources) return;
 
-    // Barde: total auto → refuse écriture du total
+    // Barde: pas d'override, ignore toute tentative d'écriture du total
     if (resource === 'bardic_inspiration') {
-      toast.error(
-        "Le total d'Inspiration bardique est calculé automatiquement (modificateur de Charisme)."
-      );
+      toast.error("Le total d'Inspiration bardique est calculé automatiquement (modificateur de Charisme).");
       return;
     }
 
-    // Paladin: total auto (5 × niveau) → refuse écriture du total
-    if (resource === 'lay_on_hands') {
-      toast.error(
-        "Le total d'Imposition des mains est calculé automatiquement (5 × niveau de Paladin)."
-      );
-      return;
-    }
+    const cr = { ...player.class_resources };
 
-    const cr: any = { ...(player.class_resources || {}) };
-
-    // Barde: clamp du used à [0..cap]
+    // Clamp pour le Barde (used uniquement)
     if (resource === 'used_bardic_inspiration' && typeof value === 'number') {
-      const cap = Math.max(0, getChaModFromPlayer(player));
-      cr.used_bardic_inspiration = Math.min(Math.max(0, value), cap);
-      if (cr.bardic_inspiration !== undefined) delete cr.bardic_inspiration;
-    }
-    // Paladin: clamp du used à [0..(5 × niveau)]
-    else if (resource === 'used_lay_on_hands' && typeof value === 'number') {
-      const totalPoints = Math.max(0, Number(player.level || 0) * 5);
-      cr.used_lay_on_hands = Math.min(Math.max(0, value), totalPoints);
+      const cap = getChaModFromPlayer(player);
+      const upper = Math.max(0, cap);
+      cr.used_bardic_inspiration = Math.min(Math.max(0, value), upper);
+      // purge tout override persistant s'il existait
+      if ((cr as any).bardic_inspiration !== undefined) {
+        delete (cr as any).bardic_inspiration;
+      }
     } else {
-      cr[resource] = value;
+      (cr as any)[resource] = value;
     }
 
     try {
@@ -307,7 +285,7 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
 
       onUpdate({
         ...player,
-        class_resources: cr,
+        class_resources: cr
       });
 
       if (typeof value === 'boolean') {
@@ -322,24 +300,20 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
           action_surge: "Sursaut d'action",
           ki_points: 'Points de crédo',
           lay_on_hands: 'Imposition des mains',
-          favored_foe: 'Ennemi juré',
+          favored_foe: 'Ennemi juré'
         };
 
-        const key = String(resource);
-        const displayKey = key.replace('used_', '');
+        const displayKey = resource.replace('used_', '');
         const resourceName = resourceNames[displayKey] || displayKey;
-        const isUsed = key.startsWith('used_');
-        const previous = (player.class_resources as any)?.[resource];
-
+        const isUsed = resource.startsWith('used_');
+        const previous = player.class_resources?.[resource] as number | boolean | undefined;
         const action =
-          isUsed && typeof previous === 'number' && typeof value === 'number'
-            ? (value as number) > (previous as number)
-              ? 'utilisé'
-              : 'récupéré'
+          isUsed
+            ? (typeof previous === 'number' && typeof value === 'number' && value > previous ? 'utilisé' : 'récupéré')
             : 'mis à jour';
 
         if (isUsed && typeof previous === 'number' && typeof value === 'number') {
-          const diff = Math.abs((value as number) - (previous as number));
+          const diff = Math.abs(value - previous);
           toast.success(`${diff} ${resourceName} ${action}`);
         } else {
           toast.success(`${resourceName} ${action}`);
@@ -366,9 +340,7 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
             used={cr.used_rage || 0}
             onUse={() => updateClassResource('used_rage', (cr.used_rage || 0) + 1)}
             onUpdateTotal={(n) => updateClassResource('rage', n)}
-            onRestore={() =>
-              updateClassResource('used_rage', Math.max(0, (cr.used_rage || 0) - 1))
-            }
+            onRestore={() => updateClassResource('used_rage', Math.max(0, (cr.used_rage || 0) - 1))}
             color="red"
           />
         );
@@ -376,8 +348,10 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
       break;
 
     case 'Barde': {
-      const cap = Math.max(0, getChaModFromPlayer(player));
-      const used = Math.min(cr.used_bardic_inspiration || 0, cap);
+      // Toujours auto: total = modificateur de Charisme, pas d'édition du total
+      const cap = getChaModFromPlayer(player);
+      const upper = Math.max(0, cap);
+      const used = Math.min(cr.used_bardic_inspiration || 0, upper);
 
       items.push(
         <ResourceBlock
@@ -387,14 +361,10 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
           total={cap}
           used={used}
           onUse={() => updateClassResource('used_bardic_inspiration', used + 1)}
-          onUpdateTotal={() => {
-            /* no-op: total auto */
-          }}
-          onRestore={() =>
-            updateClassResource('used_bardic_inspiration', Math.max(0, used - 1))
-          }
+          onUpdateTotal={() => { /* no-op: pas d'override */ }}
+          onRestore={() => updateClassResource('used_bardic_inspiration', Math.max(0, used - 1))}
           color="purple"
-          hideEdit
+          hideEdit // masque la roue des paramètres
         />
       );
       break;
@@ -409,19 +379,9 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
             label="Conduit divin"
             total={cr.channel_divinity}
             used={cr.used_channel_divinity || 0}
-            onUse={() =>
-              updateClassResource(
-                'used_channel_divinity',
-                (cr.used_channel_divinity || 0) + 1
-              )
-            }
+            onUse={() => updateClassResource('used_channel_divinity', (cr.used_channel_divinity || 0) + 1)}
             onUpdateTotal={(n) => updateClassResource('channel_divinity', n)}
-            onRestore={() =>
-              updateClassResource(
-                'used_channel_divinity',
-                Math.max(0, (cr.used_channel_divinity || 0) - 1)
-              )
-            }
+            onRestore={() => updateClassResource('used_channel_divinity', Math.max(0, (cr.used_channel_divinity || 0) - 1))}
             color="yellow"
           />
         );
@@ -437,16 +397,9 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
             label="Forme sauvage"
             total={cr.wild_shape}
             used={cr.used_wild_shape || 0}
-            onUse={() =>
-              updateClassResource('used_wild_shape', (cr.used_wild_shape || 0) + 1)
-            }
+            onUse={() => updateClassResource('used_wild_shape', (cr.used_wild_shape || 0) + 1)}
             onUpdateTotal={(n) => updateClassResource('wild_shape', n)}
-            onRestore={() =>
-              updateClassResource(
-                'used_wild_shape',
-                Math.max(0, (cr.used_wild_shape || 0) - 1)
-              )
-            }
+            onRestore={() => updateClassResource('used_wild_shape', Math.max(0, (cr.used_wild_shape || 0) - 1))}
             color="green"
           />
         );
@@ -462,19 +415,9 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
             label="Points de sorcellerie"
             total={cr.sorcery_points}
             used={cr.used_sorcery_points || 0}
-            onUse={() =>
-              updateClassResource(
-                'used_sorcery_points',
-                (cr.used_sorcery_points || 0) + 1
-              )
-            }
+            onUse={() => updateClassResource('used_sorcery_points', (cr.used_sorcery_points || 0) + 1)}
             onUpdateTotal={(n) => updateClassResource('sorcery_points', n)}
-            onRestore={() =>
-              updateClassResource(
-                'used_sorcery_points',
-                Math.max(0, (cr.used_sorcery_points || 0) - 1)
-              )
-            }
+            onRestore={() => updateClassResource('used_sorcery_points', Math.max(0, (cr.used_sorcery_points || 0) - 1))}
             color="purple"
           />
         );
@@ -490,16 +433,9 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
             label="Sursaut d'action"
             total={cr.action_surge}
             used={cr.used_action_surge || 0}
-            onUse={() =>
-              updateClassResource('used_action_surge', (cr.used_action_surge || 0) + 1)
-            }
+            onUse={() => updateClassResource('used_action_surge', (cr.used_action_surge || 0) + 1)}
             onUpdateTotal={(n) => updateClassResource('action_surge', n)}
-            onRestore={() =>
-              updateClassResource(
-                'used_action_surge',
-                Math.max(0, (cr.used_action_surge || 0) - 1)
-              )
-            }
+            onRestore={() => updateClassResource('used_action_surge', Math.max(0, (cr.used_action_surge || 0) - 1))}
             color="red"
           />
         );
@@ -509,23 +445,16 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
     case 'Magicien':
       if (cr.arcane_recovery !== undefined) {
         items.push(
-          <div
-            key="arcane_recovery"
-            className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3"
-          >
+          <div key="arcane_recovery" className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <BookOpen size={20} className="text-blue-500" />
                 <span className="text-sm font-medium text-gray-300">Récupération arcanique</span>
               </div>
               <button
-                onClick={() =>
-                  updateClassResource('used_arcane_recovery', !cr.used_arcane_recovery)
-                }
+                onClick={() => updateClassResource('used_arcane_recovery', !cr.used_arcane_recovery)}
                 className={`h-8 px-3 flex items-center justify-center rounded-md transition-colors ${
-                  cr.used_arcane_recovery
-                    ? 'bg-gray-800/50 text-gray-500'
-                    : 'text-blue-500 hover:bg-blue-900/30'
+                  cr.used_arcane_recovery ? 'bg-gray-800/50 text-gray-500' : 'text-blue-500 hover:bg-blue-900/30'
                 }`}
               >
                 {cr.used_arcane_recovery ? 'Utilisé' : 'Disponible'}
@@ -545,76 +474,32 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
             label="Points de crédo"
             total={cr.ki_points}
             used={cr.used_ki_points || 0}
-            onUse={() =>
-              updateClassResource('used_ki_points', (cr.used_ki_points || 0) + 1)
-            }
+            onUse={() => updateClassResource('used_ki_points', (cr.used_ki_points || 0) + 1)}
             onUpdateTotal={(n) => updateClassResource('ki_points', n)}
-            onRestore={() =>
-              updateClassResource(
-                'used_ki_points',
-                Math.max(0, (cr.used_ki_points || 0) - 1)
-              )
-            }
+            onRestore={() => updateClassResource('used_ki_points', Math.max(0, (cr.used_ki_points || 0) - 1))}
             color="blue"
           />
         );
       }
       break;
 
-    case 'Paladin': {
-      // Total auto = 5 × niveau — aucune édition du total
-      const level = Number(player.level || 0);
-      const totalPoints = Math.max(0, level * 5);
-      const used = Math.min(Math.max(0, cr.used_lay_on_hands || 0), totalPoints);
-
-      items.push(
-        <ResourceBlock
-          key="lay_on_hands"
-          icon={<HandHeart size={20} />}
-          label="Imposition des mains"
-          total={totalPoints}
-          used={used}
-          onUse={() =>
-            updateClassResource('used_lay_on_hands', Math.min(used + 1, totalPoints))
-          }
-          onRestore={() =>
-            updateClassResource('used_lay_on_hands', Math.max(0, used - 1))
-          }
-          onUpdateTotal={() => {
-            /* no-op: total auto, pas d’édition */
-          }}
-          color="yellow"
-          hideEdit
-        />
-      );
-
-      // Conduits divins (N3+) — total calculé → pas d’édition
-      if (level >= 3) {
-        const cap = level >= 11 ? 3 : 2;
-        const usedCd = cr.used_channel_divinity || 0;
+    case 'Paladin':
+      if (typeof cr.lay_on_hands === 'number') {
         items.push(
           <ResourceBlock
-            key="paladin_channel_divinity"
-            icon={<Cross size={20} />}
-            label="Conduits divins"
-            total={cap}
-            used={usedCd}
-            onUse={() =>
-              updateClassResource('used_channel_divinity', Math.min(usedCd + 1, cap))
-            }
-            onUpdateTotal={() => {
-              /* cap calculé -> non éditable */
-            }}
-            onRestore={() =>
-              updateClassResource('used_channel_divinity', Math.max(0, usedCd - 1))
-            }
+            key="lay_on_hands"
+            icon={<HandHeart size={20} />}
+            label="Imposition des mains"
+            total={cr.lay_on_hands}
+            used={cr.used_lay_on_hands || 0}
+            onUpdateTotal={(n) => updateClassResource('lay_on_hands', n)}
+            onUpdateUsed={(v) => updateClassResource('used_lay_on_hands', v)}
             color="yellow"
-            hideEdit
+            useNumericInput
           />
         );
       }
       break;
-    }
 
     case 'Rôdeur':
       if (typeof cr.favored_foe === 'number') {
@@ -625,16 +510,9 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
             label="Ennemi juré"
             total={cr.favored_foe}
             used={cr.used_favored_foe || 0}
-            onUse={() =>
-              updateClassResource('used_favored_foe', (cr.used_favored_foe || 0) + 1)
-            }
+            onUse={() => updateClassResource('used_favored_foe', (cr.used_favored_foe || 0) + 1)}
             onUpdateTotal={(n) => updateClassResource('favored_foe', n)}
-            onRestore={() =>
-              updateClassResource(
-                'used_favored_foe',
-                Math.max(0, (cr.used_favored_foe || 0) - 1)
-              )
-            }
+            onRestore={() => updateClassResource('used_favored_foe', Math.max(0, (cr.used_favored_foe || 0) - 1))}
             color="green"
           />
         );
@@ -644,10 +522,7 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
     case 'Roublard':
       if (cr.sneak_attack) {
         items.push(
-          <div
-            key="sneak_attack"
-            className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3"
-          >
+          <div key="sneak_attack" className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Skull size={20} className="text-red-500" />
@@ -675,5 +550,3 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
     </div>
   );
 }
-
-export default ClassResourcesSection;
