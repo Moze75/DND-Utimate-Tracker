@@ -14,8 +14,6 @@ import {
   Target,
   Skull,
   BookOpen,
-  Settings,
-  Trash2,
   Save,
   X,
   Plus,
@@ -30,7 +28,10 @@ import { loadFeatureChecks, upsertFeatureCheck } from '../services/featureChecks
 import { loadAbilitySections } from '../services/classesContent';
 import { MarkdownLite, type MarkdownCtx } from '../lib/markdownLite';
 
-// Type de section tel que renvoyé par classesContent.ts
+/* ===========================================================
+   Types externes
+   =========================================================== */
+
 type AbilitySection = {
   level: number;
   title: string;
@@ -64,53 +65,146 @@ type Props = {
 const DEBUG = typeof window !== 'undefined' && (window as any).UT_DEBUG === true;
 
 /* ===========================================================
-   Aides noms / alias
+   Aides noms / alias (aligné “règles 2024”)
    =========================================================== */
 
 const CLASS_ALIASES: Record<string, string[]> = {
-  moine: ['Moine', 'Monk'],
-  ensorceleur: ['Ensorceleur', 'Sorcier', 'Sorcerer'],
   barbare: ['Barbare', 'Barbarian'],
   barde: ['Barde', 'Bard'],
-  clerc: ['Clerc', 'Cleric'],
+  clerc: ['Clerc', 'Cleric', 'Prêtre', 'Pretre'],
   druide: ['Druide', 'Druid'],
+  ensorceleur: ['Ensorceleur', 'Sorcerer', 'Sorceror'],
   guerrier: ['Guerrier', 'Fighter'],
+  magicien: ['Magicien', 'Wizard', 'Mage'],
+  moine: ['Moine', 'Monk'],
   paladin: ['Paladin'],
   rodeur: ['Rôdeur', 'Rodeur', 'Ranger'],
-  voleur: ['Voleur', 'Rogue', 'Roublard'],
-  magicien: ['Magicien', 'Wizard'],
+  roublard: ['Roublard', 'Voleur', 'Rogue', 'Thief'],
+  // Nouveau: Occultiste = Warlock (VF moderne “Sorcier”)
+  occultiste: ['Occultiste', 'Warlock', 'Sorcier'],
 };
 
+// Clés normalisées (sans accents / tirets), valeurs: variantes FR/EN pour la recherche
 const SUBCLASS_ALIASES: Record<string, string[]> = {
-  'voie de la paume': [
-    'Voie de la Paume',
-    'Voie de la Main Ouverte',
-    'Way of the Open Hand',
-    'Open Hand',
-    'Way Of The Open Hand',
+  /* ============================
+   * Barbare – 2024
+   * ============================ */
+  'voie de l arbre monde': [
+    'Voie de l’Arbre-Monde',
+    'Voie de l Arbre Monde',
+    'Path of the World Tree',
+    'World Tree',
+    'World-Tree',
   ],
-  'voie de la main ouverte': [
-    'Voie de la Main Ouverte',
-    'Voie de la Paume',
-    'Way of the Open Hand',
-    'Open Hand',
-  ],
-  'credo de la paume': ['Voie de la Paume', 'Voie de la Main Ouverte', 'Way of the Open Hand'],
+  'voie du berserker': ['Voie du Berserker', 'Berserker', 'Path of the Berserker'],
+  'voie du coeur sauvage': ['Voie du Cœur sauvage', 'Voie du Coeur sauvage', 'Path of the Wild Heart', 'Wild Heart'],
+  'voie du zelateur': ['Voie du Zélateur', 'Voie du Zelateur', 'Path of the Zealot', 'Zealot'],
 
-  'college du savoir': [
-    'College du savoir',
-    'Collège du savoir',
-    'Collège du Savoir',
-    'College of Lore',
-    'College Of Lore',
+  /* ============================
+   * Barde – 2024
+   * ============================ */
+  'college de la danse': ['Collège de la Danse', 'College de la Danse', 'College of Dance'],
+  'college du savoir': ['Collège du Savoir', 'College du savoir', 'College of Lore', 'Lore'],
+  'college de la seduction': ['Collège de la Séduction', 'College de la Seduction', 'College of Glamour', 'Glamour'],
+  'college de la vaillance': ['Collège de la Vaillance', 'College de la Vaillance', 'College of Valor', 'Valor'],
+
+  /* ============================
+   * Clerc – 2024
+   * ============================ */
+  'domaine de la guerre': ['Domaine de la Guerre', 'War Domain'],
+  'domaine de la lumiere': ['Domaine de la Lumière', 'Light Domain'],
+  'domaine de la ruse': ['Domaine de la Ruse', 'Trickery Domain'],
+  'domaine de la vie': ['Domaine de la Vie', 'Life Domain'],
+
+  /* ============================
+   * Druide – 2024
+   * ============================ */
+  'cercle des astres': ['Cercle des Astres', 'Circle of Stars', 'Stars'],
+  'cercle de la lune': ['Cercle de la Lune', 'Circle of the Moon', 'Moon'],
+  'cercle des mers': ['Cercle des Mers', 'Circle of the Sea', 'Sea'],
+  'cercle de la terre': ['Cercle de la Terre', 'Circle of the Land', 'Land'],
+
+  /* ============================
+   * Ensorceleur – 2024
+   * (Les "Options de Métamagie" ne sont pas une sous-classe mais un regroupement)
+   * ============================ */
+  'options de metamagie': ['Options de Métamagie', 'Metamagic Options', 'Metamagie'],
+  'sorcellerie aberrante': ['Sorcellerie aberrante', 'Aberrant Sorcery', 'Aberrant Mind'],
+  'sorcellerie arcanique': ['Sorcellerie arcanique', 'Arcane Sorcery', 'Arcane'],
+  'sorcellerie mecanique': ['Sorcellerie mécanique', 'Clockwork Sorcery', 'Clockwork Soul'],
+  'sorcellerie sauvage': ['Sorcellerie sauvage', 'Wild Magic', 'Wild Sorcery'],
+
+  /* ============================
+   * Guerrier – 2024
+   * ============================ */
+  champion: ['Champion', 'Champion Fighter'],
+  'chevalier occultiste': ['Chevalier occultiste', 'Eldritch Knight'],
+  'maitre de guerre': ['Maître de guerre', 'Maitre de guerre', 'Battle Master', 'Battlemaster'],
+  'soldat psi': ['Soldat psi', 'Psi Warrior', 'Psychic Warrior'],
+
+  /* ============================
+   * Magicien – 2024
+   * ============================ */
+  abjurateur: ['Abjurateur', 'Abjuration', 'School of Abjuration'],
+  evocation: ['Évocation', 'Evocation', 'School of Evocation'],
+  illusionniste: ['Illusionniste', 'Illusion', 'School of Illusion'],
+
+  /* ============================
+   * Moine – 2024
+   * ============================ */
+  'credo des elements': [
+    'Crédo des Éléments',
+    'Credo des Elements',
+    'Way of the Four Elements',
+    'Warrior of the Elements',
   ],
-  'collège du savoir': [
-    'College du savoir',
-    'Collège du savoir',
-    'Collège du Savoir',
-    'College of Lore',
-    'College Of Lore',
+  'credo de la misericorde': ['Crédo de la Miséricorde', 'Credo de la Misericorde', 'Way of Mercy'],
+  'credo de l ombre': ['Crédo de l’Ombre', 'Credo de l Ombre', 'Way of Shadow', 'Shadow'],
+  'credo de la paume': [
+    'Crédo de la Paume',
+    'Credo de la Paume',
+    'Voie de la Paume',
+    'Voie de la Main Ouverte',
+    'Way of the Open Hand',
+    'Open Hand',
   ],
+
+  /* ============================
+   * Occultiste (Warlock) – 2024
+   * ============================ */
+  'options de manifestation occulte': [
+    'Options de Manifestation occulte',
+    'Eldritch Options',
+    'Eldritch Invocations (options)',
+  ],
+  'protecteur archange': ['Protecteur Archange', 'Archfey', 'The Archfey'],
+  'protecteur celeste': ['Protecteur Céleste', 'Celeste', 'The Celestial', 'Celestial'],
+  'protecteur felon': ['Protecteur Félon', 'Protecteur Felon', 'The Fiend', 'Fiend'],
+  'protecteur grand ancien': ['Protecteur Grand Ancien', 'The Great Old One', 'Great Old One', 'Goo'],
+
+  /* ============================
+   * Paladin – 2024
+   * ============================ */
+  'serment des paladins': ['Serment des Paladins', 'Oath of the Paladins', 'Paladin Oath (core)'],
+  'serment des anciens': ['Serment des Anciens', 'Oath of the Ancients'],
+  'serment de devotion': ['Serment de Dévotion', 'Serment de Devotion', 'Oath of Devotion'],
+  'serment de vengeance': ['Serment de Vengeance', 'Oath of Vengeance'],
+
+  /* ============================
+   * Rôdeur – 2024
+   * ============================ */
+  belluaire: ['Belluaire', 'Beast Master', 'Beastmaster'],
+  chasseur: ['Chasseur', 'Hunter'],
+  'traqueur des tenebres': ['Traqueur des ténèbres', 'Traqueur des tenebres', 'Gloom Stalker'],
+  'vagabond feerique': ['Vagabond féérique', 'Vagabond feerique', 'Fey Wanderer'],
+
+  /* ============================
+   * Roublard – 2024
+   * ============================ */
+  'ame aceree': ['Âme acérée', 'Ame aceree', 'Soulknife'],
+  'arnaqueur arcanique': ['Arnaqueur arcanique', 'Arcane Trickster'],
+  assassin: ['Assassin'],
+  voleur: ['Voleur', 'Thief'],
 };
 
 /* ===========================================================
@@ -131,17 +225,26 @@ function norm(s: string) {
 
 function canonicalClass(name: string): string {
   const n = norm(name);
+
   if (['barbare', 'barbarian'].includes(n)) return 'Barbare';
   if (['barde', 'bard'].includes(n)) return 'Barde';
-  if (['clerc', 'cleric'].includes(n)) return 'Clerc';
+  if (['clerc', 'cleric', 'pretre', 'prêtre', 'pretres'].includes(n)) return 'Clerc';
   if (['druide', 'druid'].includes(n)) return 'Druide';
-  if (['ensorceleur', 'sorcier', 'sorcerer'].includes(n)) return 'Ensorceleur';
+
+  // Ensorceleur = Sorcerer
+  if (['ensorceleur', 'sorcerer', 'sorceror'].includes(n)) return 'Ensorceleur';
+
   if (['guerrier', 'fighter'].includes(n)) return 'Guerrier';
-  if (['magicien', 'wizard'].includes(n)) return 'Magicien';
+  // Magicien = Wizard (on accepte “mage”)
+  if (['magicien', 'wizard', 'mage'].includes(n)) return 'Magicien';
   if (['moine', 'monk'].includes(n)) return 'Moine';
   if (['paladin'].includes(n)) return 'Paladin';
   if (['rodeur', 'rôdeur', 'ranger'].includes(n)) return 'Rôdeur';
-  if (['roublard', 'voleur', 'rogue'].includes(n)) return 'Roublard';
+  if (['roublard', 'voleur', 'rogue', 'thief'].includes(n)) return 'Roublard';
+
+  // Occultiste = Warlock (et “Sorcier” en VF moderne)
+  if (['occultiste', 'warlock', 'sorcier'].includes(n)) return 'Occultiste';
+
   return name || '';
 }
 
@@ -178,13 +281,7 @@ function slug(s: string) {
    =========================================================== */
 function getSubclassFromPlayerLike(p?: any): string | null {
   if (!p) return null;
-  const candidates = [
-    p?.subclass,
-    p?.sub_class,
-    p?.subClass,
-    p?.sousClasse,
-    p?.['sous-classe'],
-  ];
+  const candidates = [p?.subclass, p?.sub_class, p?.subClass, p?.sousClasse, p?.['sous-classe']];
   const found = candidates.find((v) => typeof v === 'string' && v.trim().length > 0);
   return found ? String(found).trim() : null;
 }
@@ -245,7 +342,7 @@ function getChaModFromPlayerLike(p?: any): number {
 }
 
 /* ===========================================================
-   Overlay ripple plein écran
+   Overlay ripple plein écran (effet visuel)
    =========================================================== */
 
 function ScreenRipple({
@@ -281,7 +378,7 @@ function ScreenRipple({
 
     const finalDiameter = Math.ceil(maxR * 2) + 2 * blur;
 
-    // Position/size fixes, on animera via scale
+    // Position/size fixes, animée via scale
     circle.style.width = `${finalDiameter}px`;
     circle.style.height = `${finalDiameter}px`;
     circle.style.left = `${x}px`;
@@ -324,9 +421,8 @@ function ScreenRipple({
           borderRadius: '9999px',
           left: 0,
           top: 0,
-          transform: 'translate(-50%, -50%) scale(0.01)', // intentionally equal sign mistaken? Wait!
+          transform: 'translate(-50%, -50%) scale(0.01)',
           willChange: 'transform, opacity',
-          // Gradient radial doux
           background: `radial-gradient(closest-side, ${color}, rgba(168,85,247,0.18), rgba(168,85,247,0.0))`,
           boxShadow: `0 0 ${blur * 4}px ${color}`,
           opacity: 0,
@@ -349,9 +445,8 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
 
   const [classResources, setClassResources] = useState<ClassResources | null | undefined>(player?.class_resources);
 
-  // État pour ripple plein écran
+  // Effet visuel “ripple” plein écran
   const [screenRipple, setScreenRipple] = useState<{ x: number; y: number; key: number } | null>(null);
-
   const triggerScreenRippleFromEvent = (ev: React.MouseEvent<HTMLElement>) => {
     const el = ev.currentTarget as HTMLElement;
     const rect = el.getBoundingClientRect();
@@ -361,7 +456,6 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   };
 
   const rawClass = (player?.class ?? playerClass ?? className ?? '').trim();
-  // Utilise une détection plus robuste de la sous-classe sur l'objet player, sinon fallback sur la prop
   const rawSubclass = (getSubclassFromPlayerLike(player) ?? subclassName) ?? null;
 
   const displayClass = rawClass ? sentenceCase(rawClass) : '';
@@ -375,6 +469,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
     setClassResources(player?.class_resources);
   }, [player?.class_resources, player?.id]);
 
+  // Charger les aptitudes
   useEffect(() => {
     let mounted = true;
     if (!rawClass) {
@@ -400,6 +495,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
     };
   }, [rawClass, rawSubclass, finalLevel]);
 
+  // Charger l’état des cases cochées (aptitudes) pour le personnage
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -466,7 +562,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player?.id, displayClass, finalLevel, classResources, player]);
 
-  // Barde: auto-cap dynamique pour Inspiration bardique
+  // Barde: cap dynamique pour Inspiration bardique = modificateur de Charisme
   const bardCapRef = useRef<string | null>(null);
   useEffect(() => {
     (async () => {
@@ -541,92 +637,9 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
     }
   }
 
-  function mirrorMonkKeys(resource: keyof ClassResources, value: any, into: Record<string, any>) {
-    const r = String(resource);
-    if (r === 'credo_points') {
-      into.ki_points = value;
-    } else if (r === 'used_credo_points') {
-      into.used_ki_points = value;
-    } else if (r === 'ki_points') {
-      into.credo_points = value;
-    } else if (r === 'used_ki_points') {
-      into.used_credo_points = value;
-    }
-  }
-
-  const updateClassResource = async (
-    resource: keyof ClassResources,
-    value: ClassResources[keyof ClassResources]
-  ) => {
-    if (!player?.id) return;
-
-    if (resource === 'bardic_inspiration') {
-      toast.error("Le total d'Inspiration bardique est calculé automatiquement (modificateur de Charisme).");
-      return;
-    }
-
-    const next: any = { ...(classResources || {}) };
-
-    if (resource === 'used_bardic_inspiration' && typeof value === 'number') {
-      const cap = Math.max(0, getChaModFromPlayerLike(player));
-      next.used_bardic_inspiration = Math.min(Math.max(0, value), cap);
-    } else {
-      next[resource] = value;
-    }
-
-    mirrorMonkKeys(resource, value, next);
-
-    try {
-      const { error } = await supabase.from('players').update({ class_resources: next }).eq('id', player.id);
-      if (error) throw error;
-
-      setClassResources(next as ClassResources);
-
-      if (onUpdate && player) {
-        onUpdate({ ...(player as any), class_resources: next } as Player);
-      }
-
-      if (typeof value === 'boolean') {
-        toast.success(`Récupération arcanique ${value ? 'utilisée' : 'disponible'}`);
-      } else {
-        const resourceNames: Record<string, string> = {
-          rage: 'Rage',
-          bardic_inspiration: 'Inspiration bardique',
-          channel_divinity: 'Conduit divin',
-          wild_shape: 'Forme sauvage',
-          sorcery_points: 'Points de sorcellerie',
-          action_surge: "Sursaut d'action",
-          credo_points: 'Points de crédo',
-          ki_points: 'Points de crédo',
-          lay_on_hands: 'Imposition des mains',
-          favored_foe: 'Ennemi juré',
-          sneak_attack: 'Attaque sournoise',
-        };
-
-        const key = String(resource);
-        const displayKey = key.replace('used_', '');
-        const resourceName = resourceNames[displayKey] || displayKey;
-        const isUsed = key.startsWith('used_');
-        const previous = (classResources as any)?.[resource];
-        const action =
-          isUsed && typeof previous === 'number' && typeof value === 'number'
-            ? value > previous
-              ? 'utilisé'
-              : 'récupéré'
-            : 'mis à jour';
-
-        if (isUsed && typeof previous === 'number' && typeof value === 'number') {
-          const diff = Math.abs((value as number) - (previous as number));
-          toast.success(`${diff} ${resourceName} ${action}`);
-        } else {
-          toast.success(`${resourceName} ${action}`);
-        }
-      }
-    } catch (err) {
-      console.error('Erreur lors de la mise à jour des ressources:', err);
-      toast.error('Erreur lors de la mise à jour');
-    }
-  };
+  /* ===========================================================
+     UI: rendu
+     =========================================================== */
 
   const visible = useMemo(
     () =>
@@ -666,7 +679,6 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
             onUpdateResource={updateClassResource}
             player={player ?? undefined}
             level={finalLevel}
-            // propage le ripple global
             onPulseScreen={triggerScreenRippleFromEvent}
           />
         )}
@@ -680,20 +692,19 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
         ) : visible.length === 0 ? (
           <div className="text-center text-white/70 py-10">
             Aucune aptitude trouvée pour “{displayClass}{displaySubclass ? ` - ${displaySubclass}` : ''}”.
-            {DEBUG && <pre className="mt-3 text-xs text-white/60">Activez window.UT_DEBUG = true pour voir les tentatives de chargement dans la console.</pre>}
+            {DEBUG && (
+              <pre className="mt-3 text-xs text-white/60">
+                Activez window.UT_DEBUG = true pour voir les tentatives de chargement dans la console.
+              </pre>
+            )}
           </div>
-
-            ) : (
+        ) : (
           <>
-            {/* Titre “Compétences” juste après ClassResourcesCard */}
             <div className="stat-header flex items-center gap-3 pt-1">
               <ListChecks className="w-5 h-5 text-sky-500" />
-              <h3 className="text-lg font-semibold text-gray-100">
-                Compétences de classe et sous-classe
-              </h3>
+              <h3 className="text-lg font-semibold text-gray-100">Compétences de classe et sous-classe</h3>
             </div>
-        
-            {/* Liste des aptitudes */}
+
             <div className="space-y-4">
               {visible.map((s, i) => (
                 <AbilityCard
@@ -726,10 +737,90 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
       )}
     </>
   );
+
+  /* ===========================================================
+     Handlers
+     =========================================================== */
+
+  async function updateClassResource(
+    resource: keyof ClassResources,
+    value: ClassResources[keyof ClassResources]
+  ) {
+    if (!player?.id) return;
+
+    if (resource === 'bardic_inspiration') {
+      toast.error("Le total d'Inspiration bardique est calculé automatiquement (modificateur de Charisme).");
+      return;
+    }
+
+    const next: any = { ...(classResources || {}) };
+
+    if (resource === 'used_bardic_inspiration' && typeof value === 'number') {
+      const cap = Math.max(0, getChaModFromPlayerLike(player));
+      next.used_bardic_inspiration = Math.min(Math.max(0, value), cap);
+    } else {
+      next[resource] = value;
+    }
+
+    // Moine: miroirs ki/credo
+    mirrorMonkKeys(resource, value, next);
+
+    try {
+      const { error } = await supabase.from('players').update({ class_resources: next }).eq('id', player.id);
+      if (error) throw error;
+
+      setClassResources(next as ClassResources);
+
+      if (onUpdate && player) {
+        onUpdate({ ...(player as any), class_resources: next } as Player);
+      }
+
+      if (typeof value === 'boolean') {
+        toast.success(`Récupération arcanique ${value ? 'utilisée' : 'disponible'}`);
+      } else {
+        const resourceNames: Record<string, string> = {
+          rage: 'Rage',
+          bardic_inspiration: 'Inspiration bardique',
+          channel_divinity: 'Conduit divin',
+          wild_shape: 'Forme sauvage',
+          sorcery_points: 'Points de sorcellerie',
+          action_surge: "Sursaut d'action",
+          credo_points: 'Points de crédo',
+          ki_points: 'Points de crédo',
+          lay_on_hands: 'Imposition des mains',
+          favored_foe: 'Ennemi juré',
+          sneak_attack: 'Attaque sournoise',
+          pact_magic: 'Magie de pacte',
+        };
+
+        const key = String(resource);
+        const displayKey = key.replace('used_', '');
+        const resourceName = resourceNames[displayKey] || displayKey;
+        const isUsed = key.startsWith('used_');
+        const previous = (classResources as any)?.[resource];
+        const action =
+          isUsed && typeof previous === 'number' && typeof value === 'number'
+            ? value > previous
+              ? 'utilisé'
+              : 'récupéré'
+            : 'mis à jour';
+
+        if (isUsed && typeof previous === 'number' && typeof value === 'number') {
+          const diff = Math.abs((value as number) - (previous as number));
+          toast.success(`${diff} ${resourceName} ${action}`);
+        } else {
+          toast.success(`${resourceName} ${action}`);
+        }
+      }
+    } catch (err) {
+      console.error('Erreur lors de la mise à jour des ressources:', err);
+      toast.error('Erreur lors de la mise à jour');
+    }
+  }
 }
 
 /* ===========================================================
-   Chargement "smart"
+   Chargement "smart" avec alias
    =========================================================== */
 
 async function loadSectionsSmart(params: { className: string; subclassName: string | null; level: number }): Promise<AbilitySection[]> {
@@ -766,6 +857,7 @@ async function loadSectionsSmart(params: { className: string; subclassName: stri
     });
   }
 
+  // Essayer class + subclass
   for (const c of classCandidates) {
     for (const sc of subclassCandidates) {
       try {
@@ -782,6 +874,7 @@ async function loadSectionsSmart(params: { className: string; subclassName: stri
     }
   }
 
+  // Essayer class seule
   for (const c of classCandidates) {
     try {
       if (DEBUG) console.debug('[ClassesTab] loadAbilitySections try (class only)', { className: c, level });
@@ -825,13 +918,7 @@ function AbilityCard({
         'bg-[radial-gradient(ellipse_at_top_left,rgba(120,53,15,.12),transparent_40%),radial-gradient(ellipse_at_bottom_right,rgba(91,33,182,.10),transparent_45%)]',
       ].join(' ')}
     >
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-        aria-controls={contentId}
-        className="w-full text-left"
-      >
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-controls={contentId} className="w-full text-left">
         <div className="flex items-start gap-3 p-4">
           <div className="pt-0.5 shrink-0">
             <LevelBadge level={Number(section.level) || 0} />
@@ -839,9 +926,7 @@ function AbilityCard({
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="text-white font-semibold text-base sm:text-lg truncate">
-                {sentenceCase(section.title)}
-              </h3>
+              <h3 className="text-white font-semibold text-base sm:text-lg truncate">{sentenceCase(section.title)}</h3>
               <OriginPill origin={section.origin} />
             </div>
           </div>
@@ -852,10 +937,7 @@ function AbilityCard({
         </div>
       </button>
 
-      <div
-        id={contentId}
-        className={`overflow-hidden transition-[max-height,opacity] duration-300 ${open ? 'max-h-[200vh] opacity-100' : 'max-h-0 opacity-0'}`}
-      >
+      <div id={contentId} className={`overflow-hidden transition-[max-height,opacity] duration-300 ${open ? 'max-h-[200vh] opacity-100' : 'max-h-0 opacity-0'}`}>
         <div className="px-4 pt-1 pb-4">
           {disableContentWhileLoading ? (
             <div className="h-6 w-24 bg-white/10 rounded animate-pulse" />
@@ -896,9 +978,7 @@ function OriginPill({ origin }: { origin: 'class' | 'subclass' }) {
     <span
       className={[
         'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase ring-1 ring-inset',
-        isClass
-          ? 'bg-violet-500/15 text-violet-200 ring-violet-400/25'
-          : 'bg-amber-500/15 text-amber-200 ring-amber-400/25',
+        isClass ? 'bg-violet-500/15 text-violet-200 ring-violet-400/25' : 'bg-amber-500/15 text-amber-200 ring-amber-400/25',
       ].join(' ')}
     >
       {isClass ? 'Classe' : 'Sous-classe'}
@@ -930,7 +1010,13 @@ function ResourceEditModal({
     <div className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-gray-300 mb-1">{label}</label>
-        <input type="number" min="0" value={value} onChange={(e) => setValue(e.target.value)} className="input-dark w-full px-3 py-2 rounded-md" />
+        <input
+          type="number"
+          min="0"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="input-dark w-full px-3 py-2 rounded-md"
+        />
       </div>
       <div className="flex gap-2">
         <button onClick={handleSave} className="btn-primary flex-1 px-4 py-2 rounded-lg flex items-center justify-center gap-2">
@@ -957,7 +1043,6 @@ function ResourceBlock({
   onUpdateUsed,
   useNumericInput = false,
   color = 'purple',
-  onDelete,
   hideEdit = false,
   onGlobalPulse,
 }: {
@@ -971,7 +1056,6 @@ function ResourceBlock({
   onUpdateUsed?: (value: number) => void;
   useNumericInput?: boolean;
   color?: 'red' | 'purple' | 'yellow' | 'green' | 'blue';
-  onDelete?: () => void;
   hideEdit?: boolean;
   onGlobalPulse?: (ev: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
@@ -1028,7 +1112,14 @@ function ResourceBlock({
 
       {useNumericInput ? (
         <div className="flex-1 flex items-center gap-1">
-          <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} className="input-dark flex-1 px-3 py-1 rounded-md text-center" placeholder="0" />
+          <input
+            type="number"
+            min="0"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="input-dark flex-1 px-3 py-1 rounded-md text-center"
+            placeholder="0"
+          />
           <button
             onClick={(e) => {
               const value = parseInt(amount) || 0;
@@ -1050,7 +1141,6 @@ function ResourceBlock({
               if (value > 0) {
                 onUpdateUsed?.(Math.max(0, used - value));
                 setAmount('');
-                // pas de ripple pour la récupération
               }
             }}
             className="p-1 text-green-500 hover:bg-green-900/30 rounded-md transition-colors"
@@ -1063,14 +1153,15 @@ function ResourceBlock({
         <div className="flex gap-2">
           <button
             onClick={(e) => {
-              if (remaining <= 0) return;
+              const remainingNow = Math.max(0, total - used);
+              if (remainingNow <= 0) return;
               onUse();
               triggerLocalPulse();
               onGlobalPulse?.(e);
             }}
-            disabled={remaining <= 0}
+            disabled={Math.max(0, total - used) <= 0}
             className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
-              remaining > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
+              Math.max(0, total - used) > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
             }`}
           >
             <Minus size={16} className="mx-auto" />
@@ -1079,7 +1170,6 @@ function ResourceBlock({
             onClick={() => {
               if (used <= 0) return;
               onRestore();
-              // pas de ripple pour la récupération
             }}
             disabled={used <= 0}
             className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
@@ -1091,7 +1181,7 @@ function ResourceBlock({
         </div>
       )}
 
-      {isEditing && !hideEdit && (
+      {!hideEdit && (
         <div className="mt-4 border-t border-gray-700/50 pt-4">
           <ResourceEditModal
             label={`Nombre total de ${label.toLowerCase()}`}
@@ -1107,6 +1197,19 @@ function ResourceBlock({
       )}
     </div>
   );
+}
+
+function mirrorMonkKeys(resource: keyof ClassResources, value: any, into: Record<string, any>) {
+  const r = String(resource);
+  if (r === 'credo_points') {
+    into.ki_points = value;
+  } else if (r === 'used_credo_points') {
+    into.used_ki_points = value;
+  } else if (r === 'ki_points') {
+    into.credo_points = value;
+  } else if (r === 'used_ki_points') {
+    into.used_credo_points = value;
+  }
 }
 
 function ClassResourcesCard({
@@ -1250,7 +1353,10 @@ function ClassResourcesCard({
     case 'Magicien':
       if (resources.arcane_recovery !== undefined) {
         items.push(
-          <div key="arcane_recovery" className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3">
+          <div
+            key="arcane_recovery"
+            className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3"
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <BookOpen size={20} className="text-blue-500" />
@@ -1288,6 +1394,27 @@ function ClassResourcesCard({
             color="blue"
             onGlobalPulse={onPulseScreen}
           />
+        );
+      }
+      break;
+    }
+
+    case 'Occultiste': {
+      // Placeholder simple: la “Magie de pacte” est signalée par un drapeau
+      if ((resources as any)?.pact_magic) {
+        items.push(
+          <div
+            key="pact_magic"
+            className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Sparkles size={20} className="text-purple-400" />
+                <span className="text-sm font-medium text-gray-300">Magie de pacte</span>
+              </div>
+              <span className="text-sm text-gray-400 bg-gray-800/50 px-3 py-1 rounded-md">Repos court</span>
+            </div>
+          </div>
         );
       }
       break;
@@ -1358,7 +1485,10 @@ function ClassResourcesCard({
     case 'Roublard':
       if (resources.sneak_attack) {
         items.push(
-          <div key="sneak_attack" className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3">
+          <div
+            key="sneak_attack"
+            className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3"
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Skull size={20} className="text-red-500" />
@@ -1389,16 +1519,15 @@ export default ClassesTab;
 export { ClassesTab };
 
 /* ===========================================================
-   Helpers spécifiques
+   Helpers spécifiques – init ressources par classe
    =========================================================== */
 
 function buildDefaultsForClass(cls: string, level: number, player?: PlayerLike | any): Partial<ClassResources> {
   switch (cls) {
     case 'Barbare':
       return { rage: Math.min(6, Math.floor((level + 3) / 4) + 2), used_rage: 0 };
-    case 'Barde': {
+    case 'Barde':
       return { used_bardic_inspiration: 0 };
-    }
     case 'Clerc':
       return { channel_divinity: level >= 6 ? 2 : 1, used_channel_divinity: 0 };
     case 'Druide':
@@ -1411,6 +1540,9 @@ function buildDefaultsForClass(cls: string, level: number, player?: PlayerLike |
       return { arcane_recovery: true, used_arcane_recovery: false };
     case 'Moine':
       return { credo_points: level, used_credo_points: 0, ki_points: level, used_ki_points: 0 } as any;
+    case 'Occultiste':
+      // Drapeau simple pour signaler Pact Magic (UI minimale)
+      return { pact_magic: true };
     case 'Paladin': {
       const base: any = { lay_on_hands: level * 5, used_lay_on_hands: 0 };
       if (level >= 3) {
