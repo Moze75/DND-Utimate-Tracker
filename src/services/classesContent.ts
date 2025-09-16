@@ -49,11 +49,10 @@ function titleCaseFrench(input: string): string {
   return (input || "")
     .trim()
     .split(/(\s+)/)
-    .map((part, idx, arr) => {
+    .map((part, idx) => {
       if (/^\s+$/.test(part)) return part;
       const p = part.toLowerCase();
       if (idx !== 0 && small.has(p)) return p;
-      // garder apostrophes typographiques
       const head = p.charAt(0).toUpperCase();
       return head + p.slice(1);
     })
@@ -76,6 +75,29 @@ function urlJoin(base: string, ...segments: string[]) {
   return [cleanBase, ...encodedSegments].join("/");
 }
 
+/* ===========================================================
+   Cache “positif” + cache “négatif” (anti-404 répétées)
+   =========================================================== */
+
+const textCache = new Map<string, string>();
+
+type NegativeEntry = { ts: number };
+const negativeCache = new Map<string, NegativeEntry>();
+const NEGATIVE_TTL_MS = 5 * 60 * 1000; // 5 min
+
+function negativeHas(url: string): boolean {
+  const e = negativeCache.get(url);
+  if (!e) return false;
+  if (Date.now() - e.ts > NEGATIVE_TTL_MS) {
+    negativeCache.delete(url);
+    return false;
+  }
+  return true;
+}
+function negativeSet(url: string): void {
+  negativeCache.set(url, { ts: Date.now() });
+}
+
 async function fetchFirstExisting(urls: string[], dbgLabel?: string): Promise<string | null> {
   if (DEBUG) {
     console.debug("[classesContent] Try candidates", dbgLabel || "", {
@@ -85,12 +107,25 @@ async function fetchFirstExisting(urls: string[], dbgLabel?: string): Promise<st
   }
   for (const url of urls) {
     try {
+      // Éviter les 404 répétées (StrictMode, rerenders)
+      if (negativeHas(url)) {
+        if (DEBUG) console.debug("[classesContent] skip known 404:", url);
+        continue;
+      }
+      if (textCache.has(url)) {
+        if (DEBUG) console.debug("[classesContent] cache hit:", url);
+        return textCache.get(url)!;
+      }
       const res = await fetch(url, { cache: "no-store" });
       if (res.ok) {
+        const txt = await res.text();
+        textCache.set(url, txt);
         if (DEBUG) console.debug("[classesContent] OK:", url);
-        return await res.text();
-      } else if (DEBUG) {
-        console.debug("[classesContent] 404:", url);
+        return txt;
+      } else {
+        // mémoriser 404 (et autres non-OK) pour réduire le bruit
+        negativeSet(url);
+        if (DEBUG) console.debug("[classesContent] not OK:", res.status, url);
       }
     } catch (e) {
       if (DEBUG) console.debug("[classesContent] fetch error -> continue", url, e);
@@ -153,7 +188,7 @@ const CLASS_NAME_MAP: Record<string, string> = {
 };
 
 const SUBCLASS_NAME_MAP: Record<string, string> = {
-  // Paladin — utiliser la casse exacte “Serment de dévotion” (dé en minuscule)
+  // Paladin — casse exacte “Serment de dévotion” (dévotion en minuscule dans le dépôt)
   "serment des anciens": "Serment des Anciens",
   "oath of the ancients": "Serment des Anciens",
 
@@ -167,8 +202,7 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
   "serment de gloire": "Serment de Gloire",
   "oath of glory": "Serment de Gloire",
 
-  // (Le reste — cf. autres classes si besoin; on garde celles qui existent déjà
-  // dans l’app; le souci actuel concerne surtout Paladin)
+  // … compléter ici si d’autres sous-classes posent souci
 };
 
 function canonicalizeClassName(input?: string | null): string {
@@ -205,17 +239,16 @@ function getSubclassDirNames(): string[] {
  */
 function buildSubclassNameVariants(name: string): string[] {
   const base = normalizeName(name);
-  const lower = base.toLowerCase(); // utile si les fichiers sont tout en minuscule
-  const tFr = titleCaseFrench(base); // TitleCase fr avec “de/des/du” en minuscule
+  const lower = base.toLowerCase();
+  const tFr = titleCaseFrench(base);
   const noParen = stripParentheses(base);
   const noParenT = titleCaseFrench(noParen);
   const apos = normalizeApos(base);
   const aposT = titleCaseFrench(apos);
+  // Variante avec D majuscule pour "Dévotion" au cas où
+  const altDevotion = base.replace(/(de)\s+(d[ée]votion)/i, "de Dévotion");
 
-  // Inclure aussi la version “Serment de Dévotion” (D majuscule) au cas où
-  const altCapital = base.replace(/(de)\s+(d[ée]votion)/i, "de Dévotion");
-
-  return uniq([base, lower, tFr, noParen, noParenT, apos, aposT, altCapital]);
+  return uniq([base, lower, tFr, noParen, noParenT, apos, aposT, altDevotion]);
 }
 
 /* ===========================================================
@@ -229,11 +262,16 @@ async function loadClassMarkdown(className: string): Promise<string | null> {
   for (const base of RAW_BASES) {
     for (const c of classFolders) {
       const folder = urlJoin(base, c);
-      const cTitle = c; // déjà bien cased
+
+      // IMPORTANT: essayer d’abord <Classe>/<Classe>.md (structure réelle)
+      candidates.push(
+        urlJoin(folder, `${c}.md`), // ex: Paladin/Paladin.md
+      );
+
+      // Fallbacks classiques, placés après pour éviter 404 inutiles
       candidates.push(
         urlJoin(folder, "README.md"),
         urlJoin(folder, "index.md"),
-        urlJoin(folder, `${cTitle}.md`), // ex: Paladin/Paladin.md (réel)
       );
     }
   }
@@ -249,7 +287,9 @@ async function loadSubclassMarkdown(className: string, subclassName: string): Pr
   const dash = "-";
   const enDash = "–"; // \u2013
   const emDash = "—"; // \u2014
-  const prefixes = ["Sous-classe", "Sous classe", "Subclass", "Sous-Classe"];
+
+  const bestPrefix = "Sous-classe"; // forme réellement observée
+  const extraPrefixes = ["Sous classe", "Subclass", "Sous-Classe"];
 
   const candidates: string[] = [];
 
@@ -258,27 +298,35 @@ async function loadSubclassMarkdown(className: string, subclassName: string): Pr
       for (const subdir of subdirs) {
         const baseSub = urlJoin(base, c, subdir);
 
-        // Fichiers directs — d’abord le format réel “Sous-classe - <Nom>.md”
+        // 1) Fichier direct — ESSAYER D’ABORD LE FORMAT OBSERVÉ
         for (const nm of nameVariants) {
           candidates.push(
-            urlJoin(baseSub, `${prefixes[0]} ${dash} ${nm}.md`), // Sous-classe - nm.md
-            urlJoin(baseSub, `${prefixes[0]} ${enDash} ${nm}.md`),
-            urlJoin(baseSub, `${prefixes[0]} ${emDash} ${nm}.md`),
-            urlJoin(baseSub, `${nm}.md`), // nm.md
+            urlJoin(baseSub, `${bestPrefix} ${dash} ${nm}.md`),   // Sous-classe - <Nom>.md
+            urlJoin(baseSub, `${bestPrefix} ${enDash} ${nm}.md`), // Sous-classe – <Nom>.md
+            urlJoin(baseSub, `${bestPrefix} ${emDash} ${nm}.md`), // Sous-classe — <Nom>.md
+            urlJoin(baseSub, `${nm}.md`),                         // <Nom>.md
           );
         }
 
-        // Dossiers “<Nom>/{README.md,index.md}”
+        // 2) Autres préfixes éventuels (moins probables)
+        for (const nm of nameVariants) {
+          for (const p of extraPrefixes) {
+            candidates.push(
+              urlJoin(baseSub, `${p} ${dash} ${nm}.md`),
+              urlJoin(baseSub, `${p} ${enDash} ${nm}.md`),
+              urlJoin(baseSub, `${p} ${emDash} ${nm}.md`),
+            );
+          }
+        }
+
+        // 3) Dossiers “<Nom>/{README.md,index.md}”
         const inside = ["README.md", "index.md"];
         for (const nm of nameVariants) {
           const subFolderVariants = uniq([
             nm,
-            `${prefixes[0]} ${dash} ${nm}`,
-            `${prefixes[0]} ${enDash} ${nm}`,
-            `${prefixes[0]} ${emDash} ${nm}`,
-            `${prefixes[1]} ${dash} ${nm}`,
-            `${prefixes[1]} ${enDash} ${nm}`,
-            `${prefixes[1]} ${emDash} ${nm}`,
+            `${bestPrefix} ${dash} ${nm}`,
+            `${bestPrefix} ${enDash} ${nm}`,
+            `${bestPrefix} ${emDash} ${nm}`,
           ]);
           for (const sf of subFolderVariants) {
             for (const f of inside) {
@@ -289,7 +337,7 @@ async function loadSubclassMarkdown(className: string, subclassName: string): Pr
         }
       }
 
-      // Fallback: parfois à la racine de la classe
+      // 4) Fallback: parfois à la racine de la classe
       const classFolder = urlJoin(base, c);
       for (const nm of nameVariants) {
         candidates.push(urlJoin(classFolder, `${nm}.md`));
@@ -374,103 +422,29 @@ function parseMarkdownToSections(md: string, origin: "class" | "subclass"): Abil
 }
 
 /* ===========================================================
-   Cache simple
-   =========================================================== */
-
-const textCache = new Map<string, string>();
-
-async function getTextWithCache(urls: string[], dbgLabel?: string): Promise<string | null> {
-  for (const u of urls) {
-    if (textCache.has(u)) {
-      if (DEBUG) console.debug("[classesContent] cache hit:", u);
-      return textCache.get(u)!;
-    }
-  }
-  const txt = await fetchFirstExisting(urls, dbgLabel);
-  if (txt) {
-    const chosen = urls[0];
-    textCache.set(chosen, txt);
-    return txt;
-  }
-  return null;
-}
-
-/* ===========================================================
    API moderne
    =========================================================== */
 
 export async function loadClassSections(inputClass: string): Promise<AbilitySection[]> {
-  const classFolders = getClassFolderNames(inputClass);
   const candidates: string[] = [];
-
   for (const base of RAW_BASES) {
-    for (const c of classFolders) {
+    for (const c of getClassFolderNames(inputClass)) {
       const folder = urlJoin(base, c);
-      candidates.push(
-        urlJoin(folder, "README.md"),
-        urlJoin(folder, "index.md"),
-        urlJoin(folder, `${c}.md`), // ex: Paladin/Paladin.md
-      );
+      // Essayer d’abord <Classe>/<Classe>.md (réel)
+      candidates.push(urlJoin(folder, `${c}.md`));
+      // Fallbacks ensuite
+      candidates.push(urlJoin(folder, "README.md"), urlJoin(folder, "index.md"));
     }
   }
-
-  const md = await getTextWithCache(candidates, `class:${inputClass}`);
+  const md = await fetchFirstExisting(candidates, `class:${inputClass}`);
   if (!md) return [];
   return parseMarkdownToSections(md, "class");
 }
 
 export async function loadSubclassSections(inputClass: string, inputSubclass: string): Promise<AbilitySection[]> {
-  const subclassCanonical = canonicalizeSubclassName(canonicalizeClassName(inputClass), inputSubclass);
-  const nameVariants = buildSubclassNameVariants(subclassCanonical);
-  const classFolders = getClassFolderNames(inputClass);
-  const subdirs = getSubclassDirNames();
-
-  const dash = "-";
-  const enDash = "–";
-  const emDash = "—";
-  const prefixes = ["Sous-classe", "Sous classe", "Subclass", "Sous-Classe"];
-
-  const candidates: string[] = [];
-
-  for (const base of RAW_BASES) {
-    for (const c of classFolders) {
-      for (const subdir of subdirs) {
-        const baseSub = urlJoin(base, c, subdir);
-
-        for (const nm of nameVariants) {
-          candidates.push(
-            urlJoin(baseSub, `${prefixes[0]} ${dash} ${nm}.md`),
-            urlJoin(baseSub, `${prefixes[0]} ${enDash} ${nm}.md`),
-            urlJoin(baseSub, `${prefixes[0]} ${emDash} ${nm}.md`),
-            urlJoin(baseSub, `${nm}.md`),
-          );
-        }
-
-        const inside = ["README.md", "index.md"];
-        for (const nm of nameVariants) {
-          const subFolderVariants = uniq([
-            nm,
-            `${prefixes[0]} ${dash} ${nm}`,
-            `${prefixes[0]} ${enDash} ${nm}`,
-            `${prefixes[0]} ${emDash} ${nm}`,
-            `${prefixes[1]} ${dash} ${nm}`,
-            `${prefixes[1]} ${enDash} ${nm}`,
-            `${prefixes[1]} ${emDash} ${nm}`,
-          ]);
-          for (const sf of subFolderVariants) {
-            for (const f of inside) candidates.push(urlJoin(baseSub, sf, f));
-            candidates.push(urlJoin(baseSub, nm, `${nm}.md`));
-          }
-        }
-      }
-      const classFolder = urlJoin(base, c);
-      for (const nm of nameVariants) {
-        candidates.push(urlJoin(classFolder, `${nm}.md`));
-      }
-    }
-  }
-
-  const md = await getTextWithCache(candidates, `subclass:${inputClass}/${inputSubclass}`);
+  const classCanonical = canonicalizeClassName(inputClass);
+  const subclassCanonical = canonicalizeSubclassName(classCanonical, inputSubclass);
+  const md = await loadSubclassMarkdown(classCanonical, subclassCanonical);
   if (!md) return [];
   return parseMarkdownToSections(md, "subclass");
 }
@@ -479,17 +453,19 @@ export async function loadClassAndSubclassContent(
   inputClass: string,
   inputSubclasses?: string[] | null
 ): Promise<ClassAndSubclassContent> {
-  const classSections = await loadClassSections(inputClass);
+  const classCanonical = canonicalizeClassName(inputClass);
+
+  const classSections = await loadClassSections(classCanonical);
 
   const subclassSections: Record<string, AbilitySection[]> = {};
   const subclassesRequested: string[] = [];
 
   if (inputSubclasses && inputSubclasses.length > 0) {
     for (const sc of inputSubclasses) {
-      const scCanon = canonicalizeSubclassName(canonicalizeClassName(inputClass), sc);
-      subclassesRequested.push(scCanon);
-      const sections = await loadSubclassSections(inputClass, scCanon);
-      subclassSections[scCanon] = sections;
+      const subclassCanonical = canonicalizeSubclassName(classCanonical, sc);
+      subclassesRequested.push(subclassCanonical);
+      const sections = await loadSubclassSections(classCanonical, subclassCanonical);
+      subclassSections[subclassCanonical] = sections;
     }
   }
 
@@ -499,7 +475,7 @@ export async function loadClassAndSubclassContent(
   ];
 
   return {
-    className: canonicalizeClassName(inputClass),
+    className: classCanonical,
     subclassesRequested,
     sections,
     classSections,
@@ -550,4 +526,5 @@ export function displayClassName(cls?: string | null): string {
 
 export function resetClassesContentCache(): void {
   textCache.clear();
+  negativeCache.clear();
 }
