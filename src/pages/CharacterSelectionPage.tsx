@@ -1,8 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, testConnection } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { Player } from '../types/dnd';
-import { LogOut, Plus, User, Sword, Shield, Sparkles, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
+import {
+  LogOut,
+  Plus,
+  User,
+  Sword,
+  Shield,
+  Sparkles,
+  AlertCircle,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { authService } from '../services/authService';
 
@@ -25,42 +35,41 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
   useEffect(() => {
     fetchPlayers();
     runDiagnostic();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
   const runDiagnostic = async () => {
     try {
-      console.log('=== DIAGNOSTIC DE LA BASE DE DONNÉES ===');
-      
-      // Test 1: Vérifier la connexion
-      const { data: connectionTest, error: connectionError } = await supabase
-        .from('players')
-        .select('count')
-        .limit(1);
-      
+      setDebugInfo((prev) => prev + '=== DIAGNOSTIC DE LA BASE DE DONNÉES ===\n');
+
+      // Test 1: Vérifier la connexion (simple select)
+      const { error: connectionError } = await supabase.from('players').select('id').limit(1);
       if (connectionError) {
-        setDebugInfo(prev => prev + `❌ Erreur de connexion: ${connectionError.message}\n`);
+        setDebugInfo((prev) => prev + `❌ Erreur de connexion: ${connectionError.message}\n`);
         return;
       }
-      
-      setDebugInfo(prev => prev + `✅ Connexion à Supabase OK\n`);
-      
-      // Test 2: Compter les personnages existants
+      setDebugInfo((prev) => prev + '✅ Connexion à Supabase OK\n');
+
+      // Test 2: Compter les personnages existants de l’utilisateur
       const { data: existingPlayers, error: countError } = await supabase
         .from('players')
         .select('id, user_id, name')
         .eq('user_id', session.user.id);
-      
+
       if (countError) {
-        setDebugInfo(prev => prev + `❌ Erreur lors du comptage: ${countError.message}\n`);
+        setDebugInfo((prev) => prev + `❌ Erreur lors du comptage: ${countError.message}\n`);
       } else {
-        setDebugInfo(prev => prev + `📊 Personnages existants: ${existingPlayers?.length || 0}\n`);
-        if (existingPlayers && existingPlayers.length > 0) {
-          setDebugInfo(prev => prev + `📝 Noms: ${existingPlayers.map(p => p.name).join(', ')}\n`);
-        }
+        setDebugInfo(
+          (prev) =>
+            prev +
+            `📊 Personnages existants: ${existingPlayers?.length || 0}\n` +
+            (existingPlayers && existingPlayers.length > 0
+              ? `📝 Noms: ${existingPlayers.map((p) => p.name).join(', ')}\n`
+              : '')
+        );
       }
-      
     } catch (error: any) {
-      setDebugInfo(prev => prev + `💥 Erreur de diagnostic: ${error.message}\n`);
+      setDebugInfo((prev) => prev + `💥 Erreur de diagnostic: ${error.message}\n`);
     }
   };
 
@@ -75,10 +84,10 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
 
       if (error) throw error;
       setPlayers(data || []);
-      setDebugInfo(prev => prev + `✅ Récupération réussie: ${data?.length || 0} personnages\n`);
+      setDebugInfo((prev) => prev + `✅ Récupération réussie: ${data?.length || 0} personnages\n`);
     } catch (error: any) {
       console.error('Erreur lors de la récupération des personnages:', error);
-      setDebugInfo(prev => prev + `❌ Erreur de récupération: ${error.message}\n`);
+      setDebugInfo((prev) => prev + `❌ Erreur de récupération: ${error.message}\n`);
       toast.error('Erreur lors de la récupération des personnages');
     } finally {
       setLoading(false);
@@ -90,38 +99,32 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
       toast.error('Veuillez entrer un nom pour votre personnage');
       return;
     }
-
-    if (creating) {
-      return;
-    }
+    if (creating) return;
 
     setCreating(true);
-    setDebugInfo(prev => prev + `\n🚀 TENTATIVE DE CRÉATION: "${newCharacterName}"\n`);
+    setDebugInfo((prev) => prev + `\n🚀 TENTATIVE DE CRÉATION: "${newCharacterName}"\n`);
 
     try {
-      // Vérifier que la session est valide
-      if (!session || !session.user || !session.user.id) {
+      // Vérifier la session
+      if (!session || !session.user?.id) {
         throw new Error('Session invalide - veuillez vous reconnecter');
       }
 
-      // Vérifier que l'utilisateur est authentifié
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
+      // Vérifier l’auth utilisateur
+      const { data: authData, error: userError } = await supabase.auth.getUser();
+      if (userError || !authData?.user) {
         throw new Error('Utilisateur non authentifié - veuillez vous reconnecter');
       }
 
-      // Utiliser la nouvelle fonction avec les valeurs par défaut correctes
-      
+      // 1) Tentative via RPC standard
       try {
-        const { data: playerId, error: rpcError } = await supabase
-          .rpc('create_player_with_defaults', {
-            p_user_id: user.id,
-            p_name: newCharacterName.trim(),
-            p_adventurer_name: newCharacterName.trim()
-          });
-
+        const { data: playerId, error: rpcError } = await supabase.rpc('create_player_with_defaults', {
+          p_user_id: authData.user.id,
+          p_name: newCharacterName.trim(),
+          p_adventurer_name: newCharacterName.trim(),
+        });
         if (rpcError) {
-          setDebugInfo(prev => prev + `❌ Erreur RPC: ${rpcError.message}\n`);
+          setDebugInfo((prev) => prev + `❌ Erreur RPC: ${rpcError.message}\n`);
           throw rpcError;
         }
 
@@ -131,83 +134,66 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
           .select('*')
           .eq('id', playerId)
           .single();
-
         if (fetchError) {
-          setDebugInfo(prev => prev + `❌ Erreur récupération: ${fetchError.message}\n`);
+          setDebugInfo((prev) => prev + `❌ Erreur récupération: ${fetchError.message}\n`);
           throw fetchError;
         }
 
-        setPlayers([...players, newPlayer]);
+        setPlayers((prev) => [...prev, newPlayer]);
         setNewCharacterName('');
         setShowCreateForm(false);
-        setDebugInfo(prev => prev + `🎉 SUCCÈS: Personnage créé avec RPC!\n`);
+        setDebugInfo((prev) => prev + `🎉 SUCCÈS: Personnage créé avec RPC!\n`);
         toast.success('Nouveau personnage créé !');
         return;
-
       } catch (rpcError: any) {
-        setDebugInfo(prev => prev + `💥 Échec RPC: ${rpcError.message}\n`);
-        
-        // Méthode 2: Insertion directe simplifiée
-        setDebugInfo(prev => prev + `🔄 Tentative insertion directe simplifiée...\n`);
-        
-        // Utiliser la fonction RPC pour créer un personnage avec les valeurs par défaut correctes
-        try {
-          const { data: playerId, error: directError } = await supabase
-            .rpc('create_player_with_defaults', {
-              p_user_id: user.id,
-              p_name: newCharacterName.trim(),
-              p_adventurer_name: newCharacterName.trim()
-            });
-
-          if (directError) {
-            setDebugInfo(prev => prev + `❌ Erreur insertion directe: ${directError.message} (Code: ${directError.code})\n`);
-            throw directError;
-          }
-          
-          // Récupérer le personnage créé
-          const { data: directPlayer, error: fetchError } = await supabase
-            .from('players')
-            .select('*')
-            .eq('id', playerId)
-            .single();
-            
-          if (fetchError) {
-            setDebugInfo(prev => prev + `❌ Erreur récupération: ${fetchError.message}\n`);
-            throw fetchError;
-          }
-
-          setPlayers([...players, directPlayer]);
-          setNewCharacterName('');
-          setShowCreateForm(false);
-          setDebugInfo(prev => prev + `🎉 SUCCÈS: Personnage créé directement!\n`);
-          toast.success('Nouveau personnage créé !');
-          return;
-
-        } catch (directError: any) {
-          setDebugInfo(prev => prev + `💥 Échec insertion directe: ${directError.message}\n`);
-          throw rpcError; // Retourner l'erreur RPC originale
+        // 2) Fallback: retenter la même RPC (ex: latence d’activation) avant abandon
+        setDebugInfo((prev) => prev + `🔄 Tentative alternative RPC...\n`);
+        const { data: playerId2, error: rpcError2 } = await supabase.rpc('create_player_with_defaults', {
+          p_user_id: authData.user.id,
+          p_name: newCharacterName.trim(),
+          p_adventurer_name: newCharacterName.trim(),
+        });
+        if (rpcError2) {
+          setDebugInfo(
+            (prev) =>
+              prev +
+              `❌ Erreur alternative RPC: ${rpcError2.message} (Code: ${rpcError2.code || 'NA'})\n`
+          );
+          throw rpcError2;
         }
+        const { data: newPlayer2, error: fetchError2 } = await supabase
+          .from('players')
+          .select('*')
+          .eq('id', playerId2)
+          .single();
+        if (fetchError2) {
+          setDebugInfo((prev) => prev + `❌ Erreur récupération: ${fetchError2.message}\n`);
+          throw fetchError2;
+        }
+        setPlayers((prev) => [...prev, newPlayer2]);
+        setNewCharacterName('');
+        setShowCreateForm(false);
+        setDebugInfo((prev) => prev + `🎉 SUCCÈS: Personnage créé (RPC alt)!\n`);
+        toast.success('Nouveau personnage créé !');
       }
-
     } catch (error: any) {
-      setDebugInfo(prev => prev + `💥 ÉCHEC TOTAL: ${error.message}\n`);
+      setDebugInfo((prev) => prev + `💥 ÉCHEC TOTAL: ${error.message}\n`);
       console.error('Erreur lors de la création du personnage:', error);
-      
+
       // Messages d'erreur détaillés
       if (error.message?.includes('Session invalide') || error.message?.includes('non authentifié')) {
         toast.error('Session expirée. Veuillez vous reconnecter.');
-        // Forcer la déconnexion pour que l'utilisateur se reconnecte
         await supabase.auth.signOut();
       } else if (error.code === 'PGRST202') {
-        toast.error('Fonction de création non disponible. Tentative alternative...');
+        toast.error('Fonction de création non disponible. Réessayez plus tard.');
       } else if (error.code === '23505' || error.message?.includes('duplicate key')) {
-        toast.error('Un personnage existe déjà. Problème technique résolu dans la prochaine version.');
+        toast.error('Un personnage existe déjà avec ces paramètres.');
       } else if (error.code === '42501' || error.message?.includes('policy')) {
         toast.error('Problème de permissions. Reconnectez-vous et réessayez.');
       } else {
         toast.error('Impossible de créer le personnage. Veuillez contacter le support.');
       }
-      
+
       setShowDebug(true);
     } finally {
       setCreating(false);
@@ -219,15 +205,18 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
       // Utiliser le service d'authentification
       const { error } = await authService.signOut();
       if (error) throw error;
-      
+
       toast.success('Déconnexion réussie');
-      
+
       // Forcer le rechargement sur Chrome mobile
-      if (navigator.userAgent.includes('Chrome') && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      if (
+        navigator.userAgent.includes('Chrome') &&
+        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+      ) {
         // Nettoyer tout le stockage local
         localStorage.clear();
         sessionStorage.clear();
-        
+
         setTimeout(() => {
           window.location.reload();
         }, 100);
@@ -245,27 +234,26 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
     }
 
     try {
-      // Utiliser la fonction de suppression sécurisée si elle existe
-      const { data: functionExists } = await supabase
-        .rpc('delete_character_safely', { character_id: character.id })
-        .then(() => ({ data: true }))
-        .catch(() => ({ data: false }));
+      // Utiliser la fonction de suppression sécurisée si elle existe (essai/erreur)
+      let deleted = false;
+      try {
+        await supabase.rpc('delete_character_safely', { character_id: character.id });
+        deleted = true;
+      } catch {
+        deleted = false;
+      }
 
-      if (!functionExists) {
+      if (!deleted) {
         // Suppression directe si la fonction n'existe pas
-        const { error } = await supabase
-          .from('players')
-          .delete()
-          .eq('id', character.id);
-
+        const { error } = await supabase.from('players').delete().eq('id', character.id);
         if (error) throw error;
       }
 
       // Mettre à jour la liste des personnages
-      setPlayers(players.filter(p => p.id !== character.id));
+      setPlayers((prev) => prev.filter((p) => p.id !== character.id));
       setDeletingCharacter(null);
       setDeleteConfirmation('');
-      
+
       toast.success(`Personnage "${character.adventurer_name || character.name}" supprimé`);
     } catch (error: any) {
       console.error('Erreur lors de la suppression du personnage:', error);
@@ -280,7 +268,8 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
         return <Sword className="w-5 h-5 text-red-500" />;
       case 'Magicien':
       case 'Ensorceleur':
-      case 'Sorcier':
+      case 'Sorcier': // compat (Warlock)
+      case 'Occultiste': // nouveau 2024
         return <Sparkles className="w-5 h-5 text-purple-500" />;
       case 'Clerc':
       case 'Druide':
@@ -290,11 +279,14 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
     }
   };
 
+  // Affichage: remplacer "Sorcier" par "Occultiste" pour les anciens persos
+  const displayClassName = (cls?: string | null) => (cls === 'Sorcier' ? 'Occultiste' : cls || '');
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto" />
           <p className="text-gray-400">Chargement des personnages...</p>
         </div>
       </div>
@@ -308,19 +300,29 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
         <div className="w-full max-w-6xl mx-auto px-4">
           {/* Header */}
           <div className="text-center mb-8 sm:mb-12 pt-8">
-            <h1 className="text-3xl font-bold text-white mb-2" style={{
-              textShadow: `
-                0 0 15px rgba(255, 255, 255, 0.9),
-                0 0 20px rgba(255, 255, 255, 0.6),
-                0 0 30px rgba(255, 255, 255, 0.4),
-                0 0 40px rgba(255, 255, 255, 0.2)
-              `
-            }}>Mes Personnages</h1>
+            <h1
+              className="text-3xl font-bold text-white mb-2"
+              style={{
+                textShadow: `
+                  0 0 15px rgba(255, 255, 255, 0.9),
+                  0 0 20px rgba(255, 255, 255, 0.6),
+                  0 0 30px rgba(255, 255, 255, 0.4),
+                  0 0 40px rgba(255, 255, 255, 0.2)
+                `,
+              }}
+            >
+              Mes Personnages
+            </h1>
             <div className="flex items-center justify-center gap-4">
-              <p className="text-gray-300" style={{
-                textShadow: '0 0 10px rgba(255, 255, 255, 0.3)'
-              }}>
-                {players.length > 0 ? `${players.length} personnage${players.length > 1 ? 's' : ''} créé${players.length > 1 ? 's' : ''}` : 'Aucun personnage créé'}
+              <p
+                className="text-gray-300"
+                style={{ textShadow: '0 0 10px rgba(255, 255, 255, 0.3)' }}
+              >
+                {players.length > 0
+                  ? `${players.length} personnage${players.length > 1 ? 's' : ''} créé${
+                      players.length > 1 ? 's' : ''
+                    }`
+                  : 'Aucun personnage créé'}
               </p>
               {debugInfo && (
                 <button
@@ -339,7 +341,9 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
             <div className="mb-8">
               <div className="bg-gray-900/90 border border-gray-700 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-semibold text-yellow-400">Informations de débogage</h3>
+                  <h3 className="text-lg font-semibold text-yellow-400">
+                    Informations de débogage
+                  </h3>
                   <div className="flex gap-2">
                     <button
                       onClick={runDiagnostic}
@@ -372,28 +376,28 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                     <Trash2 className="w-6 h-6 text-red-500" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-gray-100">
-                      Supprimer le personnage
-                    </h3>
+                    <h3 className="text-lg font-bold text-gray-100">Supprimer le personnage</h3>
                     <p className="text-sm text-gray-400">
                       {deletingCharacter.adventurer_name || deletingCharacter.name}
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="space-y-4">
                   <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
                     <p className="text-red-300 text-sm font-medium mb-2">
                       ⚠️ Attention : Cette action est irréversible !
                     </p>
                     <p className="text-gray-300 text-sm">
-                      Toutes les données du personnage (inventaire, attaques, statistiques) seront définitivement supprimées.
+                      Toutes les données du personnage (inventaire, attaques, statistiques) seront
+                      définitivement supprimées.
                     </p>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Pour confirmer, tapez exactement : <span className="text-red-400 font-bold">Supprime</span>
+                      Pour confirmer, tapez exactement :{' '}
+                      <span className="text-red-400 font-bold">Supprime</span>
                     </label>
                     <input
                       type="text"
@@ -428,102 +432,101 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
             </div>
           )}
 
-          {/* Characters Grid - Centré avec un espacement équilibré */}
+          {/* Characters Grid */}
           <div className="flex justify-center mb-8 sm:mb-16">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl">
-              {players.map((player) => (
-                <div
-                  key={player.id}
-                  className="w-full max-w-sm relative group bg-slate-800/60 backdrop-blur-sm border border-slate-600/40 rounded-xl shadow-lg overflow-hidden hover:bg-slate-700/70 transition-all duration-200"
-                >
-                  {/* Bouton de suppression */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeletingCharacter(player);
-                    }}
-                    className="absolute top-3 right-3 w-8 h-8 bg-red-600/80 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10"
-                    title="Supprimer le personnage"
+              {players.map((player) => {
+                const maxHp = Math.max(0, Number(player.max_hp || 0));
+                const currHp = Math.max(0, Number(player.current_hp || 0));
+                const tempHp = Math.max(0, Number(player.temporary_hp || 0));
+                const ratio = maxHp > 0 ? Math.min(100, Math.max(0, ((currHp + tempHp) / maxHp) * 100)) : 0;
+
+                return (
+                  <div
+                    key={player.id}
+                    className="w-full max-w-sm relative group bg-slate-800/60 backdrop-blur-sm border border-slate-600/40 rounded-xl shadow-lg overflow-hidden hover:bg-slate-700/70 transition-all duration-200"
                   >
-                    <Trash2 size={16} />
-                  </button>
+                    {/* Bouton de suppression */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletingCharacter(player);
+                      }}
+                      className="absolute top-3 right-3 w-8 h-8 bg-red-600/80 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                      title="Supprimer le personnage"
+                    >
+                      <Trash2 size={16} />
+                    </button>
 
-                  <div 
-                    className="p-6 cursor-pointer hover:scale-[1.02] transition-all duration-200"
-                    onClick={() => onCharacterSelect(player)}
-                  >
-                    {/* Avatar et informations - Layout horizontal */}
-                    <div className="flex items-center gap-6">
-                      <div className="w-20 h-28 flex-shrink-0 rounded-lg overflow-hidden bg-white/10">
-                      <Avatar
-                        url={player.avatar_url}
-                        playerId={player.id}
-                        size="md"
-                        editable={false}
-                        onAvatarUpdate={() => {}}
-                      />
-                    </div>
-
-                      {/* Character Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="mb-3">
-                      <h3 className="text-lg font-bold text-gray-100 mb-1">
-                        {player.adventurer_name || player.name}
-                      </h3>
-                      
-                      {player.class && (
-                        <div className="flex items-center justify-center gap-2 mb-2">
-                          {getClassIcon(player.class)}
-                            <span className="text-sm text-slate-200">
-                            {player.class} niveau {player.level}
-                          </span>
-                        </div>
-                      )}
-
-                      {!player.class && (
-                          <p className="text-sm text-slate-400 mb-2">Personnage non configuré</p>
-                      )}
+                    <div
+                      className="p-6 cursor-pointer hover:scale-[1.02] transition-all duration-200"
+                      onClick={() => onCharacterSelect(player)}
+                    >
+                      {/* Avatar et informations */}
+                      <div className="flex items-center gap-6">
+                        <div className="w-20 h-28 flex-shrink-0 rounded-lg overflow-hidden bg-white/10">
+                          <Avatar
+                            url={player.avatar_url}
+                            playerId={player.id}
+                            size="md"
+                            editable={false}
+                            onAvatarUpdate={() => {}}
+                          />
                         </div>
 
-                        {/* Health Bar */}
-                        <div className="space-y-2">
-                          <div className="w-full bg-slate-700/50 rounded-full h-3">
-                        <div 
-                              className="bg-gradient-to-r from-red-500 to-red-400 h-3 rounded-full transition-all duration-300"
-                          style={{ width: `${Math.max(0, ((player.current_hp + player.temporary_hp) / player.max_hp) * 100)}%` }}
-                        />
-                      </div>
-                          <p className="text-xs text-slate-300">
-                        {player.current_hp} / {player.max_hp} PV
-                        {player.temporary_hp > 0 && (
-                            <span className="text-blue-300 ml-1">
-                            (+{player.temporary_hp})
-                          </span>
-                        )}
-                      </p>
+                        {/* Character Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="mb-3">
+                            <h3 className="text-lg font-bold text-gray-100 mb-1 truncate">
+                              {player.adventurer_name || player.name}
+                            </h3>
+
+                            {player.class ? (
+                              <div className="flex items-center gap-2 mb-2">
+                                {getClassIcon(player.class)}
+                                <span className="text-sm text-slate-200">
+                                  {displayClassName(player.class)} niveau {player.level}
+                                </span>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-slate-400 mb-2">Personnage non configuré</p>
+                            )}
+                          </div>
+
+                          {/* Health Bar */}
+                          <div className="space-y-2">
+                            <div className="w-full bg-slate-700/50 rounded-full h-3">
+                              <div
+                                className="bg-gradient-to-r from-red-500 to-red-400 h-3 rounded-full transition-all duration-300"
+                                style={{ width: `${ratio}%` }}
+                              />
+                            </div>
+                            <p className="text-xs text-slate-300">
+                              {currHp} / {maxHp} PV
+                              {tempHp > 0 && <span className="text-blue-300 ml-1">(+{tempHp})</span>}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Create New Character Card */}
               <div
                 onClick={() => setShowCreateForm(true)}
-                className="w-full max-w-sm cursor-pointer hover:scale-[1.02] transition-all duration-200 bg-slate-800/40 backdrop-blur-sm border-dashed border-2 border-slate-600/50 hover:border-green-400 rounded-xl shadow-lg hover:bg-slate-700/50"
+                className="w-full max-w-sm cursor-pointer hover:scale-[1.02] transition-all duration-200 bg-slate-800/40 backdrop-blur-sm border-dashed border-2 border-slate-600/50 hover:border-green-500/50 rounded-xl p-6"
               >
                 <div className="p-6 flex items-center justify-center gap-6 min-h-[140px]">
                   <div className="w-16 h-16 bg-green-400/20 rounded-full flex items-center justify-center">
                     <Plus className="w-8 h-8 text-green-500" />
                   </div>
                   <div className="text-center">
-                    <h3 className="text-lg font-bold text-gray-100 mb-2">
-                    Nouveau Personnage
-                  </h3>
+                    <h3 className="text-lg font-bold text-gray-100 mb-2">Nouveau Personnage</h3>
                     <p className="text-sm text-slate-300">
-                    Créez un nouveau personnage pour vos aventures
-                  </p>
+                      Créez un nouveau personnage pour vos aventures
+                    </p>
                   </div>
                 </div>
               </div>
@@ -534,10 +537,8 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
           {showCreateForm && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
               <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
-                <h3 className="text-xl font-bold text-gray-100 mb-4">
-                  Créer un nouveau personnage
-                </h3>
-                
+                <h3 className="text-xl font-bold text-gray-100 mb-4">Créer un nouveau personnage</h3>
+
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -586,19 +587,21 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
           )}
         </div>
       </div>
-      
+
       {/* Sign Out Button - Fixed at bottom */}
       <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
         <div className="w-full max-w-md mx-auto px-4">
-            <button
-              onClick={handleSignOut}
-              className="w-full btn-secondary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
-            >
-              <LogOut size={20} />
-              Déconnexion
-            </button>
+          <button
+            onClick={handleSignOut}
+            className="w-full btn-secondary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
+          >
+            <LogOut size={20} />
+            Déconnexion
+          </button>
         </div>
       </div>
     </div>
   );
 }
+
+export default CharacterSelectionPage;
