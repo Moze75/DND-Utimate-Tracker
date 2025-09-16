@@ -11,6 +11,13 @@ import {
   Shield,
   Plus,
   Minus,
+  User,
+  Sword,
+  Sparkles,
+  BookOpen,
+  AlertCircle,
+  RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { DndClass, Player, PlayerStats, PlayerBackground } from '../types/dnd';
 import { supabase } from '../lib/supabase';
@@ -20,7 +27,8 @@ import { CONDITIONS } from './ConditionsSection';
 import { SessionsModal } from './SessionsModal';
 import { LevelUpModal } from './LevelUpModal';
 
-// Helpers D&D
+/* ============================ Helpers généraux ============================ */
+
 const getModifier = (score: number): number => Math.floor((score - 10) / 2);
 
 const getProficiencyBonusForLevel = (level: number): number => {
@@ -44,7 +52,10 @@ const DND_CLASSES: DndClass[] = [
   'Paladin',
   'Rôdeur',
   'Roublard',
-  'Sorcier'
+  // Nouveau: classe 2024
+  'Occultiste',
+  // Compatibilité données existantes (Warlock historique)
+  'Sorcier',
 ];
 
 const DND_RACES = [
@@ -118,6 +129,14 @@ const getDexModFromPlayer = (player: Player): number => {
   return 0;
 };
 
+// Canonicalisation minimale pour compat RPC (backend encore sur "Sorcier")
+function mapClassForRpc(pClass: DndClass | null | undefined): string | null | undefined {
+  if (pClass === 'Occultiste') return 'Sorcier';
+  return pClass;
+}
+
+/* ============================ Composant ============================ */
+
 interface PlayerProfileProps {
   player: Player;
   onUpdate: (player: Player) => void;
@@ -128,7 +147,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
   const [showSessions, setShowSessions] = useState(false);
   const [showLevelUp, setShowLevelUp] = useState(false);
 
-  // Tooltips pour les 4 infos (CA/VIT/INIT/MAÎT)
   const [activeTooltip, setActiveTooltip] = useState<'ac' | 'speed' | 'initiative' | 'proficiency' | null>(null);
 
   // Etats d'identité / profil
@@ -150,7 +168,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
   const [currentHp, setCurrentHp] = useState(player.current_hp);
   const [tempHp, setTempHp] = useState(player.temporary_hp);
 
-  // Stats affichées (lecture). On les resynchronise avec player.
   const [stats, setStats] = useState<PlayerStats>(player.stats || {
     armor_class: 10,
     initiative: 0,
@@ -159,13 +176,13 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
     inspirations: player.stats?.inspirations || 0
   });
 
-  // Champs d'édition dédiés pour les 4 inputs afin d'autoriser le "vide"
+  // champs d'édition permissifs
   const [acField, setAcField] = useState<string>('');
   const [initField, setInitField] = useState<string>('');
   const [speedField, setSpeedField] = useState<string>('');
   const [profField, setProfField] = useState<string>('');
 
-  // Mettre à jour les états locaux quand le player change
+  // Sync local state quand player change
   useEffect(() => {
     setLevel(player.level);
     setMaxHp(player.max_hp);
@@ -201,11 +218,13 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
         return;
       }
       try {
+        // Compat backend: map Occultiste -> Sorcier tant que la RPC n'est pas migrée
+        const rpcClass = mapClassForRpc(selectedClass);
         const { data, error } = await supabase.rpc('get_subclasses_by_class', {
-          p_class: selectedClass
+          p_class: rpcClass
         });
         if (error) throw error;
-        setAvailableSubclasses(data || []);
+        setAvailableSubclasses((data as any) || []);
       } catch (error) {
         console.error('Erreur lors du chargement des sous-classes:', error);
         setAvailableSubclasses([]);
@@ -214,14 +233,13 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
     loadSubclasses();
   }, [selectedClass]);
 
-  // Pré-remplir les champs d'édition quand on ouvre le modal
+  // Pré-remplir les champs d’édition au moment de l’ouverture
   useEffect(() => {
     if (!editing) return;
 
     const dexMod = getDexModFromPlayer(player);
     const profAuto = getProficiencyBonusForLevel(level);
 
-    // On ne calcule que si vide/0 côté player.stats
     const acInitial = (player.stats?.armor_class ?? 0) || 0;
     const initInitial = player.stats?.initiative;
     const speedInitial = (player.stats?.speed ?? 0) || 0;
@@ -232,6 +250,8 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
     setSpeedField(speedInitial > 0 ? String(speedInitial) : String(9));
     setProfField(profInitial > 0 ? String(profInitial) : String(profAuto));
   }, [editing, player, level]);
+
+  /* ============================ Repos court / long ============================ */
 
   const handleShortRest = async () => {
     if (!player.hit_dice || player.hit_dice.total - player.hit_dice.used <= 0) {
@@ -250,7 +270,9 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           case 'Druide':
           case 'Moine':
           case 'Roublard':
-          case 'Sorcier': return 8;
+          case 'Sorcier':     // compat (Warlock)
+          case 'Occultiste':  // nouveau 2024
+            return 8;
           case 'Magicien':
           case 'Ensorceleur': return 6;
           default: return 8;
@@ -303,7 +325,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
 
   const handleLongRest = async () => {
     try {
-      // Prépare une restauration complète des ressources consommées
       const nextCR: any = { ...(player.class_resources || {}) };
       nextCR.used_rage = 0;
       nextCR.used_bardic_inspiration = 0;
@@ -312,7 +333,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
       nextCR.used_sorcery_points = 0;
       nextCR.used_action_surge = 0;
       nextCR.used_arcane_recovery = false;
-      // Compat Moine selon clé utilisée dans la base
       nextCR.used_credo_points = 0;
       nextCR.used_ki_points = 0;
       nextCR.used_lay_on_hands = 0;
@@ -365,9 +385,10 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
     }
   };
 
+  /* ============================ Sauvegarde ============================ */
+
   const handleSave = async () => {
     try {
-      // Calculs auto si valeurs vides
       const dexMod = getDexModFromPlayer(player);
       const profAuto = getProficiencyBonusForLevel(level);
 
@@ -377,7 +398,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
       const profVal = parseInt(profField, 10);
 
       const finalizedStats: PlayerStats = {
-        ...player.stats, // préserve inspirations et autres champs
+        ...player.stats,
         armor_class: Number.isFinite(acVal) && acVal > 0 ? acVal : 10 + dexMod,
         initiative: Number.isFinite(initVal) ? initVal : dexMod,
         speed: Number.isFinite(speedVal) && speedVal > 0 ? speedVal : 9,
@@ -427,13 +448,34 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
     }
   };
 
-  // Affichage (lecture)
+  /* ============================ Icône de classe ============================ */
+
+  const getClassIcon = (playerClass: string | null | undefined) => {
+    switch (playerClass) {
+      case 'Guerrier':
+      case 'Paladin':
+        return <Sword className="w-5 h-5 text-red-500" />;
+      case 'Magicien':
+      case 'Ensorceleur':
+      case 'Sorcier':     // compat
+      case 'Occultiste':  // nouveau 2024
+        return <Sparkles className="w-5 h-5 text-purple-500" />;
+      case 'Clerc':
+      case 'Druide':
+        return <Shield className="w-5 h-5 text-yellow-500" />;
+      default:
+        return <User className="w-5 h-5 text-gray-500" />;
+    }
+  };
+
+  /* ============================ Rendu ============================ */
+
   if (!editing) {
     return (
       <div className="stat-card">
         <div className="stat-header flex items-start justify-between">
           <div className="flex flex-col gap-4 w-full">
-            {/* États actifs uniquement */}
+            {/* États actifs */}
             {player.active_conditions && player.active_conditions.length > 0 && (
               <div className="flex gap-1 flex-wrap">
                 {player.active_conditions
@@ -450,17 +492,16 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               </div>
             )}
 
-            {/* Layout horizontal: grille 2 colonnes (Avatar fluide + colonne boutons fixe) */}
+            {/* Carte avatar + actions (identique, non modifié) */}
             <div
               className="grid items-start gap-3 sm:gap-4"
-              style={{ gridTemplateColumns: 'minmax(0,1fr) 8rem' }} // 8rem = 128px
+              style={{ gridTemplateColumns: 'minmax(0,1fr) 8rem' }}
             >
-              {/* Avatar responsive (remplit la colonne gauche) */}
               <div className="relative w-full min-w-0 aspect-[7/10] sm:aspect-[2/3] rounded-lg overflow-hidden bg-gray-800/50 flex items-center justify-center">
-                {/* Bouton paramètres en overlay en haut à droite */}
                 <button
                   onClick={() => setEditing(true)}
-                  className="absolute top-2 right-2 w-9 h-9 rounded-full bg-gray-900/40 backdrop-blur-sm text-white hover:bg-gray-800/50 hover:text-white flex items-center justify-center z-10 transition-all duration-150"
+                  className="absolute top-2 right-2 w-9 h-9 rounded-full bg-gray-900/40 backdrop-blur-sm text-white hover:bg-gray-800/50 hover:text-white flex items-center justify-center z-10 transition-colors"
+                  title="Modifier le profil"
                 >
                   <Settings className="w-5 h-5" />
                 </button>
@@ -473,24 +514,23 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
                   onAvatarUpdate={() => {}}
                 />
 
-                {/* Superposition avec les informations du personnage */}
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 pointer-events-none">
                   <div className="text-white">
                     <h3 className="text-lg font-bold text-white drop-shadow-lg">
                       {adventurerName || player.name}
                     </h3>
-                    {selectedClass && (
+                    {player.class && (
                       <p className="text-sm text-gray-200 drop-shadow-md">
-                        {selectedClass} niveau {level}
+                        {player.class} niveau {player.level}
                       </p>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Colonne boutons fixe (8rem) */}
+              {/* Colonne boutons (repos / inspirations / concentration) */}
               <div className="flex flex-col gap-3 sm:gap-4 items-stretch w-32 justify-start">
-                {/* Bloc Inspiration */}
+                {/* Inspirations */}
                 <div className="w-32 rounded text-sm bg-gray-800/50 flex flex-col">
                   <div className="text-gray-400 text-sm text-center h-8 flex items-center justify-center gap-1">
                     <span className="ml-3">Inspiration</span>
@@ -507,7 +547,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
                           onUpdate({ ...player, stats: newStats });
                           toast.success('Inspiration retirée');
                         } catch (error) {
-                          console.error('Erreur lors de la mise à jour de l\'inspiration:', error);
+                          console.error('Erreur maj inspiration:', error);
                           toast.error('Erreur lors de la mise à jour');
                         }
                       }}
@@ -533,7 +573,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
                           onUpdate({ ...player, stats: newStats });
                           toast.success('Inspiration ajoutée');
                         } catch (error) {
-                          console.error('Erreur lors de la mise à jour de l\'inspiration:', error);
+                          console.error('Erreur maj inspiration:', error);
                           toast.error('Erreur lors de la mise à jour');
                         }
                       }}
@@ -549,7 +589,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
                   </div>
                 </div>
 
-                {/* Repos long */}
+                {/* Repos */}
                 <button
                   onClick={handleLongRest}
                   className="w-32 h-9 rounded text-sm bg-gray-800/50 text-gray-400 hover:bg-gray-700/50 flex items-center justify-between px-3"
@@ -558,7 +598,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
                   <Moon className="w-4 h-4" />
                 </button>
 
-                {/* Repos court */}
                 <button
                   onClick={handleShortRest}
                   className="w-32 h-9 rounded text-sm bg-gray-800/50 text-gray-400 hover:bg-gray-700/50 flex items-center justify-between px-3"
@@ -577,7 +616,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
                   </div>
                 )}
 
-                {/* Concentration */}
+                {/* Concentration toggle */}
                 <button
                   onClick={async () => {
                     try {
@@ -598,7 +637,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
 
                       toast.success(player.is_concentrating ? 'Concentration interrompue' : 'Concentration activée');
                     } catch (error) {
-                      console.error('Erreur lors de la modification de la concentration:', error);
+                      console.error('Erreur concentration:', error);
                       toast.error('Erreur lors de la modification de la concentration');
                     }
                   }}
@@ -619,11 +658,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           <div></div>
         </div>
 
-        {/* Modals */}
-        {showSessions && (
-          <SessionsModal isGM={player.is_gm || false} onClose={() => setShowSessions(false)} />
-        )}
-
+        {/* Mini-grille des stats (CA / Vitesse / Initiative / Maîtrise) */}
         <div className="grid grid-cols-4 gap-4 mt-2 bg-gray-800/50 rounded-lg py-1">
           {/* CA */}
           <div className="flex flex-col items-center">
@@ -637,8 +672,8 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               </div>
               {activeTooltip === 'ac' && (
                 <>
-                  <div className="tooltip-overlay" onClick={() => setActiveTooltip(null)} />
-                  <div className="invisible tooltip-visible fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[92%] z-50">
+                  <div className="fixed inset-0" onClick={() => setActiveTooltip(null)} />
+                  <div className="fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-lg border border-white/10">
                     <h4 className="font-semibold text-gray-100 mb-1">Classe d'Armure</h4>
                     <p className="mb-2">Détermine la difficulté pour vous toucher en combat.</p>
                     <p className="text-gray-400">Calcul de base :</p>
@@ -665,8 +700,8 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               </div>
               {activeTooltip === 'speed' && (
                 <>
-                  <div className="tooltip-overlay" onClick={() => setActiveTooltip(null)} />
-                  <div className="invisible tooltip-visible fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[92%] z-50">
+                  <div className="fixed inset-0" onClick={() => setActiveTooltip(null)} />
+                  <div className="fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-lg border border-white/10">
                     <h4 className="font-semibold text-gray-100 mb-1">Vitesse</h4>
                     <p className="mb-2">Distance que vous pouvez parcourir en un tour.</p>
                     <div className="text-gray-400">
@@ -694,8 +729,8 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               </div>
               {activeTooltip === 'initiative' && (
                 <>
-                  <div className="tooltip-overlay" onClick={() => setActiveTooltip(null)} />
-                  <div className="invisible tooltip-visible fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[92%] z-50">
+                  <div className="fixed inset-0" onClick={() => setActiveTooltip(null)} />
+                  <div className="fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-lg border border-white/10">
                     <h4 className="font-semibold text-gray-100 mb-1">Initiative</h4>
                     <p className="mb-2">Détermine l'ordre d'action en combat.</p>
                     <div className="text-gray-400">
@@ -712,7 +747,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
             <div className="text-xs uppercase tracking-wide text-gray-500 -mt-1 text-center -ml-2">INIT</div>
           </div>
 
-          {/* Bonus de maîtrise */}
+          {/* Maîtrise */}
           <div className="flex flex-col items-center">
             <div
               className="relative w-10 h-10 -mt-2 -mb-1 group cursor-pointer"
@@ -723,8 +758,8 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               </div>
               {activeTooltip === 'proficiency' && (
                 <>
-                  <div className="tooltip-overlay" onClick={() => setActiveTooltip(null)} />
-                  <div className="invisible tooltip-visible fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[92%] z-50">
+                  <div className="fixed inset-0" onClick={() => setActiveTooltip(null)} />
+                  <div className="fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-lg border border-white/10">
                     <h4 className="font-semibold text-gray-100 mb-1">Bonus de Maîtrise</h4>
                     <p>Représente votre expertise générale.</p>
                     <div className="text-gray-400">
@@ -748,7 +783,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
     );
   }
 
-  // Mode édition - Modal plein écran
+  // Mode édition
   return (
     <div className="fixed inset-0 bg-gray-900/95 z-50 overflow-y-auto">
       <div className="max-w-4xl mx-auto p-4 py-8 space-y-6 pb-32">
@@ -762,403 +797,351 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           </button>
         </div>
 
-        <div className="space-y-6">
-          {/* Identité */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <h3 className="text-lg font-semibold text-gray-100">Identité</h3>
-            </div>
-            <div className="p-4 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="flex flex-col">
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Avatar</label>
-                  <div className="w-40 h-56 rounded-lg overflow-hidden bg-gray-800/50 mx-auto">
-                    <Avatar
-                      url={avatarUrl}
-                      playerId={player.id}
-                      onAvatarUpdate={(url) => setAvatarUrl(url)}
-                      size="lg"
-                      editable={true}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Nom d'aventurier
-                  </label>
-                  <input
-                    type="text"
-                    value={adventurerName}
-                    onChange={(e) => setAdventurerName(e.target.value)}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                    placeholder="Nom d'aventurier"
+        {/* Identité */}
+        <div className="stat-card">
+          <div className="stat-header">
+            <h3 className="text-lg font-semibold text-gray-100">Identité</h3>
+          </div>
+          <div className="p-4 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex flex-col">
+                <label className="block text-sm font-medium text-gray-300 mb-2">Avatar</label>
+                <div className="w-40 h-56 rounded-lg overflow-hidden bg-gray-800/50 mx-auto">
+                  <Avatar
+                    url={avatarUrl}
+                    playerId={player.id}
+                    onAvatarUpdate={(url) => setAvatarUrl(url)}
+                    size="lg"
+                    editable
                   />
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Niveau */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <h3 className="text-lg font-semibold text-gray-100">Niveau</h3>
-            </div>
-            <div className="p-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Niveau</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Nom d'aventurier</label>
                 <input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={level}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value, 10);
-                    if (!isNaN(value)) setLevel(Math.max(1, Math.min(20, value)));
-                  }}
+                  type="text"
+                  value={adventurerName}
+                  onChange={(e) => setAdventurerName(e.target.value)}
                   className="input-dark w-full px-3 py-2 rounded-md"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
+                  placeholder="Nom d'aventurier"
                 />
               </div>
-
-              <button
-                onClick={() => setShowLevelUp(true)}
-                className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg flex items-center justify-center gap-2"
-              >
-                <TrendingUp size={20} />
-                Passer au niveau {level + 1}
-              </button>
-            </div>
-          </div>
-
-          {/* Classe et Race */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <h3 className="text-lg font-semibold text-gray-100">Classe et Race</h3>
-            </div>
-            <div className="p-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Race</label>
-                  <select
-                    value={selectedRace}
-                    onChange={(e) => setSelectedRace(e.target.value)}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                  >
-                    {DND_RACES.map((race) => (
-                      <option key={race} value={race}>
-                        {race || 'Sélectionnez une race'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Classe</label>
-                  <select
-                    value={selectedClass || ''}
-                    onChange={(e) => setSelectedClass(e.target.value as DndClass)}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                  >
-                    {DND_CLASSES.map((dndClass) => (
-                      <option key={dndClass} value={dndClass}>
-                        {dndClass || 'Sélectionnez une classe'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Sous-classe</label>
-                  <select
-                    value={selectedSubclass}
-                    onChange={(e) => setSelectedSubclass(e.target.value)}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                    disabled={!selectedClass || availableSubclasses.length === 0}
-                  >
-                    <option value="">Sélectionnez une sous-classe</option>
-                    {availableSubclasses.map((subclass) => (
-                      <option key={subclass} value={subclass}>
-                        {subclass}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Statistiques (édition des 4 champs avec auto si vide) */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <h3 className="text-lg font-semibold text-gray-100">Statistiques</h3>
-            </div>
-            <div className="p-4 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* CA */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Classe d'armure (CA)
-                  </label>
-                  <input
-                    type="number"
-                    value={acField}
-                    onChange={(e) => setAcField(e.target.value)}
-                    onBlur={() => {
-                      if (acField === '' || parseInt(acField, 10) <= 0) {
-                        const dm = getDexModFromPlayer(player);
-                        setAcField(String(10 + dm));
-                      }
-                    }}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                    placeholder="Auto si vide: 10 + mod DEX"
-                  />
-                </div>
-
-                {/* Initiative */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Initiative
-                  </label>
-                  <input
-                    type="number"
-                    value={initField}
-                    onChange={(e) => setInitField(e.target.value)}
-                    onBlur={() => {
-                      if (initField === '') {
-                        const dm = getDexModFromPlayer(player);
-                        setInitField(String(dm));
-                      }
-                    }}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                    placeholder="Auto si vide: mod DEX"
-                  />
-                </div>
-
-                {/* Vitesse */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Vitesse (m)
-                  </label>
-                  <input
-                    type="number"
-                    value={speedField}
-                    onChange={(e) => setSpeedField(e.target.value)}
-                    onBlur={() => {
-                      if (speedField === '' || parseInt(speedField, 10) <= 0) {
-                        setSpeedField('9');
-                      }
-                    }}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                    placeholder="Auto si vide: 9 m"
-                  />
-                </div>
-
-                {/* Bonus de maîtrise */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Bonus de maîtrise
-                  </label>
-                  <input
-                    type="number"
-                    value={profField}
-                    onChange={(e) => setProfField(e.target.value)}
-                    onBlur={() => {
-                      if (profField === '' || parseInt(profField, 10) <= 0) {
-                        setProfField(String(getProficiencyBonusForLevel(level)));
-                      }
-                    }}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                    placeholder="Auto si vide: selon niveau"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Points de vie */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <h3 className="text-lg font-semibold text-gray-100">Points de vie</h3>
-            </div>
-            <div className="p-4 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">PV Maximum</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={maxHp}
-                    onChange={(e) => setMaxHp(parseInt(e.target.value, 10) || 1)}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Dés de vie disponibles
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={level}
-                    value={level - (hitDice?.used || 0)}
-                    onChange={(e) =>
-                      setHitDice({
-                        total: level,
-                        used: Math.max(0, Math.min(level, level - (parseInt(e.target.value, 10) || 0)))
-                      })
-                    }
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Historique / Alignement / Infos */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <h3 className="text-lg font-semibold text-gray-100">Historique</h3>
-            </div>
-            <div className="p-4 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Historique</label>
-                  <select
-                    value={selectedBackground || ''}
-                    onChange={(e) => setSelectedBackground(e.target.value as PlayerBackground)}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                  >
-                    {DND_BACKGROUNDS.map((b) => (
-                      <option key={b} value={b}>
-                        {b || 'Sélectionnez un historique'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Alignement</label>
-                  <select
-                    value={selectedAlignment}
-                    onChange={(e) => setSelectedAlignment(e.target.value)}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                  >
-                    {DND_ALIGNMENTS.map((a) => (
-                      <option key={a} value={a}>
-                        {a || 'Sélectionnez un alignement'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Âge</label>
-                  <input
-                    type="text"
-                    value={age}
-                    onChange={(e) => setAge(e.target.value)}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                    placeholder="Âge du personnage"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Genre</label>
-                  <input
-                    type="text"
-                    value={gender}
-                    onChange={(e) => setGender(e.target.value)}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                    placeholder="Genre du personnage"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Langues */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <h3 className="text-lg font-semibold text-gray-100">Langues</h3>
-            </div>
-            <div className="p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                {DND_LANGUAGES.map((language) => (
-                  <label
-                    key={language}
-                    className="flex items-center cursor-pointer hover:bg-gray-800/30 p-2 rounded transition-colors"
-                  >
-                    <div
-                      className={`mr-2 h-4 w-4 rounded border-2 flex items-center justify-center transition-all duration-200 ${
-                        selectedLanguages.includes(language)
-                          ? 'bg-red-500 border-red-500'
-                          : 'border-gray-600 hover:border-gray-500'
-                      }`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (selectedLanguages.includes(language)) {
-                          setSelectedLanguages(selectedLanguages.filter(lang => lang !== language));
-                        } else {
-                          setSelectedLanguages([...selectedLanguages, language]);
-                        }
-                      }}
-                    >
-                      {selectedLanguages.includes(language) && (
-                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path
-                            fillRule="evenodd"
-                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      )}
-                    </div>
-                    <span className="text-sm text-gray-300 select-none">{language}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Histoire */}
-          <div className="stat-card">
-            <div className="p-4">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Histoire du personnage
-              </label>
-              <textarea
-                value={characterHistory}
-                onChange={(e) => setCharacterHistory(e.target.value)}
-                className="input-dark w-full px-3 py-2 rounded-md"
-                rows={6}
-                placeholder="Décrivez l'histoire de votre personnage..."
-              />
-            </div>
-          </div>
-
-          {/* Boutons d'action */}
-          <div className="flex gap-3 fixed bottom-0 left-0 right-0 bg-gray-900/95 p-4 border-t border-gray-700/50 z-10">
-            <div className="max-w-4xl mx-auto w-full flex gap-3">
-              <button
-                onClick={handleSave}
-                className="btn-primary flex-1 px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
-              >
-                <Save size={20} />
-                Sauvegarder
-              </button>
-              <button
-                onClick={() => setEditing(false)}
-                className="btn-secondary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
-              >
-                <X size={20} />
-                Annuler
-              </button>
             </div>
           </div>
         </div>
 
-        {/* Modal de passage de niveau */}
+        {/* Niveau */}
+        <div className="stat-card">
+          <div className="stat-header">
+            <h3 className="text-lg font-semibold text-gray-100">Niveau</h3>
+          </div>
+          <div className="p-4 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Niveau</label>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={level}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value, 10);
+                  if (!isNaN(value)) setLevel(Math.max(1, Math.min(20, value)));
+                }}
+                className="input-dark w-full px-3 py-2 rounded-md"
+                inputMode="numeric"
+                pattern="[0-9]*"
+              />
+            </div>
+
+            <button
+              onClick={() => setShowLevelUp(true)}
+              className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg flex items-center justify-center gap-2"
+            >
+              <TrendingUp size={20} />
+              Passer au niveau {level + 1}
+            </button>
+          </div>
+        </div>
+
+        {/* Classe et Race */}
+        <div className="stat-card">
+          <div className="stat-header">
+            <h3 className="text-lg font-semibold text-gray-100">Classe et Race</h3>
+          </div>
+          <div className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Race</label>
+                <select
+                  value={selectedRace}
+                  onChange={(e) => setSelectedRace(e.target.value)}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                >
+                  {DND_RACES.map((race) => (
+                    <option key={race} value={race}>
+                      {race || 'Sélectionnez une race'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Classe</label>
+                <select
+                  value={selectedClass || ''}
+                  onChange={(e) => setSelectedClass(e.target.value as DndClass)}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                >
+                  {DND_CLASSES.map((dndClass) => (
+                    <option key={dndClass} value={dndClass}>
+                      {dndClass || 'Sélectionnez une classe'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Sous-classe</label>
+                <select
+                  value={selectedSubclass}
+                  onChange={(e) => setSelectedSubclass(e.target.value)}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                  disabled={!selectedClass || availableSubclasses.length === 0}
+                >
+                  <option value="">Sélectionnez une sous-classe</option>
+                  {availableSubclasses.map((subclass) => (
+                    <option key={subclass} value={subclass}>
+                      {subclass}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Statistiques */}
+        <div className="stat-card">
+          <div className="stat-header">
+            <h3 className="text-lg font-semibold text-gray-100">Statistiques</h3>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Classe d'armure (CA)
+                </label>
+                <input
+                  type="number"
+                  value={acField}
+                  onChange={(e) => setAcField(e.target.value)}
+                  onBlur={() => {
+                    if (acField === '' || parseInt(acField, 10) <= 0) {
+                      const dm = getDexModFromPlayer(player);
+                      setAcField(String(10 + dm));
+                    }
+                  }}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                  placeholder="Auto si vide: 10 + mod DEX"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Initiative
+                </label>
+                <input
+                  type="number"
+                  value={initField}
+                  onChange={(e) => setInitField(e.target.value)}
+                  onBlur={() => {
+                    if (initField === '') {
+                      const dm = getDexModFromPlayer(player);
+                      setInitField(String(dm));
+                    }
+                  }}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                  placeholder="Auto si vide: mod DEX"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Vitesse (m)
+                </label>
+                <input
+                  type="number"
+                  value={speedField}
+                  onChange={(e) => setSpeedField(e.target.value)}
+                  onBlur={() => {
+                    if (speedField === '' || parseInt(speedField, 10) <= 0) {
+                      setSpeedField('9');
+                    }
+                  }}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                  placeholder="Auto si vide: 9 m"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Bonus de maîtrise
+                </label>
+                <input
+                  type="number"
+                  value={profField}
+                  onChange={(e) => setProfField(e.target.value)}
+                  onBlur={() => {
+                    if (profField === '' || parseInt(profField, 10) <= 0) {
+                      setProfField(String(getProficiencyBonusForLevel(level)));
+                    }
+                  }}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                  placeholder="Auto si vide: selon niveau"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Points de vie */}
+        <div className="stat-card">
+          <div className="stat-header">
+            <h3 className="text-lg font-semibold text-gray-100">Points de vie</h3>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">PV Maximum</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={maxHp}
+                  onChange={(e) => setMaxHp(parseInt(e.target.value, 10) || 1)}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Dés de vie disponibles
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={level}
+                  value={level - (hitDice?.used || 0)}
+                  onChange={(e) =>
+                    setHitDice({
+                      total: level,
+                      used: Math.max(0, Math.min(level, level - (parseInt(e.target.value, 10) || 0)))
+                    })
+                  }
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Historique / Alignement / Infos */}
+        <div className="stat-card">
+          <div className="stat-header">
+            <h3 className="text-lg font-semibold text-gray-100">Historique</h3>
+          </div>
+          <div className="p-4 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Historique</label>
+                <select
+                  value={selectedBackground || ''}
+                  onChange={(e) => setSelectedBackground(e.target.value as PlayerBackground)}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                >
+                  {DND_BACKGROUNDS.map((b) => (
+                    <option key={b} value={b}>
+                      {b || 'Sélectionnez un historique'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Alignement</label>
+                <select
+                  value={selectedAlignment}
+                  onChange={(e) => setSelectedAlignment(e.target.value)}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                >
+                  {DND_ALIGNMENTS.map((a) => (
+                    <option key={a} value={a}>
+                      {a || 'Sélectionnez un alignement'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Âge</label>
+                <input
+                  type="text"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value)}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                  placeholder="Âge du personnage"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Genre</label>
+                <input
+                  type="text"
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                  placeholder="Genre du personnage"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Histoire */}
+        <div className="stat-card">
+          <div className="p-4">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Histoire du personnage
+            </label>
+            <textarea
+              value={characterHistory}
+              onChange={(e) => setCharacterHistory(e.target.value)}
+              className="input-dark w-full px-3 py-2 rounded-md"
+              rows={6}
+              placeholder="Décrivez l'histoire de votre personnage..."
+            />
+          </div>
+        </div>
+
+        {/* Boutons d'action */}
+        <div className="flex gap-3 fixed bottom-0 left-0 right-0 bg-gray-900/95 p-4 border-t border-gray-700/50 z-10">
+          <div className="max-w-4xl mx-auto w-full flex gap-3">
+            <button
+              onClick={handleSave}
+              className="btn-primary flex-1 px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
+            >
+              <Save size={20} />
+              Sauvegarder
+            </button>
+            <button
+              onClick={() => setEditing(false)}
+              className="btn-secondary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
+            >
+              <X size={20} />
+              Annuler
+            </button>
+          </div>
+        </div>
+
+        {/* Modal passage de niveau */}
         <LevelUpModal
           isOpen={showLevelUp}
           onClose={() => setShowLevelUp(false)}
