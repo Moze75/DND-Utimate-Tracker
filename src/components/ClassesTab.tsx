@@ -1181,31 +1181,7 @@ function ResourceBlock({
         </div>
       )}
 
-      {isEditing && !hideEdit && (
-        <div className="mt-4 border-t border-gray-700/50 pt-4">
-          <ResourceEditModal
-            label={`Nombre total de ${label.toLowerCase()}`}
-            total={total}
-            onSave={(newTotal) => {
-              onRestore?.(); // reset used si fourni
-              onUpdateTotal(newTotal);
-              setIsEditing(false);
-            }}
-            onCancel={() => setIsEditing(false)}
-          />
-        </div>
-      )}
-
-      {!hideEdit && (
-        <div className="mt-3 flex justify-end">
-          <button
-            onClick={() => setIsEditing(true)}
-            className="text-xs text-gray-400 hover:text-gray-300 underline underline-offset-4"
-          >
-            Modifier le total
-          </button>
-        </div>
-      )}
+     }
     </div>
   );
 }
