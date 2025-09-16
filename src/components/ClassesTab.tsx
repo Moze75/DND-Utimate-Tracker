@@ -184,7 +184,7 @@ const SUBCLASS_ALIASES: Record<string, string[]> = {
   belluaire: ['Belluaire', 'Beast Master', 'Beastmaster'],
   chasseur: ['Chasseur', 'Hunter'],
   'traqueur des tenebres': ['Traqueur des ténèbres', 'Traqueur des tenebres', 'Gloom Stalker'],
-  'vagabond feerique': ['Vagabond féérique', 'Vagabond feerique', 'Fe
+  'vagabond feerique': ['Vagabond féérique', 'Vagabond feerique', 'Fey Wanderer'],
 
   /* ============================
    * Roublard – 2024
