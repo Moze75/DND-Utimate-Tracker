@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -14,23 +14,18 @@ import {
   Target,
   Skull,
   BookOpen,
+  Settings,
+  Trash2,
   Save,
   X,
   Plus,
   Minus,
-  ListChecks,
 } from 'lucide-react';
-
-import toast from 'react-hot-toast';
-import { supabase } from '../lib/supabase';
-import type { ClassResources, Player } from '../types/dnd';
-import { loadFeatureChecks, upsertFeatureCheck } from '../services/featureChecks';
 import { loadAbilitySections } from '../services/classesContent';
-import { MarkdownLite, type MarkdownCtx } from '../lib/markdownLite';
-
-/* ===========================================================
-   Types externes
-   =========================================================== */
+import { loadFeatureChecks, upsertFeatureCheck } from '../services/featureChecks';
+import { supabase } from '../lib/supabase';
+import toast from 'react-hot-toast';
+import type { ClassResources } from '../types/dnd';
 
 type AbilitySection = {
   level: number;
@@ -40,202 +35,93 @@ type AbilitySection = {
 };
 
 type PlayerLike = {
-  id?: string | null;
+  id?: string | null;       // id du personnage (pour persister les cases côté Supabase)
   class?: string | null;
   subclass?: string | null;
   level?: number | null;
+
+  // pour afficher/mettre à jour les ressources de classe
   class_resources?: ClassResources | null;
-  // champs optionnels utiles pour extraire le modificateur de Charisme
-  stats?: { charisma?: number; CHA?: number } | null;
-  charisma?: number;
-  CHA?: number;
-  ability_scores?: { cha?: number } | null;
-  abilities?: any; // objet ou tableau selon les modèles
 };
 
 type Props = {
-  player?: (PlayerLike & Partial<Player>) | null;
-  playerClass?: string;
-  className?: string;
+  player?: PlayerLike;
+  playerClass?: string;       // si pas de player
+  className?: string;         // rétrocompatibilité
   subclassName?: string | null;
   characterLevel?: number;
-  onUpdate?: (player: Player) => void;
 };
 
+// Active des logs de debug dans la console si window.UT_DEBUG === true
 const DEBUG = typeof window !== 'undefined' && (window as any).UT_DEBUG === true;
 
-/* ===========================================================
-   Aides noms / alias (aligné “règles 2024”
-   =========================================================== */
-
+/* Alias FR/EN pour compenser les divergences de nommage du contenu (chargement de sections) */
 const CLASS_ALIASES: Record<string, string[]> = {
-  barbare: ['Barbare', 'Barbarian'],
-  barde: ['Barde', 'Bard'],
-  clerc: ['Clerc', 'Cleric', 'Prêtre', 'Pretre'],
-  druide: ['Druide', 'Druid'],
-  ensorceleur: ['Ensorceleur', 'Sorcerer', 'Sorceror'],
-  guerrier: ['Guerrier', 'Fighter'],
-  magicien: ['Magicien', 'Wizard', 'Mage'],
-  moine: ['Moine', 'Monk'],
-  paladin: ['Paladin'],
-  rodeur: ['Rôdeur', 'Rodeur', 'Ranger'],
-  roublard: ['Roublard', 'Voleur', 'Rogue', 'Thief'],
-  // Nouveau: Occultiste = Warlock (VF moderne “Sorcier”)
-  occultiste: ['Occultiste', 'Warlock', 'Sorcier'],
+  // normalisé -> candidats possibles dans les données
+  'moine': ['Moine', 'Monk'],
+  'ensorceleur': ['Ensorceleur', 'Sorcier', 'Sorcerer'],
+  'barbare': ['Barbare', 'Barbarian'],
+  'barde': ['Barde', 'Bard'],
+  'clerc': ['Clerc', 'Cleric'],
+  'druide': ['Druide', 'Druid'],
+  'guerrier': ['Guerrier', 'Fighter'],
+  'paladin': ['Paladin'],
+  'rodeur': ['Rôdeur', 'Rodeur', 'Ranger'],
+  'voleur': ['Voleur', 'Rogue', 'Roublard'],
+  'magicien': ['Magicien', 'Wizard'],
+  // ajoute si besoin
 };
 
-// Clés normalisées (sans accents / tirets), valeurs: variantes FR/EN pour la recherche
 const SUBCLASS_ALIASES: Record<string, string[]> = {
-  /* ============================
-   * Barbare – 2024
-   * ============================ */
-
-    'voie de l arbre monde': ['Voie de l’Arbre-Monde', 'Voie de l Arbre Monde', 'Path of the World Tree'],
-  'voie du berserker': ['Voie du Berserker', 'Berserker', 'Path of the Berserker'],
-  'voie du coeur sauvage': ['Voie du Cœur sauvage', 'Voie du Coeur sauvage', 'Path of the Wild Heart'],
-  'voie du zelateur': ['Voie du Zélateur', 'Voie du Zelateur', 'Path of the Zealot'],
-
-  /* ============================
-   * Barde – 2024
-   * ============================ */
-  
-  'college de la danse': ['Collège de la Danse', 'College de la Danse', 'College of Dance'],
-  'college du savoir': ['Collège du Savoir', 'College du savoir', 'College of Lore', 'Lore'],
-  'college de la seduction': ['Collège de la Séduction', 'College de la Seduction', 'College of     Glamour', 'Glamour'],
-  'college de la vaillance': ['Collège de la Vaillance', 'College de la Vaillance', 'College of   Valor', 'Valor'],
-
-
-  /* ============================
-   * Clerc – 2024
-   * ============================ */
-'domaine de la guerre': ['Domaine de la Guerre', 'War Domain'],
-  'domaine de la lumiere': ['Domaine de la Lumière', 'Light Domain'],
-  'domaine de la ruse': ['Domaine de la Ruse', 'Trickery Domain'],
-  'domaine de la vie': ['Domaine de la Vie', 'Life Domain'],
-
-
-  /* ============================
-   * Druide – 2024
-   * ============================ */
-'cercle des astres': ['Cercle des Astres', 'Circle of Stars', 'Stars'],
-  'cercle de la lune': ['Cercle de la Lune', 'Circle of the Moon', 'Moon'],
-  'cercle des mers': ['Cercle des Mers', 'Circle of the Sea', 'Sea'],
-  'cercle de la terre': ['Cercle de la Terre', 'Circle of the Land', 'Land'],
-
-
-  /* ============================
-   * Ensorceleur – 2024
-   * (Les "Options de Métamagie" ne sont pas une sous-classe mais un regroupement)
-   * ============================ */
- 'sorcellerie aberrante': ['Sorcellerie aberrante', 'Aberrant Sorcery', 'Aberrant Mind'],
-  'sorcellerie draconique': ['Sorcellerie draconique', 'Draconic Sorcery', 'Draconic Bloodline'],
-  'sorcellerie mecanique': ['Sorcellerie mécanique', 'Clockwork Sorcery', 'Clockwork Soul'],
-  'sorcellerie sauvage': ['Sorcellerie sauvage', 'Wild Magic', 'Wild Sorcery'],
-
-
-  /* ============================
-   * Guerrier – 2024
-   * ============================ */
-  champion: ['Champion', 'Champion Fighter'],
-  'chevalier occultiste': ['Chevalier occultiste', 'Eldritch Knight'],
-  'maitre de guerre': ['Maître de guerre', 'Maitre de guerre', 'Battle Master', 'Battlemaster'],
-  'soldat psi': ['Soldat psi', 'Psi Warrior', 'Psychic Warrior'],
-
-
-  /* ============================
-   * Magicien – 2024
-   * ============================ */
- abjurateur: ['Abjurateur', 'Abjuration', 'School of Abjuration'],
-  devin: ['Devin', 'Divination', 'School of Divination'],
-  evocation: ['Évocation', 'Evocation', 'School of Evocation'],
-  illusionniste: ['Illusionniste', 'Illusion', 'School of Illusion'],
-
-  /* ============================
-   * Moine – 2024
-   * ============================ */
-'credo des elements': ['Crédo des Éléments', 'Credo des Elements', 'Way of the Four Elements'],
-  'credo de la misericorde': ['Crédo de la Miséricorde', 'Credo de la Misericorde', 'Way of Mercy'],
-  'credo de l ombre': ['Crédo de l’Ombre', 'Credo de l Ombre', 'Way of Shadow', 'Shadow'],
-  'credo de la paume': ['Crédo de la Paume', 'Credo de la Paume', 'Crédo de la paume','Way of the Open Hand', 'Open Hand'],
-
-
-  /* ============================
-   * Occultiste (Warlock) – 2024
-   * ============================ */
-'protecteur archifee': ['Protecteur Archifée', 'Archfey', 'The Archfey'],
-  'protecteur celeste': ['Protecteur Céleste', 'Celeste', 'The Celestial', 'Celestial'],
-  'protecteur felon': ['Protecteur Félon', 'Protecteur Felon', 'The Fiend', 'Fiend'],
-  'protecteur grand ancien': ['Protecteur Grand Ancien', 'The Great Old One', 'Great Old One'],
-
-  // Paladin
-
-  /* ============================
-   * Paladin – 2024
-   * ============================ */
-  'serment de gloire': ['Serment de Gloire', 'Oath of Glory'],
-  'serment des anciens': ['Serment des Anciens', 'Oath of the Ancients'],
-  'serment de devotion': ['Serment de Dévotion', 'Serment de Devotion', 'Oath of Devotion'],
-  'serment de vengeance': ['Serment de Vengeance', 'Oath of Vengeance'],
-
-
-  /* ============================
-   * Rôdeur – 2024
-   * ============================ */
-  belluaire: ['Belluaire', 'Beast Master', 'Beastmaster'],
-  chasseur: ['Chasseur', 'Hunter'],
-  'traqueur des tenebres': ['Traqueur des ténèbres', 'Traqueur des tenebres', 'Gloom Stalker'],
-  'vagabond feerique': ['Vagabond féérique', 'Vagabond feerique', 'Fey Wanderer'],
-
-  /* ============================
-   * Roublard – 2024
-   * ============================ */
- 'ame aceree': ['Âme acérée', 'Ame aceree', 'Soulknife'],
-  'arnaqueur arcanique': ['Arnaqueur arcanique', 'Arcane Trickster'],
-  assassin: ['Assassin'],
-  voleur: ['Voleur', 'Thief'],
+  // moine
+  'voie de la paume': [
+    'Voie de la Paume',
+    'Voie de la Main Ouverte',
+    'Way of the Open Hand',
+    'Open Hand',
+    'Way Of The Open Hand',
+  ],
+  'voie de la main ouverte': [
+    'Voie de la Main Ouverte',
+    'Voie de la Paume',
+    'Way of the Open Hand',
+    'Open Hand',
+  ],
+  // quelques alias génériques utiles
+  'credo de la paume': ['Voie de la Paume', 'Voie de la Main Ouverte', 'Way of the Open Hand'],
 };
 
-/* ===========================================================
-   Utils textes
-   =========================================================== */
-
+/* Normalisation forte (lookup interne) */
 function norm(s: string) {
   return (s || '')
     .trim()
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/[\u0300-\u036f]/g, '') // sans accents
+    .replace(/\s*\([^)]*\)\s*/g, ' ') // sans parenthèses
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
 
+/* Canonicalise une classe (FR) pour le switch des ressources de classe */
 function canonicalClass(name: string): string {
   const n = norm(name);
-
   if (['barbare', 'barbarian'].includes(n)) return 'Barbare';
   if (['barde', 'bard'].includes(n)) return 'Barde';
-  if (['clerc', 'cleric', 'pretre', 'prêtre', 'pretres'].includes(n)) return 'Clerc';
+  if (['clerc', 'cleric'].includes(n)) return 'Clerc';
   if (['druide', 'druid'].includes(n)) return 'Druide';
-
-  // Ensorceleur = Sorcerer
-  if (['ensorceleur', 'sorcerer', 'sorceror'].includes(n)) return 'Ensorceleur';
-
+  if (['ensorceleur', 'sorcier', 'sorcerer'].includes(n)) return 'Ensorceleur';
   if (['guerrier', 'fighter'].includes(n)) return 'Guerrier';
-  // Magicien = Wizard (on accepte “mage”)
-  if (['magicien', 'wizard', 'mage'].includes(n)) return 'Magicien';
+  if (['magicien', 'wizard'].includes(n)) return 'Magicien';
   if (['moine', 'monk'].includes(n)) return 'Moine';
   if (['paladin'].includes(n)) return 'Paladin';
   if (['rodeur', 'rôdeur', 'ranger'].includes(n)) return 'Rôdeur';
-  if (['roublard', 'voleur', 'rogue', 'thief'].includes(n)) return 'Roublard';
-
-  // Occultiste = Warlock (et “Sorcier” en VF moderne)
-  if (['occultiste', 'warlock', 'sorcier'].includes(n)) return 'Occultiste';
-
+  if (['roublard', 'voleur', 'rogue'].includes(n)) return 'Roublard';
   return name || '';
 }
 
+/* Pour affichage seulement (majuscule initiale) */
 function sentenceCase(s: string) {
   const t = (s || '').toLocaleLowerCase('fr-FR').trim();
   if (!t) return t;
@@ -264,188 +150,28 @@ function slug(s: string) {
     .replace(/(^-|-$)/g, '');
 }
 
-/* ===========================================================
-   Helper sous-classe robuste (plusieurs noms possibles)
-   =========================================================== */
-function getSubclassFromPlayerLike(p?: any): string | null {
-  if (!p) return null;
-  const candidates = [p?.subclass, p?.sub_class, p?.subClass, p?.sousClasse, p?.['sous-classe']];
-  const found = candidates.find((v) => typeof v === 'string' && v.trim().length > 0);
-  return found ? String(found).trim() : null;
-}
-
-/* ===========================================================
-   Helper robuste: modificateur de Charisme
-   =========================================================== */
-
-function getChaModFromPlayerLike(p?: any): number {
-  if (!p) return 0;
-
-  const toNum = (v: any): number | null => {
-    if (typeof v === 'number' && Number.isFinite(v)) return v;
-    if (typeof v === 'string') {
-      const n = Number(v.replace(/[^\d+-]/g, ''));
-      return Number.isFinite(n) ? n : null;
-    }
-    return null;
-  };
-
-  let chaObj: any = null;
-  const abilities = p?.abilities;
-  if (Array.isArray(abilities)) {
-    chaObj = abilities.find((a: any) => {
-      const n = (a?.name || a?.abbr || a?.key || a?.code || '').toString().toLowerCase();
-      return n === 'charisme' || n === 'charisma' || n === 'cha' || n === 'car';
-    });
-  } else if (abilities && typeof abilities === 'object') {
-    const keys = Object.keys(abilities);
-    const key =
-      keys.find(k => {
-        const kk = k.toLowerCase();
-        return kk === 'charisme' || kk === 'charisma' || kk === 'cha' || kk === 'car';
-      }) ??
-      keys.find(k => k.toLowerCase().includes('charis') || k.toLowerCase() === 'cha' || k.toLowerCase() === 'car');
-    if (key) chaObj = abilities[key];
-  }
-
-  if (chaObj) {
-    const mod = toNum(chaObj.modifier) ?? toNum(chaObj.mod) ?? toNum(chaObj.modValue) ?? toNum(chaObj.value);
-    if (mod != null) return mod;
-    const score = toNum(chaObj.score) ?? toNum(chaObj.total) ?? toNum(chaObj.base);
-    if (score != null) return Math.floor((score - 10) / 2);
-  }
-
-  const score2 =
-    p?.stats?.charisma ??
-    p?.stats?.CHA ??
-    p?.charisma ??
-    p?.CHA ??
-    p?.ability_scores?.cha ??
-    p?.abilities?.cha ??
-    null;
-
-  if (typeof score2 === 'number') return Math.floor((score2 - 10) / 2);
-
-  return 0;
-}
-
-/* ===========================================================
-   Overlay ripple plein écran (effet visuel)
-   =========================================================== */
-
-function ScreenRipple({
-  x,
-  y,
-  onDone,
-  duration = 750,
-  color = 'rgba(168,85,247,0.28)', // violet 500 ~ #a855f7 avec alpha
-  blur = 2,
-}: {
-  x: number;
-  y: number;
-  onDone: () => void;
-  duration?: number;
-  color?: string;
-  blur?: number;
-}) {
-  const circleRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const circle = circleRef.current;
-    if (!circle) return;
-
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-
-    // distance max jusqu'à un coin (pour couvrir tout l'écran)
-    const dTopLeft = Math.hypot(x - 0, y - 0);
-    const dTopRight = Math.hypot(x - w, y - 0);
-    const dBottomLeft = Math.hypot(x - 0, y - h);
-    const dBottomRight = Math.hypot(x - w, y - h);
-    const maxR = Math.max(dTopLeft, dTopRight, dBottomLeft, dBottomRight);
-
-    const finalDiameter = Math.ceil(maxR * 2) + 2 * blur;
-
-    // Position/size fixes, animée via scale
-    circle.style.width = `${finalDiameter}px`;
-    circle.style.height = `${finalDiameter}px`;
-    circle.style.left = `${x}px`;
-    circle.style.top = `${y}px`;
-    circle.style.transform = 'translate(-50%, -50%) scale(0.01)';
-    circle.style.opacity = '0.75';
-
-    // Déclenche l’animation (scale vers 1 + fadeout)
-    const raf = requestAnimationFrame(() => {
-      circle.style.transition = `transform ${duration}ms ease-out, opacity ${duration + 100}ms ease-in`;
-      circle.style.transform = 'translate(-50%, -50%) scale(1)';
-      circle.style.opacity = '0';
-    });
-
-    const to = window.setTimeout(() => {
-      onDone();
-    }, duration + 140);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(to);
-    };
-  }, [x, y, onDone, duration, blur]);
-
-  return (
-    <div
-      aria-hidden="true"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        pointerEvents: 'none',
-        zIndex: 70, // au-dessus de l’UI
-      }}
-    >
-      {/* Cercle expansif */}
-      <div
-        ref={circleRef}
-        style={{
-          position: 'fixed',
-          borderRadius: '9999px',
-          left: 0,
-          top: 0,
-          transform: 'translate(-50%, -50%) scale(0.01)',
-          willChange: 'transform, opacity',
-          background: `radial-gradient(closest-side, ${color}, rgba(168,85,247,0.18), rgba(168,85,247,0.0))`,
-          boxShadow: `0 0 ${blur * 4}px ${color}`,
-          opacity: 0,
-        }}
-      />
-    </div>
-  );
-}
-
-/* ===========================================================
-   Composant principal
-   =========================================================== */
-
-function ClassesTab({ player, playerClass, className, subclassName, characterLevel, onUpdate }: Props) {
+function ClassesTab({
+  player,
+  playerClass,
+  className,
+  subclassName,
+  characterLevel,
+}: Props) {
   const [sections, setSections] = useState<AbilitySection[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // État des cases cochées persistées (depuis markdown)
   const [checkedMap, setCheckedMap] = useState<Map<string, boolean>>(new Map());
   const [loadingChecks, setLoadingChecks] = useState(false);
 
+  // État local pour les ressources de classe (pour retours UI immédiats)
   const [classResources, setClassResources] = useState<ClassResources | null | undefined>(player?.class_resources);
 
-  // Effet visuel “ripple” plein écran
-  const [screenRipple, setScreenRipple] = useState<{ x: number; y: number; key: number } | null>(null);
-  const triggerScreenRippleFromEvent = (ev: React.MouseEvent<HTMLElement>) => {
-    const el = ev.currentTarget as HTMLElement;
-    const rect = el.getBoundingClientRect();
-    const x = Math.round(rect.left + rect.width / 2);
-    const y = Math.round(rect.top + rect.height / 2);
-    setScreenRipple({ x, y, key: Date.now() });
-  };
-
+  // RAW (pour la recherche de markdown)
   const rawClass = (player?.class ?? playerClass ?? className ?? '').trim();
-  const rawSubclass = (getSubclassFromPlayerLike(player) ?? subclassName) ?? null;
+  const rawSubclass = (player?.subclass ?? subclassName) ?? null;
 
+  // DISPLAY (pour l’UI uniquement)
   const displayClass = rawClass ? sentenceCase(rawClass) : '';
   const displaySubclass = rawSubclass ? sentenceCase(rawSubclass) : null;
 
@@ -453,21 +179,28 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   const finalLevel = Math.max(1, Number(finalLevelRaw) || 1);
   const characterId = player?.id ?? null;
 
+  // Sync local resources si player change
   useEffect(() => {
     setClassResources(player?.class_resources);
   }, [player?.class_resources, player?.id]);
 
-  // Charger les aptitudes
+  // Chargement "smart" des sections avec variantes de normalisation + alias
   useEffect(() => {
     let mounted = true;
+
     if (!rawClass) {
       setSections([]);
       return;
     }
+
     (async () => {
       setLoading(true);
       try {
-        const res = await loadSectionsSmart({ className: rawClass, subclassName: rawSubclass, level: finalLevel });
+        const res = await loadSectionsSmart({
+          className: rawClass,
+          subclassName: rawSubclass,
+          level: finalLevel,
+        });
         if (!mounted) return;
         setSections(res);
       } catch (e) {
@@ -478,12 +211,13 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
         if (mounted) setLoading(false);
       }
     })();
+
     return () => {
       mounted = false;
     };
   }, [rawClass, rawSubclass, finalLevel]);
 
-  // Charger l’état des cases cochées (aptitudes) pour le personnage
+  // Charger l’état des cases cochées (features markdown)
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -505,276 +239,48 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
     };
   }, [characterId]);
 
-  // Evite double init en StrictMode (guard)
-  const initKeyRef = useRef<string | null>(null);
-
-  // Auto-init silencieuse des ressources manquantes
-  useEffect(() => {
-    (async () => {
-      if (!player?.id || !displayClass) return;
-
-      const cls = canonicalClass(displayClass);
-      if (!cls) return;
-
-      const ensureKey = `${player.id}:${cls}:${finalLevel}`;
-      if (initKeyRef.current === ensureKey) return;
-
-      const current: Record<string, any> = { ...(classResources || {}) };
-      const defaults = buildDefaultsForClass(cls, finalLevel, player);
-
-      let changed = false;
-      for (const [k, v] of Object.entries(defaults)) {
-        if (current[k] === undefined || current[k] === null) {
-          current[k] = v;
-          changed = true;
-        }
-      }
-
-      if (!changed) return;
-
-      initKeyRef.current = ensureKey;
-      try {
-        const { error } = await supabase.from('players').update({ class_resources: current }).eq('id', player.id);
-        if (error) throw error;
-
-        setClassResources(current as ClassResources);
-
-        if (onUpdate && player) {
-          onUpdate({ ...(player as any), class_resources: current } as Player);
-        }
-      } catch (e) {
-        initKeyRef.current = null;
-        console.error('[ClassesTab] auto-init class_resources error:', e);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [player?.id, displayClass, finalLevel, classResources, player]);
-
-  // Barde: cap dynamique pour Inspiration bardique = modificateur de Charisme
-  const bardCapRef = useRef<string | null>(null);
-  useEffect(() => {
-    (async () => {
-      if (!player?.id || !displayClass) return;
-      if (canonicalClass(displayClass) !== 'Barde') return;
-
-      const cap = Math.max(0, getChaModFromPlayerLike(player));
-      const total = (classResources as any)?.bardic_inspiration;
-      const used = (classResources as any)?.used_bardic_inspiration || 0;
-
-      const key = `${player.id}:${cap}:${total ?? 'u'}:${used}`;
-      if (bardCapRef.current === key) return;
-
-      if (typeof cap !== 'number') return;
-
-      if (typeof total !== 'number' || total !== cap || used > cap) {
-        const next = {
-          ...(classResources || {}),
-          bardic_inspiration: cap,
-          used_bardic_inspiration: Math.min(used, cap),
-        };
-
-        try {
-          const { error } = await supabase.from('players').update({ class_resources: next }).eq('id', player.id);
-          if (error) throw error;
-
-          setClassResources(next as ClassResources);
-          bardCapRef.current = key;
-
-          if (onUpdate && player) {
-            onUpdate({ ...(player as any), class_resources: next } as Player);
-          }
-        } catch (e) {
-          console.error('[ClassesTab] bard cap update error:', e);
-          bardCapRef.current = null;
-        }
-      } else {
-        bardCapRef.current = key;
-      }
-    })();
-  }, [
-    player?.id,
-    displayClass,
-    player?.stats?.charisma,
-    player?.stats?.CHA,
-    player?.charisma,
-    player?.CHA,
-    player?.ability_scores?.cha,
-    player?.abilities,
-    classResources?.bardic_inspiration,
-    classResources?.used_bardic_inspiration,
-    onUpdate,
-    player,
-  ]);
-
+  // Toggle + persistance (cases cochées)
   async function handleToggle(featureKey: string, checked: boolean) {
+    // Optimistic UI
     setCheckedMap(prev => {
       const next = new Map(prev);
       next.set(featureKey, checked);
       return next;
     });
+    // Persist
     try {
       await upsertFeatureCheck({
         characterId,
-        className: displayClass,
+        className: displayClass,          // stocke version affichée
         subclassName: displaySubclass ?? null,
         featureKey,
         checked,
       });
     } catch (e) {
       if (DEBUG) console.debug('[ClassesTab] upsertFeatureCheck error:', e);
+      // On peut rester optimiste
     }
   }
 
-  /* ===========================================================
-     UI: rendu
-     =========================================================== */
-
-  const visible = useMemo(
-    () =>
-      sections
-        .filter((s) => (typeof s.level === 'number' ? s.level <= finalLevel : true))
-        .sort((a, b) => (Number(a.level) || 0) - (Number(b.level) || 0)),
-    [sections, finalLevel]
-  );
-
-  const hasClass = !!displayClass;
-  const hasSubclass = !!displaySubclass;
-
-  return (
-    <>
-      <div className="space-y-4">
-        <div className="bg-gradient-to-r from-violet-700/30 via-fuchsia-600/20 to-amber-600/20 border border-white/10 rounded-2xl px-4 py-3 ring-1 ring-black/5 shadow-md shadow-black/20">
-          <div className="flex items-center justify-between">
-            {/* Libellé classe / sous-classe avec message si manquante */}
-            <span className="text-sm font-semibold text-white">
-              {hasClass ? displayClass : '—'}
-              {hasClass && (
-                <span className={`ml-2 font-normal ${hasSubclass ? 'text-white/80' : 'text-red-400'}`}>
-                  {hasSubclass ? `- ${displaySubclass}` : 'Sélectionnez votre sous-classe dans les paramètres'}
-                </span>
-              )}
-            </span>
-
-            {/* Niveau */}
-            <span className="text-xs text-white/70">Niveau {finalLevel}</span>
-          </div>
-        </div>
-
-        {hasClass && (
-          <ClassResourcesCard
-            playerClass={displayClass}
-            resources={classResources || undefined}
-            onUpdateResource={updateClassResource}
-            player={player ?? undefined}
-            level={finalLevel}
-            onPulseScreen={triggerScreenRippleFromEvent}
-          />
-        )}
-
-        {!hasClass ? (
-          <div className="text-center text-white/70 py-10">Sélectionne une classe pour afficher les aptitudes.</div>
-        ) : loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-400" />
-          </div>
-        ) : visible.length === 0 ? (
-          <div className="text-center text-white/70 py-10">
-            Aucune aptitude trouvée pour “{displayClass}{displaySubclass ? ` - ${displaySubclass}` : ''}”.
-            {DEBUG && (
-              <pre className="mt-3 text-xs text-white/60">
-                Activez window.UT_DEBUG = true pour voir les tentatives de chargement dans la console.
-              </pre>
-            )}
-          </div>
-        ) : (
-          <>
-            <div className="stat-header flex items-center gap-3 pt-1">
-              <ListChecks className="w-5 h-5 text-sky-500" />
-              <h3 className="text-lg font-semibold text-gray-100">Compétences de classe et sous-classe</h3>
-            </div>
-
-            <div className="space-y-4">
-              {visible.map((s, i) => (
-                <AbilityCard
-                  key={`${s.origin}-${s.level ?? 'x'}-${i}`}
-                  section={s}
-                  defaultOpen={s.level === finalLevel}
-                  ctx={{
-                    characterId,
-                    className: displayClass,
-                    subclassName: displaySubclass,
-                    checkedMap,
-                    onToggle: handleToggle,
-                  }}
-                  disableContentWhileLoading={loadingChecks}
-                />
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Overlay ripple plein écran */}
-      {screenRipple && (
-        <ScreenRipple
-          key={screenRipple.key}
-          x={screenRipple.x}
-          y={screenRipple.y}
-          onDone={() => setScreenRipple(null)}
-        />
-      )}
-    </>
-  );
-
-  /* ===========================================================
-     Handlers
-     =========================================================== */
-
-  async function updateClassResource(
+  // Mise à jour d'une ressource de classe (persist + UI locale)
+  const updateClassResource = async (
     resource: keyof ClassResources,
     value: ClassResources[keyof ClassResources]
-  ) {
+  ) => {
     if (!player?.id) return;
-
-    // Totaux calculés automatiquement: bloquer leur édition
-    if (resource === 'bardic_inspiration') {
-      toast.error("Le total d'Inspiration bardique est calculé automatiquement (modificateur de Charisme).");
-      return;
-    }
-    if (resource === 'lay_on_hands') {
-      toast.error("Le total d'Imposition des mains est calculé automatiquement (5 × niveau de Paladin).");
-      return;
-    }
-
-    const next: any = { ...(classResources || {}) };
-
-    // Barde: clamp used à [0..cap CHA]
-    if (resource === 'used_bardic_inspiration' && typeof value === 'number') {
-      const cap = Math.max(0, getChaModFromPlayerLike(player));
-      next.used_bardic_inspiration = Math.min(Math.max(0, value), cap);
-    }
-    // Paladin: clamp used à [0..(5 × niveau)]
-    else if (resource === 'used_lay_on_hands' && typeof value === 'number') {
-      const lvl = Number(player?.level || 0);
-      const cap = Math.max(0, lvl * 5);
-      next.used_lay_on_hands = Math.min(Math.max(0, value), cap);
-    } else {
-      next[resource] = value;
-    }
-
-    // Moine: miroirs ki/credo
-    mirrorMonkKeys(resource, value, next);
+    const next = { ...(classResources || {}), [resource]: value };
 
     try {
-      const { error } = await supabase.from('players').update({ class_resources: next }).eq('id', player.id);
+      const { error } = await supabase
+        .from('players')
+        .update({ class_resources: next })
+        .eq('id', player.id);
+
       if (error) throw error;
 
       setClassResources(next as ClassResources);
 
-      if (onUpdate && player) {
-        onUpdate({ ...(player as any), class_resources: next } as Player);
-      }
-
+      // Toasts
       if (typeof value === 'boolean') {
         toast.success(`Récupération arcanique ${value ? 'utilisée' : 'disponible'}`);
       } else {
@@ -785,18 +291,16 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
           wild_shape: 'Forme sauvage',
           sorcery_points: 'Points de sorcellerie',
           action_surge: "Sursaut d'action",
-          credo_points: 'Points de crédo',
-          ki_points: 'Points de crédo',
+          ki_points: 'Points de crédo', // renommage UI pour le Moine
           lay_on_hands: 'Imposition des mains',
           favored_foe: 'Ennemi juré',
           sneak_attack: 'Attaque sournoise',
-          pact_magic: 'Magie de pacte',
         };
 
-        const key = String(resource);
-        const displayKey = key.replace('used_', '');
+        const displayKey = (resource as string).replace('used_', '');
         const resourceName = resourceNames[displayKey] || displayKey;
-        const isUsed = key.startsWith('used_');
+        const isUsed = (resource as string).startsWith('used_');
+
         const previous = (classResources as any)?.[resource];
         const action =
           isUsed && typeof previous === 'number' && typeof value === 'number'
@@ -806,7 +310,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
             : 'mis à jour';
 
         if (isUsed && typeof previous === 'number' && typeof value === 'number') {
-          const diff = Math.abs((value as number) - (previous as number));
+          const diff = Math.abs(value - previous);
           toast.success(`${diff} ${resourceName} ${action}`);
         } else {
           toast.success(`${resourceName} ${action}`);
@@ -816,25 +320,102 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
       console.error('Erreur lors de la mise à jour des ressources:', err);
       toast.error('Erreur lors de la mise à jour');
     }
-  }
+  };
+
+  const visible = useMemo(
+    () =>
+      sections
+        .filter((s) => (typeof s.level === 'number' ? s.level <= finalLevel : true))
+        .sort((a, b) => (a.level ?? 0) - (b.level ?? 0)),
+    [sections, finalLevel]
+  );
+
+  const hasClass = !!displayClass;
+
+  return (
+    <div className="space-y-4">
+      {/* En-tête minimal: <Classe> - <Sous-classe> */}
+      <div className="bg-gradient-to-r from-violet-700/30 via-fuchsia-600/20 to-amber-600/20 border border-white/10 rounded-2xl px-4 py-3 ring-1 ring-black/5 shadow-md shadow-black/20">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold text-white">
+            {hasClass ? displayClass : '—'}{displaySubclass ? ` - ${displaySubclass}` : ''}
+          </span>
+          <span className="text-xs text-white/70">Niveau {finalLevel}</span>
+        </div>
+      </div>
+
+      {/* RESSOURCES DE CLASSE — déplacées ici sous l'entête (avec alias FR/EN robustes) */}
+      {hasClass && (
+        <ClassResourcesCard
+          playerClass={displayClass}
+          resources={classResources || undefined}
+          onUpdateResource={updateClassResource}
+        />
+      )}
+
+      {!hasClass ? (
+        <div className="text-center text-white/70 py-10">
+          Sélectionne une classe pour afficher les aptitudes.
+        </div>
+      ) : loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-400" />
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="text-center text-white/70 py-10">
+          Aucune aptitude trouvée pour “{displayClass}{displaySubclass ? ` - ${displaySubclass}` : ''}”.
+          {DEBUG && <pre className="mt-3 text-xs text-white/60">Activez window.UT_DEBUG = true pour voir les tentatives de chargement dans la console.</pre>}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {visible.map((s, i) => (
+            <AbilityCard
+              key={`${s.origin}-${s.level}-${i}`}
+              section={s}
+              defaultOpen={s.level === finalLevel}
+              ctx={{
+                characterId,
+                className: displayClass,
+                subclassName: displaySubclass,
+                checkedMap,
+                onToggle: handleToggle,
+              }}
+              disableContentWhileLoading={loadingChecks}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
-/* ===========================================================
-   Chargement "smart" avec alias
-   =========================================================== */
-
-async function loadSectionsSmart(params: { className: string; subclassName: string | null; level: number }): Promise<AbilitySection[]> {
+/* ———— Chargement "smart" des sections ————
+   Essaie:
+   - brut
+   - sans parenthèses
+   - sans accents
+   - sentenceCase
+   - alias FR/EN
+   - fallback sans sous-classe
+   Loggue les tentatives si UT_DEBUG = true.
+*/
+async function loadSectionsSmart(params: {
+  className: string;
+  subclassName: string | null;
+  level: number;
+}): Promise<AbilitySection[]> {
   const { className, subclassName, level } = params;
+
   const clsNorm = norm(className);
   const subNorm = subclassName ? norm(subclassName) : '';
 
+  // Candidats de base
   const classCandidatesBase = uniq([
     className,
     stripDiacritics(className),
     stripParentheses(className),
     sentenceCase(className),
   ]).filter(Boolean) as string[];
-
   const subclassCandidatesBase = uniq([
     subclassName ?? '',
     stripParentheses(subclassName ?? ''),
@@ -842,6 +423,7 @@ async function loadSectionsSmart(params: { className: string; subclassName: stri
     sentenceCase(subclassName ?? ''),
   ]).filter(Boolean) as string[];
 
+  // Ajout des alias
   const classAlias = CLASS_ALIASES[clsNorm] ?? [];
   const subclassAlias = subNorm ? (SUBCLASS_ALIASES[subNorm] ?? []) : [];
 
@@ -849,6 +431,7 @@ async function loadSectionsSmart(params: { className: string; subclassName: stri
   const subclassCandidates = uniq([...subclassCandidatesBase, ...subclassAlias]).filter(Boolean) as string[];
 
   if (DEBUG) {
+    // eslint-disable-next-line no-console
     console.debug('[ClassesTab] Tentatives de chargement', {
       input: { className, subclassName, level },
       normalized: { clsNorm, subNorm },
@@ -857,12 +440,16 @@ async function loadSectionsSmart(params: { className: string; subclassName: stri
     });
   }
 
-  // Essayer class + subclass
+  // 1) Essayer toutes les combinaisons (classe x sous-classe)
   for (const c of classCandidates) {
     for (const sc of subclassCandidates) {
       try {
         if (DEBUG) console.debug('[ClassesTab] loadAbilitySections try', { className: c, subclassName: sc, level });
-        const res = await loadAbilitySections({ className: c, subclassName: sc, characterLevel: level });
+        const res = await loadAbilitySections({
+          className: c,
+          subclassName: sc,
+          characterLevel: level,
+        });
         const secs = (res?.sections ?? []) as AbilitySection[];
         if (Array.isArray(secs) && secs.length > 0) {
           if (DEBUG) console.debug('[ClassesTab] -> OK', { className: c, subclassName: sc, count: secs.length });
@@ -874,11 +461,15 @@ async function loadSectionsSmart(params: { className: string; subclassName: stri
     }
   }
 
-  // Essayer class seule
+  // 2) Essayer avec la classe uniquement (sans sous-classe)
   for (const c of classCandidates) {
     try {
       if (DEBUG) console.debug('[ClassesTab] loadAbilitySections try (class only)', { className: c, level });
-      const res = await loadAbilitySections({ className: c, subclassName: null, characterLevel: level });
+      const res = await loadAbilitySections({
+        className: c,
+        subclassName: null,
+        characterLevel: level,
+      });
       const secs = (res?.sections ?? []) as AbilitySection[];
       if (Array.isArray(secs) && secs.length > 0) {
         if (DEBUG) console.debug('[ClassesTab] -> OK (class only)', { className: c, count: secs.length });
@@ -889,12 +480,11 @@ async function loadSectionsSmart(params: { className: string; subclassName: stri
     }
   }
 
+  // 3) Échec
   return [];
 }
 
-/* ===========================================================
-   UI: cartes & rendu
-   =========================================================== */
+/* ———— Carte repliable, typo alignée, contenu bien visible ———— */
 
 function AbilityCard({
   section,
@@ -908,7 +498,7 @@ function AbilityCard({
   disableContentWhileLoading?: boolean;
 }) {
   const [open, setOpen] = useState(!!defaultOpen);
-  const contentId = `ability-${section.origin}-${section.level ?? 'x'}-${slug(section.title)}`;
+  const contentId = `ability-${section.origin}-${section.level}-${slug(section.title)}`;
 
   return (
     <article
@@ -918,15 +508,24 @@ function AbilityCard({
         'bg-[radial-gradient(ellipse_at_top_left,rgba(120,53,15,.12),transparent_40%),radial-gradient(ellipse_at_bottom_right,rgba(91,33,182,.10),transparent_45%)]',
       ].join(' ')}
     >
-      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-controls={contentId} className="w-full text-left">
+      {/* En-tête cliquable (toggle), sans étiquette texte */}
+      <button
+        type="button'
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        aria-controls={contentId}
+        className="w-full text-left"
+      >
         <div className="flex items-start gap-3 p-4">
           <div className="pt-0.5 shrink-0">
-            <LevelBadge level={Number(section.level) || 0} />
+            <LevelBadge level={section.level} />
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="text-white font-semibold text-base sm:text-lg truncate">{sentenceCase(section.title)}</h3>
+              <h3 className="text-white font-semibold text-base sm:text-lg truncate">
+                {sentenceCase(section.title)}
+              </h3>
               <OriginPill origin={section.origin} />
             </div>
           </div>
@@ -937,7 +536,11 @@ function AbilityCard({
         </div>
       </button>
 
-      <div id={contentId} className={`overflow-hidden transition-[max-height,opacity] duration-300 ${open ? 'max-h-[200vh] opacity-100' : 'max-h-0 opacity-0'}`}>
+      {/* Contenu repliable — padding top léger, pas de marge négative */}
+      <div
+        id={contentId}
+        className={`overflow-hidden transition-[max-height,opacity] duration-300 ${open ? 'max-h-[200vh] opacity-100' : 'max-h-0 opacity-0'}`}
+      >
         <div className="px-4 pt-1 pb-4">
           {disableContentWhileLoading ? (
             <div className="h-6 w-24 bg-white/10 rounded animate-pulse" />
@@ -947,7 +550,7 @@ function AbilityCard({
                 text={section.content}
                 ctx={{
                   ...ctx,
-                  section: { level: Number(section.level) || 0, origin: section.origin, title: section.title },
+                  section: { level: section.level, origin: section.origin, title: section.title },
                 }}
               />
             </div>
@@ -958,6 +561,8 @@ function AbilityCard({
   );
 }
 
+/* ———— Étiquettes ———— */
+
 function LevelBadge({ level }: { level: number }) {
   return (
     <span
@@ -967,7 +572,7 @@ function LevelBadge({ level }: { level: number }) {
         'ring-1 ring-inset ring-violet-300/30 shadow-sm shadow-black/20',
       ].join(' ')}
     >
-      Niv. {level || '—'}
+      Niv. {level}
     </span>
   );
 }
@@ -978,7 +583,9 @@ function OriginPill({ origin }: { origin: 'class' | 'subclass' }) {
     <span
       className={[
         'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase ring-1 ring-inset',
-        isClass ? 'bg-violet-500/15 text-violet-200 ring-violet-400/25' : 'bg-amber-500/15 text-amber-200 ring-amber-400/25',
+        isClass
+          ? 'bg-violet-500/15 text-violet-200 ring-violet-400/25'
+          : 'bg-amber-500/15 text-amber-200 ring-amber-400/25',
       ].join(' ')}
     >
       {isClass ? 'Classe' : 'Sous-classe'}
@@ -986,9 +593,292 @@ function OriginPill({ origin }: { origin: 'class' | 'subclass' }) {
   );
 }
 
-/* ===========================================================
-   Ressources de classe
-   =========================================================== */
+/* ———— Markdown léger avec support #### titres et ##### cases cochables ———— */
+
+type MarkdownCtx = {
+  characterId?: string | null;
+  className: string;
+  subclassName?: string | null;
+  checkedMap?: Map<string, boolean>;
+  onToggle?: (featureKey: string, checked: boolean) => void;
+};
+
+function MarkdownLite({ text, ctx }: { text: string; ctx: MarkdownCtx & { section: { level: number; origin: 'class' | 'subclass'; title: string } } }) {
+  const nodes = useMemo(() => parseMarkdownLite(text, ctx), [text, ctx]);
+  return <>{nodes}</>;
+}
+
+function parseMarkdownLite(
+  md: string,
+  ctx: MarkdownCtx & { section: { level: number; origin: 'class' | 'subclass'; title: string } }
+): React.ReactNode[] {
+  const lines = md.split(/\r?\n/);
+  const out: React.ReactNode[] = [];
+  let i = 0;
+  let key = 0;
+
+  const pushPara = (buff: string[]) => {
+    const content = buff.join(' ').trim();
+    if (!content) return;
+    out.push(
+      <p key={`p-${key++}`} className="text-sm">
+        {formatInline(content)}
+      </p>
+    );
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (!line.trim()) {
+      out.push(<div key={`sp-${key++}`} className="h-2" />);
+      i++;
+      continue;
+    }
+
+    // ##### -> case à cocher persistante
+    const h5chk = line.match(/^\s*#####\s+(.*)$/);
+    if (h5chk) {
+      const rawLabel = h5chk[1];
+      const label = sentenceCase(rawLabel);
+      const featureKey = slug(`${ctx.section.level}-${ctx.section.origin}-${ctx.section.title}--${label}`);
+      const checked = ctx.checkedMap?.get(featureKey) ?? false;
+      const id = `chk-${key}`;
+
+      out.push(
+        <div key={`chk-${key++}`} className="flex items-start gap-2">
+          <input
+            id={id}
+            type="checkbox"
+            checked={checked}
+            onChange={(e) => ctx.onToggle?.(featureKey, e.currentTarget.checked)}
+            className="mt-0.5 h-4 w-4 accent-violet-500 bg-black/40 border border-white/20 rounded"
+          />
+          <label htmlFor={id} className="text-sm text-white/90">
+            {formatInline(label)}
+          </label>
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    // #### -> petit titre, légèrement augmenté en casse (small-caps)
+    const h4small = line.match(/^\s*####\s+(.*)$/);
+    if (h4small) {
+      out.push(
+        <h5
+          key={`h4s-${key++}`}
+          className="text-white font-semibold text-[13px]"
+          style={{ fontVariant: 'small-caps' }}
+        >
+          {formatInline(sentenceCase(h4small[1]))}
+        </h5>
+      );
+      i++;
+      continue;
+    }
+
+    // ### / ## / #
+    const h3 = line.match(/^\s*###\s+(.*)$/);
+    if (h3) {
+      out.push(
+        <h4 key={`h3-${key++}`} className="text-white font-semibold text-sm sm:text-base">
+          {formatInline(sentenceCase(h3[1]))}
+        </h4>
+      );
+      i++;
+      continue;
+    }
+    const h2 = line.match(/^\s*##\s+(.*)$/);
+    if (h2) {
+      out.push(
+        <h4 key={`h2-${key++}`} className="text-white font-semibold text-sm sm:text-base">
+          {formatInline(sentenceCase(h2[1]))}
+        </h4>
+      );
+      i++;
+      continue;
+    }
+    const h1 = line.match(/^\s*#\s+(.*)$/);
+    if (h1) {
+      out.push(
+        <h4 key={`h1-${key++}`} className="text-white font-semibold text-sm sm:text-base">
+          {formatInline(sentenceCase(h1[1]))}
+        </h4>
+      );
+      i++;
+      continue;
+    }
+
+    // Table Markdown simple
+    if (line.includes('|')) {
+      const block: string[] = [];
+      while (i < lines.length && lines[i].includes('|')) {
+        block.push(lines[i]);
+        i++;
+      }
+      const tableNode = renderTable(block, key);
+      if (tableNode) {
+        out.push(tableNode);
+        key++;
+        continue;
+      }
+      out.push(
+        <p key={`pf-${key++}`} className="text-sm">
+          {formatInline(block.join(' '))}
+        </p>
+      );
+      continue;
+    }
+
+    // Liste à puces
+    if (/^\s*[-*]\s+/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*[-*]\s+/, ''));
+        i++;
+      }
+      out.push(
+        <ul key={`ul-${key++}`} className="list-disc pl-5 space-y-1">
+          {items.map((it, idx) => (
+            <li key={`li-${idx}`} className="text-sm">
+              {formatInline(it)}
+            </li>
+          ))}
+        </ul>
+      );
+      continue;
+    }
+
+    // Liste ordonnée
+    if (/^\s*\d+\.\s+/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*\d+\.\s+/, ''));
+        i++;
+      }
+      out.push(
+        <ol key={`ol-${key++}`} className="list-decimal pl-5 space-y-1">
+          {items.map((it, idx) => (
+            <li key={`oli-${idx}`} className="text-sm">
+              {formatInline(it)}
+            </li>
+          ))}
+        </ol>
+      );
+      continue;
+    }
+
+    // Paragraphe (agrège jusqu’à ligne de rupture)
+    const buff: string[] = [line];
+    i++;
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !/^\s*[-*]\s+/.test(lines[i]) &&
+      !/^\s*\d+\.\s+/.test(lines[i]) &&
+      !lines[i].includes('|') &&
+      !/^\s*#{1,6}\s+/.test(lines[i])
+    ) {
+      buff.push(lines[i]);
+      i++;
+    }
+    pushPara(buff);
+  }
+
+  return out;
+}
+
+function renderTable(block: string[], key: number): React.ReactNode | null {
+  if (block.length < 2) return null;
+  const rows = block.map(r =>
+    r
+      .split('|')
+      .map(c => c.trim())
+      .filter((_, idx, arr) => !(idx === 0 && arr[0] === '') && !(idx === arr.length - 1 && arr[arr.length - 1] === ''))
+  );
+
+  const hasSep = rows[1] && rows[1].every(cell => /^:?-{3,}:?$/.test(cell));
+  const header = hasSep ? rows[0] : null;
+  const body = hasSep ? rows.slice(2) : rows;
+
+  return (
+    <div key={`tbl-${key}`} className="overflow-x-auto">
+      <table className="min-w-[360px] w-full text-sm border-separate border-spacing-y-1">
+        {header && (
+          <thead>
+            <tr>
+              {header.map((h, i) => (
+                <th key={`th-${i}`} className="text-left text-white font-semibold px-2 py-1 bg-white/5 rounded">
+                  {formatInline(sentenceCase(h))}
+                </th>
+              ))}
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {body.map((cells, r) => (
+            <tr key={`tr-${r}`}>
+              {cells.map((c, ci) => (
+                <td key={`td-${ci}`} className="px-2 py-1 text-white/90 bg-white/0">
+                  {formatInline(c)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Inline: **gras**, *italique* ou _italique_
+function formatInline(text: string): React.ReactNode[] {
+  let parts: Array<string | React.ReactNode> = [text];
+
+  // Gras **...**
+  parts = splitAndMap(parts, /\*\*([^*]+)\*\*/g, (m, i) => <strong key={`b-${i}`} className="text-white">{m[1]}</strong>);
+
+  // Italique *...*
+  parts = splitAndMap(parts, /(^|[^*])\*([^*]+)\*(?!\*)/g, (m, i) => [m[1], <em key={`i-${i}`} className="italic">{m[2]}</em>]);
+
+  // Italique _..._
+  parts = splitAndMap(parts, /_([^_]+)_/g, (m, i) => <em key={`u-${i}`} className="italic">{m[1]}</em>);
+
+  return parts.map((p, i) => (typeof p === 'string' ? <React.Fragment key={`t-${i}`}>{p}</React.Fragment> : p));
+}
+
+function splitAndMap(
+  parts: Array<string | React.ReactNode>,
+  regex: RegExp,
+  toNode: (m: RegExpExecArray, idx: number) => React.ReactNode | React.ReactNode[]
+): Array<string | React.ReactNode> {
+  const out: Array<string | React.ReactNode> = [];
+
+  for (const part of parts) {
+    if (typeof part !== 'string') {
+      out.push(part);
+      continue;
+    }
+    let str = part;
+    let lastIndex = 0;
+    let m: RegExpExecArray | null;
+    const r = new RegExp(regex.source, regex.flags);
+
+    while ((m = r.exec(str)) !== null) {
+      out.push(str.slice(lastIndex, m.index));
+      const node = toNode(m, out.length);
+      if (Array.isArray(node)) out.push(...node);
+      else out.push(node);
+      lastIndex = m.index + m[0].length;
+    }
+    out.push(str.slice(lastIndex));
+  }
+  return out;
+}
+
+/* ———— Composants Ressources ———— */
 
 function ResourceEditModal({
   label,
@@ -1002,10 +892,12 @@ function ResourceEditModal({
   onCancel: () => void;
 }) {
   const [value, setValue] = useState<string>(total.toString());
+
   const handleSave = () => {
     const newValue = parseInt(value) || 0;
     if (newValue >= 0) onSave(newValue);
   };
+
   return (
     <div className="space-y-4">
       <div>
@@ -1043,40 +935,23 @@ function ResourceBlock({
   onUpdateUsed,
   useNumericInput = false,
   color = 'purple',
-  hideEdit = false,
-  onGlobalPulse,
+  onDelete,
 }: {
   icon: React.ReactNode;
   label: string;
   total: number;
   used: number;
   onUse: () => void;
-  onRestore?: () => void; // rendu optionnel et sécurisé
+  onRestore: () => void;
   onUpdateTotal: (newTotal: number) => void;
   onUpdateUsed?: (value: number) => void;
   useNumericInput?: boolean;
   color?: 'red' | 'purple' | 'yellow' | 'green' | 'blue';
-  hideEdit?: boolean;
-  onGlobalPulse?: (ev: React.MouseEvent<HTMLButtonElement>) => void;
+  onDelete?: () => void;
 }) {
   const remaining = Math.max(0, total - used);
   const [isEditing, setIsEditing] = useState(false);
   const [amount, setAmount] = useState<string>('');
-
-  // Etat pour l'effet pulse local
-  const [pulse, setPulse] = useState(false);
-  const triggerLocalPulse = () => {
-    setPulse(true);
-    window.setTimeout(() => setPulse(false), 260);
-  };
-
-  const ringColorClasses: Record<NonNullable<typeof color>, string> = {
-    red: 'ring-red-400/60',
-    purple: 'ring-purple-400/60',
-    yellow: 'ring-yellow-400/60',
-    green: 'ring-green-400/60',
-    blue: 'ring-blue-400/60',
-  };
 
   const colorClasses = {
     red: 'text-red-500 hover:bg-red-900/30',
@@ -1087,26 +962,32 @@ function ResourceBlock({
   };
 
   return (
-    <div
-      className={[
-        'resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3',
-        'transition-shadow duration-200',
-        pulse ? `ring-2 ${ringColorClasses[color]}` : '',
-      ].join(' ')}
-    >
+    <div className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className={`${colorClasses[color]}`}>{icon}</div>
           <span className="text-sm font-medium text-gray-300">{label}</span>
         </div>
-        <div
-          className={[
-            'text-sm text-gray-400 bg-gray-800/50 px-3 py-1 rounded-md min-w-[64px] text-center',
-            'transition-transform duration-200',
-            pulse ? `scale-105 ring-1 ${ringColorClasses[color]} shadow-md` : '',
-          ].join(' ')}
-        >
-          {remaining}/{total}
+        <div className="flex items-center gap-2">
+          <div className="text-sm text-gray-400 bg-gray-800/50 px-3 py-1 rounded-md min-w-[64px] text-center">
+            {remaining}/{total}
+          </div>
+          <button
+            onClick={() => setIsEditing(true)}
+            className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-blue-500 hover:bg-blue-900/30 rounded-full transition-colors"
+            title="Modifier"
+          >
+            <Settings size={16} />
+          </button>
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-900/30 rounded-full transition-colors"
+              title="Supprimer"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -1121,13 +1002,11 @@ function ResourceBlock({
             placeholder="0"
           />
           <button
-            onClick={(e) => {
+            onClick={() => {
               const value = parseInt(amount) || 0;
               if (value > 0) {
                 onUpdateUsed?.(used + value);
                 setAmount('');
-                triggerLocalPulse();
-                onGlobalPulse?.(e);
               }
             }}
             className="p-1 text-red-500 hover:bg-red-900/30 rounded-md transition-colors"
@@ -1152,25 +1031,16 @@ function ResourceBlock({
       ) : (
         <div className="flex gap-2">
           <button
-            onClick={(e) => {
-              const remainingNow = Math.max(0, total - used);
-              if (remainingNow <= 0) return;
-              onUse();
-              triggerLocalPulse();
-              onGlobalPulse?.(e);
-            }}
-            disabled={Math.max(0, total - used) <= 0}
+            onClick={onUse}
+            disabled={remaining <= 0}
             className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
-              Math.max(0, total - used) > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
+              remaining > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
             }`}
           >
             <Minus size={16} className="mx-auto" />
           </button>
           <button
-            onClick={() => {
-              if (used <= 0) return;
-              onRestore?.(); // sécurisé
-            }}
+            onClick={onRestore}
             disabled={used <= 0}
             className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
               used > 0 ? colorClasses[color] : 'text-gray-600 bg-gray-800/50 cursor-not-allowed'
@@ -1181,38 +1051,32 @@ function ResourceBlock({
         </div>
       )}
 
-
+      {isEditing && (
+        <div className="mt-4 border-t border-gray-700/50 pt-4">
+          <ResourceEditModal
+            label={`Nombre total de ${label.toLowerCase()}`}
+            total={total}
+            onSave={(newTotal) => {
+              onRestore(); // reset used
+              onUpdateTotal(newTotal);
+              setIsEditing(false);
+            }}
+            onCancel={() => setIsEditing(false)}
+          />
+        </div>
+      )}
     </div>
   );
-}
-
-function mirrorMonkKeys(resource: keyof ClassResources, value: any, into: Record<string, any>) {
-  const r = String(resource);
-  if (r === 'credo_points') {
-    into.ki_points = value;
-  } else if (r === 'used_credo_points') {
-    into.used_ki_points = value;
-  } else if (r === 'ki_points') {
-    into.credo_points = value;
-  } else if (r === 'used_ki_points') {
-    into.used_credo_points = value;
-  }
 }
 
 function ClassResourcesCard({
   playerClass,
   resources,
   onUpdateResource,
-  player,
-  level,
-  onPulseScreen,
 }: {
   playerClass: string;
   resources?: ClassResources;
   onUpdateResource: (resource: keyof ClassResources, value: any) => void;
-  player?: PlayerLike;
-  level?: number;
-  onPulseScreen?: (ev: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   if (!resources || !playerClass) return null;
 
@@ -1233,33 +1097,28 @@ function ClassResourcesCard({
             onUpdateTotal={(n) => onUpdateResource('rage', n)}
             onRestore={() => onUpdateResource('used_rage', Math.max(0, (resources.used_rage || 0) - 1))}
             color="red"
-            onGlobalPulse={onPulseScreen}
           />
         );
       }
       break;
 
-    case 'Barde': {
-      const cap = Math.max(0, getChaModFromPlayerLike(player));
-      const used = Math.min(resources.used_bardic_inspiration || 0, cap);
-
-      items.push(
-        <ResourceBlock
-          key="bardic_inspiration"
-          icon={<Music size={20} />}
-          label="Inspiration bardique"
-          total={cap}
-          used={used}
-          onUse={() => onUpdateResource('used_bardic_inspiration', Math.min(used + 1, cap))}
-          onUpdateTotal={() => { /* no-op */ }}
-          onRestore={() => onUpdateResource('used_bardic_inspiration', Math.max(0, used - 1))}
-          color="purple"
-          hideEdit
-          onGlobalPulse={onPulseScreen}
-        />
-      );
+    case 'Barde':
+      if (typeof resources.bardic_inspiration === 'number') {
+        items.push(
+          <ResourceBlock
+            key="bardic_inspiration"
+            icon={<Music size={20} />}
+            label="Inspiration bardique"
+            total={resources.bardic_inspiration}
+            used={resources.used_bardic_inspiration || 0}
+            onUse={() => onUpdateResource('used_bardic_inspiration', (resources.used_bardic_inspiration || 0) + 1)}
+            onUpdateTotal={(n) => onUpdateResource('bardic_inspiration', n)}
+            onRestore={() => onUpdateResource('used_bardic_inspiration', Math.max(0, (resources.used_bardic_inspiration || 0) - 1))}
+            color="purple"
+          />
+        );
+      }
       break;
-    }
 
     case 'Clerc':
       if (typeof resources.channel_divinity === 'number') {
@@ -1274,7 +1133,6 @@ function ClassResourcesCard({
             onUpdateTotal={(n) => onUpdateResource('channel_divinity', n)}
             onRestore={() => onUpdateResource('used_channel_divinity', Math.max(0, (resources.used_channel_divinity || 0) - 1))}
             color="yellow"
-            onGlobalPulse={onPulseScreen}
           />
         );
       }
@@ -1293,7 +1151,6 @@ function ClassResourcesCard({
             onUpdateTotal={(n) => onUpdateResource('wild_shape', n)}
             onRestore={() => onUpdateResource('used_wild_shape', Math.max(0, (resources.used_wild_shape || 0) - 1))}
             color="green"
-            onGlobalPulse={onPulseScreen}
           />
         );
       }
@@ -1312,7 +1169,6 @@ function ClassResourcesCard({
             onUpdateTotal={(n) => onUpdateResource('sorcery_points', n)}
             onRestore={() => onUpdateResource('used_sorcery_points', Math.max(0, (resources.used_sorcery_points || 0) - 1))}
             color="purple"
-            onGlobalPulse={onPulseScreen}
           />
         );
       }
@@ -1331,7 +1187,6 @@ function ClassResourcesCard({
             onUpdateTotal={(n) => onUpdateResource('action_surge', n)}
             onRestore={() => onUpdateResource('used_action_surge', Math.max(0, (resources.used_action_surge || 0) - 1))}
             color="red"
-            onGlobalPulse={onPulseScreen}
           />
         );
       }
@@ -1340,10 +1195,7 @@ function ClassResourcesCard({
     case 'Magicien':
       if (resources.arcane_recovery !== undefined) {
         items.push(
-          <div
-            key="arcane_recovery"
-            className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3"
-          >
+          <div key="arcane_recovery" className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <BookOpen size={20} className="text-blue-500" />
@@ -1363,99 +1215,41 @@ function ClassResourcesCard({
       }
       break;
 
-    case 'Moine': {
-      const total = (resources as any).credo_points ?? (resources as any).ki_points;
-      const used = (resources as any).used_credo_points ?? (resources as any).used_ki_points ?? 0;
-
-      if (typeof total === 'number') {
+    case 'Moine':
+      if (typeof resources.ki_points === 'number') {
         items.push(
           <ResourceBlock
-            key="credo_points"
+            key="ki_points"
             icon={<Footprints size={20} />}
             label="Points de crédo"
-            total={total}
-            used={used}
-            onUse={() => onUpdateResource('used_credo_points', used + 1)}
-            onUpdateTotal={(n) => onUpdateResource('credo_points', n)}
-            onRestore={() => onUpdateResource('used_credo_points', Math.max(0, used - 1))}
+            total={resources.ki_points}
+            used={resources.used_ki_points || 0}
+            onUse={() => onUpdateResource('used_ki_points', (resources.used_ki_points || 0) + 1)}
+            onUpdateTotal={(n) => onUpdateResource('ki_points', n)}
+            onRestore={() => onUpdateResource('used_ki_points', Math.max(0, (resources.used_ki_points || 0) - 1))}
             color="blue"
-            onGlobalPulse={onPulseScreen}
           />
         );
       }
       break;
-    }
 
-    case 'Occultiste': {
-      // Placeholder simple: la “Magie de pacte” est signalée par un drapeau
-      if ((resources as any)?.pact_magic) {
-        items.push(
-          <div
-            key="pact_magic"
-            className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Sparkles size={20} className="text-purple-400" />
-                <span className="text-sm font-medium text-gray-300">Magie de pacte</span>
-              </div>
-              <span className="text-sm text-gray-400 bg-gray-800/50 px-3 py-1 rounded-md">Repos court</span>
-            </div>
-          </div>
-        );
-      }
-      break;
-    }
-
-    case 'Paladin': {
-      // Total auto = 5 × niveau
-      const lvl = Number(level || 0);
-      const totalPoints = Math.max(0, lvl * 5);
-      const used = Math.min(Math.max(0, resources.used_lay_on_hands || 0), totalPoints);
-
-      items.push(
-        <ResourceBlock
-          key="lay_on_hands"
-          icon={<HandHeart size={20} />}
-          label="Imposition des mains"
-          total={totalPoints}
-          used={used}
-          onUse={() => onUpdateResource('used_lay_on_hands', Math.min(used + 1, totalPoints))}
-          onRestore={() => onUpdateResource('used_lay_on_hands', Math.max(0, used - 1))}
-          onUpdateTotal={() => { /* no-op: total auto */ }}
-          color="yellow"
-          useNumericInput
-          hideEdit
-          onGlobalPulse={onPulseScreen}
-          onUpdateUsed={(v) => {
-            const clamped = Math.min(Math.max(0, v), totalPoints);
-            onUpdateResource('used_lay_on_hands', clamped);
-          }}
-        />
-      );
-
-      // Conduits divins (N3+) — total calculé → pas d’édition
-      if (lvl >= 3) {
-        const cap = lvl >= 11 ? 3 : 2;
-        const usedCd = resources.used_channel_divinity || 0;
+    case 'Paladin':
+      if (typeof resources.lay_on_hands === 'number') {
         items.push(
           <ResourceBlock
-            key="paladin_channel_divinity"
-            icon={<Cross size={20} />}
-            label="Conduits divins"
-            total={cap}
-            used={usedCd}
-            onUse={() => onUpdateResource('used_channel_divinity', Math.min(usedCd + 1, cap))}
-            onUpdateTotal={() => { /* cap calculé par niveau -> non éditable */ }}
-            onRestore={() => onUpdateResource('used_channel_divinity', Math.max(0, usedCd - 1))}
+            key="lay_on_hands"
+            icon={<HandHeart size={20} />}
+            label="Imposition des mains"
+            total={resources.lay_on_hands}
+            used={resources.used_lay_on_hands || 0}
+            onUpdateTotal={(n) => onUpdateResource('lay_on_hands', n)}
+            onUpdateUsed={(v) => onUpdateResource('used_lay_on_hands', v)}
             color="yellow"
-            hideEdit
-            onGlobalPulse={onPulseScreen}
+            useNumericInput
           />
         );
       }
       break;
-    }
 
     case 'Rôdeur':
       if (typeof resources.favored_foe === 'number') {
@@ -1470,7 +1264,6 @@ function ClassResourcesCard({
             onUpdateTotal={(n) => onUpdateResource('favored_foe', n)}
             onRestore={() => onUpdateResource('used_favored_foe', Math.max(0, (resources.used_favored_foe || 0) - 1))}
             color="green"
-            onGlobalPulse={onPulseScreen}
           />
         );
       }
@@ -1479,16 +1272,15 @@ function ClassResourcesCard({
     case 'Roublard':
       if (resources.sneak_attack) {
         items.push(
-          <div
-            key="sneak_attack"
-            className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3"
-          >
+          <div key="sneak_attack" className="resource-block bg-gradient-to-br from-gray-800/50 to-gray-900/30 border border-gray-700/30 rounded-lg p-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Skull size={20} className="text-red-500" />
                 <span className="text-sm font-medium text-gray-300">Attaque sournoise</span>
               </div>
-              <div className="text-sm text-gray-400 bg-gray-800/50 px-3 py-1 rounded-md">{resources.sneak_attack}</div>
+              <div className="text-sm text-gray-400 bg-gray-800/50 px-3 py-1 rounded-md">
+                {resources.sneak_attack}
+              </div>
             </div>
           </div>
         );
@@ -1511,45 +1303,3 @@ function ClassResourcesCard({
 
 export default ClassesTab;
 export { ClassesTab };
-
-/* ===========================================================
-   Helpers spécifiques – init ressources par classe
-   =========================================================== */
-
-function buildDefaultsForClass(cls: string, level: number, player?: PlayerLike | any): Partial<ClassResources> {
-  switch (cls) {
-    case 'Barbare':
-      return { rage: Math.min(6, Math.floor((level + 3) / 4) + 2), used_rage: 0 };
-    case 'Barde':
-      return { used_bardic_inspiration: 0 };
-    case 'Clerc':
-      return { channel_divinity: level >= 6 ? 2 : 1, used_channel_divinity: 0 };
-    case 'Druide':
-      return { wild_shape: 2, used_wild_shape: 0 };
-    case 'Ensorceleur':
-      return { sorcery_points: level, used_sorcery_points: 0 };
-    case 'Guerrier':
-      return { action_surge: level >= 17 ? 2 : 1, used_action_surge: 0 };
-    case 'Magicien':
-      return { arcane_recovery: true, used_arcane_recovery: false };
-    case 'Moine':
-      return { credo_points: level, used_credo_points: 0, ki_points: level, used_ki_points: 0 } as any;
-    case 'Occultiste':
-      // Drapeau simple pour signaler Pact Magic (UI minimale)
-      return { pact_magic: true };
-    case 'Paladin': {
-      const base: any = { lay_on_hands: level * 5, used_lay_on_hands: 0 };
-      if (level >= 3) {
-        base.channel_divinity = level >= 11 ? 3 : 2;
-        base.used_channel_divinity = 0;
-      }
-      return base;
-    }
-    case 'Rôdeur':
-      return { favored_foe: Math.max(1, Math.floor((level + 3) / 4)), used_favored_foe: 0 };
-    case 'Roublard':
-      return { sneak_attack: `${Math.ceil(level / 2)}d6` };
-    default:
-      return {};
-  }
-}
