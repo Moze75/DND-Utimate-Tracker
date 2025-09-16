@@ -1181,7 +1181,7 @@ function ResourceBlock({
         </div>
       )}
 
-     }
+
     </div>
   );
 }
