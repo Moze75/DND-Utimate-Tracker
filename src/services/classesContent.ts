@@ -3,12 +3,15 @@
 
    Hypothèses & règles:
    - Structures de dépôts (Ultimate_Tracker):
-       RAW_BASE/Classes/<Classe>/(README.md|index.md|<Classe>.md|<ClasseTitle>.md)
-       RAW_BASE/Classes/<Classe>/Subclasses/(“Sous-classe - <Nom>.md” | “<Nom>.md” | dossier "<Nom>" contenant README.md/index.md)
+       RAW_BASE(S)/Classes/<Classe>/(README.md|index.md|<Classe>.md|<ClasseTitle>.md)
+       RAW_BASE(S)/Classes/<Classe>/(Subclasses|Sous-classes)/(
+         “Sous-classe - <Nom>.md” | “Sous–classe – <Nom>.md” | “<Nom>.md”
+         | dossier "<Nom>" contenant README.md/index.md
+       )
    - On tolère au maximum les variantes d'écriture (accents, apostrophes, casse) via normalisation + maps.
    - On crée des “sections” à partir des titres Markdown ###. Si un niveau (Niveau X / Niv. X / Level X) est détecté, il est saisi;
      sinon, on affecte level=0 (toujours affiché).
-   - Compat 2024: “Occultiste” remplace “Sorcier” (Warlock). Tout alias “Sorcier/Warlock” est mappé vers “Occultiste”.
+   - Compat 2024: “Occultiste” remplace “Sorcier” (Warlock) côté app; le parseur essaie les dossiers Occultiste/Sorcier/Warlock côté dépôt.
 */
 
 export type AbilitySection = {
@@ -26,8 +29,11 @@ export type ClassAndSubclassContent = {
   subclassSections: Record<string, AbilitySection[]>; // par sous-classe
 };
 
-const RAW_BASE =
-  "https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main/Classes";
+// Essaye d'abord files/Classes (nouvelle structure), puis Classes (historique)
+const RAW_BASES = [
+  "https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main/files/Classes",
+  "https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main/Classes",
+];
 
 /* ===========================================================
    Normalisation & helpers
@@ -124,13 +130,14 @@ const CLASS_NAME_MAP: Record<string, string> = {
   "thief": "Roublard",
 
   // 2024: Occultiste (Warlock) — compat anciens contenus “Sorcier”
+  // La valeur ici reste la dénomination App; la résolution vers un dossier dépôt
+  // se fait via getClassFolderNames pour essayer Occultiste et Sorcier.
   "occultiste": "Occultiste",
   "warlock": "Occultiste",
   "sorcier": "Occultiste",
 };
 
 // Sous-classes (fichier/dossier) — clés normalisées (minuscules, sans accents)
-// Cette table reprend une version étendue (proche de ta version longue) pour maximiser la résolution.
 const SUBCLASS_NAME_MAP: Record<string, string> = {
   /* ============================
    * Barbare – 2024
@@ -257,26 +264,6 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
   "school of illusion": "Illusionniste",
 
   /* ============================
-   * Moine – 2024
-   * ============================ */
-  "credo des elements": "Crédo des Éléments",
-  "warrior of the elements": "Crédo des Éléments",
-  "way of the four elements": "Crédo des Éléments",
-
-  "credo de la misericorde": "Crédo de la Miséricorde",
-  "way of mercy": "Crédo de la Miséricorde",
-
-  "credo de l ombre": "Crédo de l’Ombre",
-  "way of shadow": "Crédo de l’Ombre",
-  "shadow": "Crédo de l’Ombre",
-
-  "credo de la paume": "Crédo de la Paume",
-  "voie de la paume": "Crédo de la Paume",
-  "voie de la main ouverte": "Crédo de la Paume",
-  "way of the open hand": "Crédo de la Paume",
-  "open hand": "Crédo de la Paume",
-
-  /* ============================
    * Occultiste (Warlock) – 2024
    * ============================ */
   "options de manifestation occulte": "Options de Manifestation occulte",
@@ -360,21 +347,50 @@ function mapSubclassName(subclassName: string): string {
   return SUBCLASS_NAME_MAP[key] ?? titleCase(raw);
 }
 
+/**
+ * Donne la liste des noms de dossier possibles pour une classe dans le dépôt.
+ * - Par défaut: le nom mappé (ex: "Magicien").
+ * - Pour “Occultiste” (2024) on essaie aussi “Sorcier” (hist.) et “Warlock” par compat.
+ */
+function getClassFolderNames(appClassName: string): string[] {
+  const primary = mapClassName(appClassName); // nom app canonique mappé
+  const variants = [primary];
+
+  const key = lowerNoAccents(primary);
+  if (key === "occultiste") {
+    // ordre: Occultiste (si le repo a évolué) -> Sorcier (héritage FR) -> Warlock (rare)
+    variants.push("Sorcier", "Warlock");
+  }
+  return Array.from(new Set(variants));
+}
+
+/**
+ * Donne la liste des noms de dossier “Subclasses” possibles (EN/FR).
+ */
+function getSubclassDirNames(): string[] {
+  return ["Subclasses", "Sous-classes"];
+}
+
 /* ===========================================================
    Chargement markdown: classe et sous-classe
    =========================================================== */
 
 async function loadClassMarkdown(className: string): Promise<string | null> {
-  const c = mapClassName(className); // ex: "Ensorceleur"
-  const folder = urlJoin(RAW_BASE, c);
-  const cTitle = titleCase(c);
+  const classFolders = getClassFolderNames(className);
+  const candidates: string[] = [];
 
-  const candidates = [
-    urlJoin(folder, "README.md"),
-    urlJoin(folder, "index.md"),
-    urlJoin(folder, `${c}.md`),
-    urlJoin(folder, `${cTitle}.md`),
-  ];
+  for (const base of RAW_BASES) {
+    for (const c of classFolders) {
+      const folder = urlJoin(base, c);
+      const cTitle = titleCase(c);
+      candidates.push(
+        urlJoin(folder, "README.md"),
+        urlJoin(folder, "index.md"),
+        urlJoin(folder, `${c}.md`),
+        urlJoin(folder, `${cTitle}.md`),
+      );
+    }
+  }
   return fetchFirstExisting(candidates);
 }
 
@@ -382,58 +398,62 @@ async function loadSubclassMarkdown(
   className: string,
   subclassName: string
 ): Promise<string | null> {
-  const c = mapClassName(className);
+  const classFolders = getClassFolderNames(className);
   const sBase = mapSubclassName(subclassName); // ex: "Sorcellerie mécanique"
   const sTitle = titleCase(sBase);             // ex: "Sorcellerie Mécanique"
 
-  const baseSub = urlJoin(RAW_BASE, c, "Subclasses");
-
-  // 1) Fichier direct dans Subclasses (avec ou sans préfixe "Sous-classe - ")
   const dash = "-";
   const enDash = "–"; // \u2013
   const emDash = "—"; // \u2014
-  const directFileCandidates = [
-    urlJoin(baseSub, `Sous-classe ${dash} ${sBase}.md`),
-    urlJoin(baseSub, `Sous-classe ${dash} ${sTitle}.md`),
-    urlJoin(baseSub, `Sous-classe ${enDash} ${sBase}.md`),
-    urlJoin(baseSub, `Sous-classe ${enDash} ${sTitle}.md`),
-    urlJoin(baseSub, `Sous-classe ${emDash} ${sBase}.md`),
-    urlJoin(baseSub, `Sous-classe ${emDash} ${sTitle}.md`),
-    urlJoin(baseSub, `${sBase}.md`),
-    urlJoin(baseSub, `${sTitle}.md`),
-  ];
-  const direct = await fetchFirstExisting(directFileCandidates);
-  if (direct) return direct;
 
-  // 2) Dossier Subclasses/<Nom> + fichier interne (README/index/<Nom>.md)
-  const subFolderCandidates = [
-    urlJoin(baseSub, `Sous-classe ${dash} ${sBase}`),
-    urlJoin(baseSub, `Sous-classe ${dash} ${sTitle}`),
-    urlJoin(baseSub, `Sous-classe ${enDash} ${sBase}`),
-    urlJoin(baseSub, `Sous-classe ${enDash} ${sTitle}`),
-    urlJoin(baseSub, `Sous-classe ${emDash} ${sBase}`),
-    urlJoin(baseSub, `Sous-classe ${emDash} ${sTitle}`),
-    urlJoin(baseSub, sBase),
-    urlJoin(baseSub, sTitle),
-  ];
-  const fileCandidatesInside = ["README.md", "index.md", `${sBase}.md`, `${sTitle}.md`];
+  const candidates: string[] = [];
 
-  for (const subFolder of subFolderCandidates) {
-    const urls = fileCandidatesInside.map((f) => urlJoin(subFolder, f));
-    const text = await fetchFirstExisting(urls);
-    if (text) return text;
+  for (const base of RAW_BASES) {
+    for (const c of classFolders) {
+      for (const subdir of getSubclassDirNames()) {
+        const baseSub = urlJoin(base, c, subdir);
+
+        // 1) Fichier direct dans le dossier de sous-classes
+        candidates.push(
+          urlJoin(baseSub, `Sous-classe ${dash} ${sBase}.md`),
+          urlJoin(baseSub, `Sous-classe ${dash} ${sTitle}.md`),
+          urlJoin(baseSub, `Sous-classe ${enDash} ${sBase}.md`),
+          urlJoin(baseSub, `Sous-classe ${enDash} ${sTitle}.md`),
+          urlJoin(baseSub, `Sous-classe ${emDash} ${sBase}.md`),
+          urlJoin(baseSub, `Sous-classe ${emDash} ${sTitle}.md`),
+          urlJoin(baseSub, `${sBase}.md`),
+          urlJoin(baseSub, `${sTitle}.md`),
+        );
+
+        // 2) Dossier de sous-classe + fichier interne
+        const fileCandidatesInside = ["README.md", "index.md", `${sBase}.md`, `${sTitle}.md`];
+        const subFolderCandidates = [
+          `Sous-classe ${dash} ${sBase}`,
+          `Sous-classe ${dash} ${sTitle}`,
+          `Sous-classe ${enDash} ${sBase}`,
+          `Sous-classe ${enDash} ${sTitle}`,
+          `Sous-classe ${emDash} ${sBase}`,
+          `Sous-classe ${emDash} ${sTitle}`,
+          sBase,
+          sTitle,
+        ];
+        for (const subFolder of subFolderCandidates) {
+          for (const f of fileCandidatesInside) {
+            candidates.push(urlJoin(baseSub, subFolder, f));
+          }
+        }
+      }
+
+      // 3) FALLBACK: certains contenus “options …” sont parfois à la racine de la classe
+      const classFolderFallback = urlJoin(base, c);
+      candidates.push(
+        urlJoin(classFolderFallback, `${sBase}.md`),
+        urlJoin(classFolderFallback, `${sTitle}.md`),
+      );
+    }
   }
 
-  // 3) FALLBACK: certains contenus “options …” peuvent être à la racine de la classe
-  const classFolderFallback = urlJoin(RAW_BASE, c);
-  const classLevelFiles = [
-    urlJoin(classFolderFallback, `${sBase}.md`),
-    urlJoin(classFolderFallback, `${sTitle}.md`),
-  ];
-  const fallbackText = await fetchFirstExisting(classLevelFiles);
-  if (fallbackText) return fallbackText;
-
-  return null;
+  return fetchFirstExisting(candidates);
 }
 
 /* ===========================================================
@@ -558,33 +578,73 @@ export function canonicalizeSubclassName(classCanonical: string, input?: string 
 }
 
 export async function loadClassSections(inputClass: string): Promise<AbilitySection[]> {
-  const md = await getTextWithCache([
-    urlJoin(RAW_BASE, canonicalizeClassName(inputClass), "README.md"),
-    urlJoin(RAW_BASE, canonicalizeClassName(inputClass), "index.md"),
-    urlJoin(RAW_BASE, canonicalizeClassName(inputClass), `${canonicalizeClassName(inputClass)}.md`),
-    urlJoin(RAW_BASE, canonicalizeClassName(inputClass), `${titleCase(canonicalizeClassName(inputClass))}.md`),
-  ]);
+  const classFolders = getClassFolderNames(inputClass);
+  const candidates: string[] = [];
+
+  for (const base of RAW_BASES) {
+    for (const c of classFolders) {
+      const folder = urlJoin(base, c);
+      const cTitle = titleCase(c);
+      candidates.push(
+        urlJoin(folder, "README.md"),
+        urlJoin(folder, "index.md"),
+        urlJoin(folder, `${c}.md`),
+        urlJoin(folder, `${cTitle}.md`),
+      );
+    }
+  }
+
+  const md = await getTextWithCache(candidates);
   if (!md) return [];
   return parseMarkdownToSections(md, "class");
 }
 
 export async function loadSubclassSections(inputClass: string, inputSubclass: string): Promise<AbilitySection[]> {
-  const classCanonical = canonicalizeClassName(inputClass);
-  const subclassCanonical = canonicalizeSubclassName(classCanonical, inputSubclass);
+  const classFolders = getClassFolderNames(inputClass);
+  const subclassCanonical = canonicalizeSubclassName(mapClassName(inputClass), inputSubclass);
 
-  const urls = [
-    // Fichiers directs
-    urlJoin(RAW_BASE, classCanonical, "Subclasses", `Sous-classe - ${subclassCanonical}.md`),
-    urlJoin(RAW_BASE, classCanonical, "Subclasses", `${subclassCanonical}.md`),
-    // Dossiers
-    urlJoin(RAW_BASE, classCanonical, "Subclasses", subclassCanonical, "README.md"),
-    urlJoin(RAW_BASE, classCanonical, "Subclasses", subclassCanonical, "index.md"),
-    urlJoin(RAW_BASE, classCanonical, "Subclasses", subclassCanonical, `${subclassCanonical}.md`),
-    // FallBack: parfois à la racine de la classe
-    urlJoin(RAW_BASE, classCanonical, `${subclassCanonical}.md`),
-  ];
+  const dash = "-";
+  const enDash = "–";
+  const emDash = "—";
 
-  const md = await getTextWithCache(urls);
+  const candidates: string[] = [];
+
+  for (const base of RAW_BASES) {
+    for (const c of classFolders) {
+      for (const subdir of getSubclassDirNames()) {
+        const baseSub = urlJoin(base, c, subdir);
+
+        // Fichiers directs
+        candidates.push(
+          urlJoin(baseSub, `Sous-classe ${dash} ${subclassCanonical}.md`),
+          urlJoin(baseSub, `Sous-classe ${enDash} ${subclassCanonical}.md`),
+          urlJoin(baseSub, `Sous-classe ${emDash} ${subclassCanonical}.md`),
+          urlJoin(baseSub, `${subclassCanonical}.md`),
+        );
+
+        // Dossiers
+        candidates.push(
+          urlJoin(baseSub, `Sous-classe ${dash} ${subclassCanonical}`, "README.md"),
+          urlJoin(baseSub, `Sous-classe ${dash} ${subclassCanonical}`, "index.md"),
+          urlJoin(baseSub, `Sous-classe ${enDash} ${subclassCanonical}`, "README.md"),
+          urlJoin(baseSub, `Sous-classe ${enDash} ${subclassCanonical}`, "index.md"),
+          urlJoin(baseSub, `Sous-classe ${emDash} ${subclassCanonical}`, "README.md"),
+          urlJoin(baseSub, `Sous-classe ${emDash} ${subclassCanonical}`, "index.md"),
+          urlJoin(baseSub, subclassCanonical, "README.md"),
+          urlJoin(baseSub, subclassCanonical, "index.md"),
+          urlJoin(baseSub, subclassCanonical, `${subclassCanonical}.md`),
+        );
+      }
+
+      // Fallback à la racine de la classe
+      const classFolder = urlJoin(base, c);
+      candidates.push(
+        urlJoin(classFolder, `${subclassCanonical}.md`)
+      );
+    }
+  }
+
+  const md = await getTextWithCache(candidates);
   if (!md) return [];
   return parseMarkdownToSections(md, "subclass");
 }
