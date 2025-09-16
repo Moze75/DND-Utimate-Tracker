@@ -1,19 +1,26 @@
-export type DndClass = 
-  | ''
-  | 'Barbare' 
-  | 'Barde' 
-  | 'Clerc' 
-  | 'Druide' 
-  | 'Ensorceleur' 
-  | 'Guerrier' 
-  | 'Magicien' 
-  | 'Moine' 
-  | 'Paladin' 
-  | 'Rôdeur' 
-  | 'Roublard' 
-  | 'Sorcier';
+// Types D&D centralisés
 
-export type PlayerBackground = 
+// IMPORTANT — Compatibilité classes
+// - Ajout de "Occultiste" (Warlock) conformément aux règles 2024.
+// - On conserve "Sorcier" temporairement pour compatibilité avec des données existantes.
+//   Idéalement, migrez vos données vers "Occultiste" puis retirez "Sorcier".
+export type DndClass =
+  | ''
+  | 'Barbare'
+  | 'Barde'
+  | 'Clerc'
+  | 'Druide'
+  | 'Ensorceleur'
+  | 'Guerrier'
+  | 'Magicien'
+  | 'Moine'
+  | 'Paladin'
+  | 'Rôdeur'
+  | 'Roublard'
+  | 'Occultiste'
+  | 'Sorcier'; // legacy alias (Warlock) — à migrer vers "Occultiste"
+
+export type PlayerBackground =
   | ''
   | 'Acolyte'
   | 'Artisan de guilde'
@@ -51,27 +58,50 @@ export interface SpellSlots {
 }
 
 export interface ClassResources {
+  // Barbare
   rage?: number;
   used_rage?: number;
-  bardic_inspiration?: number;
+
+  // Barde
+  bardic_inspiration?: number; // total (calculé dynamiquement côté app)
   used_bardic_inspiration?: number;
+
+  // Clerc & Paladin (conduits divins)
   channel_divinity?: number;
   used_channel_divinity?: number;
+
+  // Druide
   wild_shape?: number;
   used_wild_shape?: number;
+
+  // Ensorceleur
   sorcery_points?: number;
   used_sorcery_points?: number;
+
+  // Guerrier
   action_surge?: number;
   used_action_surge?: number;
+
+  // Magicien
   arcane_recovery?: boolean;
   used_arcane_recovery?: boolean;
+
+  // Moine (double clé pour compat : credo/ki)
   credo_points?: number;
   used_credo_points?: number;
+
+  // Paladin
   lay_on_hands?: number;
   used_lay_on_hands?: number;
+
+  // Rôdeur
   favored_foe?: number;
   used_favored_foe?: number;
+
+  // Roublard
   sneak_attack?: string;
+
+  // Occultiste (Warlock)
   pact_magic?: boolean;
 }
 
@@ -97,6 +127,7 @@ export interface Ability {
   }[];
 }
 
+// Attaque — unifiée (inclut munitions facultatives)
 export interface Attack {
   id: string;
   player_id: string;
@@ -111,11 +142,16 @@ export interface Attack {
   manual_damage_bonus?: number | null;
   attack_type?: 'physical' | 'spell';
   spell_level?: number | null;
+
+  // Munitions (optionnelles)
+  ammo_type?: string | null;
+  ammo_count?: number | null;
 }
 
 export interface Player {
   id: string;
   user_id?: string | null;
+
   equipment?: {
     armor?: { name: string; description: string } | null;
     weapon?: { name: string; description: string } | null;
@@ -123,9 +159,11 @@ export interface Player {
     potion?: { name: string; description: string } | null;
     jewelry?: { name: string; description: string } | null;
   };
+
   name: string;
   adventurer_name?: string | null;
   avatar_url?: string | null;
+
   race?: string | null;
   subclass?: string | null;
   background?: PlayerBackground | null;
@@ -134,28 +172,39 @@ export interface Player {
   age?: string | null;
   gender?: string | null;
   character_history?: string | null;
+
   avatar_position?: { x: number; y: number } | null;
   avatar_zoom?: number | null;
+
   class?: DndClass | null;
   level: number;
+
   max_hp: number;
   current_hp: number;
   temporary_hp: number;
+
   spell_slots?: SpellSlots | null;
   class_resources?: ClassResources | null;
+
   gold: number;
   silver: number;
   copper: number;
+
   created_at: string;
+
   stats: PlayerStats;
   abilities?: Ability[];
+
   is_gm?: boolean;
+
   hit_dice?: {
     total: number;
     used: number;
   };
+
   is_concentrating?: boolean;
   concentration_spell?: string;
+
   active_conditions?: string[];
 }
 
@@ -172,23 +221,4 @@ export interface InventoryItem {
   name: string;
   description?: string | null;
   created_at: string;
-
-  export interface Attack {
-  id: string;
-  player_id: string;
-  name: string;
-  damage_dice: string;
-  damage_type: string;
-  range: string;
-  properties?: string;
-  expertise: boolean;
-  created_at: string;
-  manual_attack_bonus?: number | null;
-  manual_damage_bonus?: number | null;
-  attack_type?: 'physical' | 'spell';
-  spell_level?: number | null;
-
-  // Nouveau: munitions
-  ammo_type?: string | null;
-  ammo_count?: number | null;
 }
