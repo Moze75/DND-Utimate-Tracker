@@ -22,9 +22,8 @@ const DEBUG: boolean =
   typeof window !== "undefined" && (window as any).UT_DEBUG === true;
 
 /* ===========================================================
-   Bases RAW — d’abord la structure réellement présente
+   Bases RAW — structure réelle du dépôt
    =========================================================== */
-// D’abord “Classes” (structure réelle), puis fallback “master”
 const RAW_BASES = [
   "https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main/Classes",
   "https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/master/Classes",
@@ -43,8 +42,11 @@ function lowerNoAccents(s: string): string {
 function normalizeName(name: string): string {
   return (name || "").trim();
 }
+function normalizeApos(s: string): string {
+  return (s || "").replace(/[’]/g, "'");
+}
 function titleCaseFrench(input: string): string {
-  // TitleCase “fr” avec petits mots conservés en minuscule
+  // TitleCase fr avec petits mots conservés en minuscule
   const small = new Set(["de", "des", "du", "la", "le", "les", "et", "d'", "l'"]);
   return (input || "")
     .trim()
@@ -58,11 +60,14 @@ function titleCaseFrench(input: string): string {
     })
     .join("");
 }
+function sentenceCaseFrench(input: string): string {
+  // Premier mot capitalisé, reste en minuscule (utile pour “Collège du savoir”, “Credo de la paume”)
+  const s = (input || "").trim().toLowerCase();
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 function stripParentheses(s: string): string {
   return (s || "").replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s{2,}/g, " ").trim();
-}
-function normalizeApos(s: string): string {
-  return (s || "").replace(/[’]/g, "'");
 }
 function uniq<T>(arr: T[]): T[] {
   return Array.from(new Set(arr));
@@ -107,7 +112,6 @@ async function fetchFirstExisting(urls: string[], dbgLabel?: string): Promise<st
   }
   for (const url of urls) {
     try {
-      // Éviter les 404 répétées (StrictMode, rerenders)
       if (negativeHas(url)) {
         if (DEBUG) console.debug("[classesContent] skip known 404:", url);
         continue;
@@ -123,7 +127,6 @@ async function fetchFirstExisting(urls: string[], dbgLabel?: string): Promise<st
         if (DEBUG) console.debug("[classesContent] OK:", url);
         return txt;
       } else {
-        // mémoriser 404 (et autres non-OK) pour réduire le bruit
         negativeSet(url);
         if (DEBUG) console.debug("[classesContent] not OK:", res.status, url);
       }
@@ -182,13 +185,16 @@ const CLASS_NAME_MAP: Record<string, string> = {
   "voleur": "Roublard",
   "thief": "Roublard",
 
+  // 2024: Occultiste (Warlock) — résolution dossiers via getClassFolderNames
   "occultiste": "Occultiste",
   "warlock": "Occultiste",
   "sorcier": "Occultiste",
 };
 
+// On garde une table minimale et on s’appuie surtout sur les variantes générées.
+// Ajoute ici si tu veux forcer des renommages officiels.
 const SUBCLASS_NAME_MAP: Record<string, string> = {
-  // Paladin — casse exacte “Serment de dévotion” (dévotion en minuscule dans le dépôt)
+  // Paladin — casse exacte dans le dépôt
   "serment des anciens": "Serment des Anciens",
   "oath of the ancients": "Serment des Anciens",
 
@@ -198,11 +204,8 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
 
   "serment de vengeance": "Serment de Vengeance",
   "oath of vengeance": "Serment de Vengeance",
-
   "serment de gloire": "Serment de Gloire",
   "oath of glory": "Serment de Gloire",
-
-  // … compléter ici si d’autres sous-classes posent souci
 };
 
 function canonicalizeClassName(input?: string | null): string {
@@ -217,38 +220,64 @@ function canonicalizeSubclassName(_classCanonical: string, input?: string | null
 
 /**
  * Dossiers possibles pour une classe dans le dépôt.
- * Pour “Occultiste” on essaie aussi “Sorcier” et “Warlock” (compat).
+ * - nom canonique
+ * - variante sans accents (ex: Rôdeur -> Rodeur)
+ * - “Sorcier” et “Warlock” en plus pour Occultiste
  */
 function getClassFolderNames(appClassName: string): string[] {
   const primary = canonicalizeClassName(appClassName);
   const variants = [primary];
+
   const k = lowerNoAccents(primary);
   if (k === "occultiste") variants.push("Sorcier", "Warlock");
+
+  // Ajouter une variante sans accents pour tous (utile si certains dossiers n’ont pas d’accents)
+  variants.push(stripDiacritics(primary));
+
   return uniq(variants);
 }
 
 /**
- * Dossiers possibles pour les sous-classes — d’abord Subclasses (réel dans le dépôt)
+ * Dossiers possibles pour les sous-classes — “Subclasses” en premier (structure réelle),
+ * garder d’autres variantes par tolérance.
  */
 function getSubclassDirNames(): string[] {
   return ["Subclasses", "Sous-classes", "Sous classes", "SousClasses", "SubClasses", "Sous_Classes"];
 }
 
 /**
- * Variantes robustes pour un nom de sous-classe (préserve accents, varie la casse utile).
+ * Variantes robustes pour un nom de sous-classe:
+ * - base d’entrée, TitleCase fr, tout en minuscule, “Phrase” (premier mot cap),
+ * - sans parenthèses, apostrophes normalisées,
+ * - chaque variante déclinée aussi en “sans accents”.
  */
 function buildSubclassNameVariants(name: string): string[] {
   const base = normalizeName(name);
   const lower = base.toLowerCase();
   const tFr = titleCaseFrench(base);
+  const sent = sentenceCaseFrench(base);
   const noParen = stripParentheses(base);
+  const noParenLower = noParen.toLowerCase();
   const noParenT = titleCaseFrench(noParen);
+  const noParenSent = sentenceCaseFrench(noParen);
   const apos = normalizeApos(base);
+  const aposLower = apos.toLowerCase();
   const aposT = titleCaseFrench(apos);
-  // Variante avec D majuscule pour "Dévotion" au cas où
-  const altDevotion = base.replace(/(de)\s+(d[ée]votion)/i, "de Dévotion");
+  const aposSent = sentenceCaseFrench(apos);
 
-  return uniq([base, lower, tFr, noParen, noParenT, apos, aposT, altDevotion]);
+  const withAccents = [
+    base, lower, tFr, sent,
+    noParen, noParenLower, noParenT, noParenSent,
+    apos, aposLower, aposT, aposSent,
+  ];
+
+  const noAccents = withAccents.map(stripDiacritics);
+
+  // Cas particulier: “... de dévotion” -> forcer aussi “... de Dévotion”
+  const altDev = (s: string) => s.replace(/(de)\s+(d[ée]votion)/i, "de Dévotion");
+  const withAltDev = uniq([...withAccents, ...withAccents.map(altDev)]);
+
+  return uniq([...withAltDev, ...noAccents, ...noAccents.map(altDev)]);
 }
 
 /* ===========================================================
@@ -263,12 +292,10 @@ async function loadClassMarkdown(className: string): Promise<string | null> {
     for (const c of classFolders) {
       const folder = urlJoin(base, c);
 
-      // IMPORTANT: essayer d’abord <Classe>/<Classe>.md (structure réelle)
-      candidates.push(
-        urlJoin(folder, `${c}.md`), // ex: Paladin/Paladin.md
-      );
+      // 1) Chemin réel observé
+      candidates.push(urlJoin(folder, `${c}.md`)); // ex: Paladin/Paladin.md
 
-      // Fallbacks classiques, placés après pour éviter 404 inutiles
+      // 2) Fallbacks classiques
       candidates.push(
         urlJoin(folder, "README.md"),
         urlJoin(folder, "index.md"),
@@ -298,17 +325,17 @@ async function loadSubclassMarkdown(className: string, subclassName: string): Pr
       for (const subdir of subdirs) {
         const baseSub = urlJoin(base, c, subdir);
 
-        // 1) Fichier direct — ESSAYER D’ABORD LE FORMAT OBSERVÉ
+        // 1) Fichiers directs — d’abord le format observé
         for (const nm of nameVariants) {
           candidates.push(
-            urlJoin(baseSub, `${bestPrefix} ${dash} ${nm}.md`),   // Sous-classe - <Nom>.md
-            urlJoin(baseSub, `${bestPrefix} ${enDash} ${nm}.md`), // Sous-classe – <Nom>.md
-            urlJoin(baseSub, `${bestPrefix} ${emDash} ${nm}.md`), // Sous-classe — <Nom>.md
-            urlJoin(baseSub, `${nm}.md`),                         // <Nom>.md
+            urlJoin(baseSub, `${bestPrefix} ${dash} ${nm}.md`),
+            urlJoin(baseSub, `${bestPrefix} ${enDash} ${nm}.md`),
+            urlJoin(baseSub, `${bestPrefix} ${emDash} ${nm}.md`),
+            urlJoin(baseSub, `${nm}.md`),
           );
         }
 
-        // 2) Autres préfixes éventuels (moins probables)
+        // 2) Autres préfixes (moins probables)
         for (const nm of nameVariants) {
           for (const p of extraPrefixes) {
             candidates.push(
@@ -329,19 +356,15 @@ async function loadSubclassMarkdown(className: string, subclassName: string): Pr
             `${bestPrefix} ${emDash} ${nm}`,
           ]);
           for (const sf of subFolderVariants) {
-            for (const f of inside) {
-              candidates.push(urlJoin(baseSub, sf, f));
-            }
+            for (const f of inside) candidates.push(urlJoin(baseSub, sf, f));
             candidates.push(urlJoin(baseSub, nm, `${nm}.md`)); // <Nom>/<Nom>.md
           }
         }
       }
 
-      // 4) Fallback: parfois à la racine de la classe
+      // 4) Fallback: racine de la classe
       const classFolder = urlJoin(base, c);
-      for (const nm of nameVariants) {
-        candidates.push(urlJoin(classFolder, `${nm}.md`));
-      }
+      for (const nm of nameVariants) candidates.push(urlJoin(classFolder, `${nm}.md`));
     }
   }
 
@@ -426,9 +449,11 @@ function parseMarkdownToSections(md: string, origin: "class" | "subclass"): Abil
    =========================================================== */
 
 export async function loadClassSections(inputClass: string): Promise<AbilitySection[]> {
+  const classFolders = getClassFolderNames(inputClass);
   const candidates: string[] = [];
+
   for (const base of RAW_BASES) {
-    for (const c of getClassFolderNames(inputClass)) {
+    for (const c of classFolders) {
       const folder = urlJoin(base, c);
       // Essayer d’abord <Classe>/<Classe>.md (réel)
       candidates.push(urlJoin(folder, `${c}.md`));
