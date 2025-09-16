@@ -302,7 +302,7 @@ function SpellCard({
             e.stopPropagation();
             onTogglePrepared(spell.id, spell.is_prepared);
           }}
-          className={`w-6 h-6 rounded-lg ${spell.is_prepared ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-gray-700/50 text-gray-400 hover:bg-gray-600/50'} flex items-center justify-center transition-colors`}
+          className={`w-6 h-6 rounded-lg ${spell.is_prepared ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-gray-700/50 text-gray-400 hover:bg-gray-600/50'} flex items-center justify-center`}
           title={spell.is_prepared ? 'Dépréparer' : 'Préparer'}
         >
           <Check size={16} />
@@ -530,7 +530,7 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
     }, {} as Record<string, KnownSpell[]>);
   }, [filteredSpells]);
 
-  // DD des sorts + Bonus d'attaque des sorts
+  // DD des sorts
   const spellcastingAbilityName = useMemo(
     () => getSpellcastingAbilityName(player.class as any),
     [player.class]
@@ -547,10 +547,6 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
   );
   const spellSaveDC = useMemo(
     () => (spellcastingAbilityName ? 8 + proficiencyBonus + abilityMod : null),
-    [spellcastingAbilityName, proficiencyBonus, abilityMod]
-  );
-  const spellAttackBonus = useMemo(
-    () => (spellcastingAbilityName ? proficiencyBonus + abilityMod : null),
     [spellcastingAbilityName, proficiencyBonus, abilityMod]
   );
 
@@ -598,11 +594,6 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
                 DD des sorts: {spellSaveDC}
               </p>
             )}
-            {spellAttackBonus !== null && (
-              <p className="text-sm text-purple-300">
-                Bonus d'attaque : {spellAttackBonus >= 0 ? '+' : ''}{spellAttackBonus}
-              </p>
-            )}
             {preparedCount > 0 && (
               <p className="text-sm text-green-400">
                 {preparedCount} préparé{preparedCount > 1 ? 's' : ''}
@@ -612,7 +603,7 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
         </div>
         <button
           onClick={() => setShowSpellbook(true)}
-          className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-3 py-1.5 rounded-lg font-medium transition-all duration-200 shadow-lg shadow-blue-900/20 flex items-center gap-2"
+          className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-3 py-1.5 rounded-lg font-medium transition-all duration-200 shadow-lg shadow-blue-900/20 hover:shadow-blue-900/40 flex items-center gap-2 hover:scale-105 active:scale-95"
         >
           <Plus size={16} />
           Ajouter
