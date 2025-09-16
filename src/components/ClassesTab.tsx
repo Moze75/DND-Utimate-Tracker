@@ -89,50 +89,49 @@ const SUBCLASS_ALIASES: Record<string, string[]> = {
   /* ============================
    * Barbare – 2024
    * ============================ */
-  'voie de l arbre monde': [
-    'Voie de l’Arbre-Monde',
-    'Voie de l Arbre Monde',
-    'Path of the World Tree',
-    'World Tree',
-    'World-Tree',
-  ],
+
+    'voie de l arbre monde': ['Voie de l’Arbre-Monde', 'Voie de l Arbre Monde', 'Path of the World Tree'],
   'voie du berserker': ['Voie du Berserker', 'Berserker', 'Path of the Berserker'],
-  'voie du coeur sauvage': ['Voie du Cœur sauvage', 'Voie du Coeur sauvage', 'Path of the Wild Heart', 'Wild Heart'],
-  'voie du zelateur': ['Voie du Zélateur', 'Voie du Zelateur', 'Path of the Zealot', 'Zealot'],
+  'voie du coeur sauvage': ['Voie du Cœur sauvage', 'Voie du Coeur sauvage', 'Path of the Wild Heart'],
+  'voie du zelateur': ['Voie du Zélateur', 'Voie du Zelateur', 'Path of the Zealot'],
 
   /* ============================
    * Barde – 2024
    * ============================ */
+  
   'college de la danse': ['Collège de la Danse', 'College de la Danse', 'College of Dance'],
   'college du savoir': ['Collège du Savoir', 'College du savoir', 'College of Lore', 'Lore'],
-  'college de la seduction': ['Collège de la Séduction', 'College de la Seduction', 'College of Glamour', 'Glamour'],
-  'college de la vaillance': ['Collège de la Vaillance', 'College de la Vaillance', 'College of Valor', 'Valor'],
+  'college de la seduction': ['Collège de la Séduction', 'College de la Seduction', 'College of     Glamour', 'Glamour'],
+  'college de la vaillance': ['Collège de la Vaillance', 'College de la Vaillance', 'College of   Valor', 'Valor'],
+
 
   /* ============================
    * Clerc – 2024
    * ============================ */
-  'domaine de la guerre': ['Domaine de la Guerre', 'War Domain'],
+'domaine de la guerre': ['Domaine de la Guerre', 'War Domain'],
   'domaine de la lumiere': ['Domaine de la Lumière', 'Light Domain'],
   'domaine de la ruse': ['Domaine de la Ruse', 'Trickery Domain'],
   'domaine de la vie': ['Domaine de la Vie', 'Life Domain'],
 
+
   /* ============================
    * Druide – 2024
    * ============================ */
-  'cercle des astres': ['Cercle des Astres', 'Circle of Stars', 'Stars'],
+'cercle des astres': ['Cercle des Astres', 'Circle of Stars', 'Stars'],
   'cercle de la lune': ['Cercle de la Lune', 'Circle of the Moon', 'Moon'],
   'cercle des mers': ['Cercle des Mers', 'Circle of the Sea', 'Sea'],
   'cercle de la terre': ['Cercle de la Terre', 'Circle of the Land', 'Land'],
+
 
   /* ============================
    * Ensorceleur – 2024
    * (Les "Options de Métamagie" ne sont pas une sous-classe mais un regroupement)
    * ============================ */
-  'options de metamagie': ['Options de Métamagie', 'Metamagic Options', 'Metamagie'],
-  'sorcellerie aberrante': ['Sorcellerie aberrante', 'Aberrant Sorcery', 'Aberrant Mind'],
-  'sorcellerie arcanique': ['Sorcellerie arcanique', 'Arcane Sorcery', 'Arcane'],
+ 'sorcellerie aberrante': ['Sorcellerie aberrante', 'Aberrant Sorcery', 'Aberrant Mind'],
+  'sorcellerie draconique': ['Sorcellerie draconique', 'Draconic Sorcery', 'Draconic Bloodline'],
   'sorcellerie mecanique': ['Sorcellerie mécanique', 'Clockwork Sorcery', 'Clockwork Soul'],
   'sorcellerie sauvage': ['Sorcellerie sauvage', 'Wild Magic', 'Wild Sorcery'],
+
 
   /* ============================
    * Guerrier – 2024
@@ -142,53 +141,42 @@ const SUBCLASS_ALIASES: Record<string, string[]> = {
   'maitre de guerre': ['Maître de guerre', 'Maitre de guerre', 'Battle Master', 'Battlemaster'],
   'soldat psi': ['Soldat psi', 'Psi Warrior', 'Psychic Warrior'],
 
+
   /* ============================
    * Magicien – 2024
    * ============================ */
-  abjurateur: ['Abjurateur', 'Abjuration', 'School of Abjuration'],
+ abjurateur: ['Abjurateur', 'Abjuration', 'School of Abjuration'],
+  devin: ['Devin', 'Divination', 'School of Divination'],
   evocation: ['Évocation', 'Evocation', 'School of Evocation'],
   illusionniste: ['Illusionniste', 'Illusion', 'School of Illusion'],
 
   /* ============================
    * Moine – 2024
    * ============================ */
-  'credo des elements': [
-    'Crédo des Éléments',
-    'Credo des Elements',
-    'Way of the Four Elements',
-    'Warrior of the Elements',
-  ],
+'credo des elements': ['Crédo des Éléments', 'Credo des Elements', 'Way of the Four Elements'],
   'credo de la misericorde': ['Crédo de la Miséricorde', 'Credo de la Misericorde', 'Way of Mercy'],
   'credo de l ombre': ['Crédo de l’Ombre', 'Credo de l Ombre', 'Way of Shadow', 'Shadow'],
-  'credo de la paume': [
-    'Crédo de la Paume',
-    'Credo de la Paume',
-    'Voie de la Paume',
-    'Voie de la Main Ouverte',
-    'Way of the Open Hand',
-    'Open Hand',
-  ],
+  'credo de la paume': ['Crédo de la Paume', 'Credo de la Paume', 'Crédo de la paume','Way of the Open Hand', 'Open Hand'],
+
 
   /* ============================
    * Occultiste (Warlock) – 2024
    * ============================ */
-  'options de manifestation occulte': [
-    'Options de Manifestation occulte',
-    'Eldritch Options',
-    'Eldritch Invocations (options)',
-  ],
-  'protecteur archange': ['Protecteur Archange', 'Archfey', 'The Archfey'],
+'protecteur archifee': ['Protecteur Archifée', 'Archfey', 'The Archfey'],
   'protecteur celeste': ['Protecteur Céleste', 'Celeste', 'The Celestial', 'Celestial'],
   'protecteur felon': ['Protecteur Félon', 'Protecteur Felon', 'The Fiend', 'Fiend'],
-  'protecteur grand ancien': ['Protecteur Grand Ancien', 'The Great Old One', 'Great Old One', 'Goo'],
+  'protecteur grand ancien': ['Protecteur Grand Ancien', 'The Great Old One', 'Great Old One'],
+
+  // Paladin
 
   /* ============================
    * Paladin – 2024
    * ============================ */
-  'serment des paladins': ['Serment des Paladins', 'Oath of the Paladins', 'Paladin Oath (core)'],
+  'serment de gloire': ['Serment de Gloire', 'Oath of Glory'],
   'serment des anciens': ['Serment des Anciens', 'Oath of the Ancients'],
   'serment de devotion': ['Serment de Dévotion', 'Serment de Devotion', 'Oath of Devotion'],
   'serment de vengeance': ['Serment de Vengeance', 'Oath of Vengeance'],
+
 
   /* ============================
    * Rôdeur – 2024
@@ -196,12 +184,12 @@ const SUBCLASS_ALIASES: Record<string, string[]> = {
   belluaire: ['Belluaire', 'Beast Master', 'Beastmaster'],
   chasseur: ['Chasseur', 'Hunter'],
   'traqueur des tenebres': ['Traqueur des ténèbres', 'Traqueur des tenebres', 'Gloom Stalker'],
-  'vagabond feerique': ['Vagabond féérique', 'Vagabond feerique', 'Fey Wanderer'],
+  'vagabond feerique': ['Vagabond féérique', 'Vagabond feerique', 'Fe
 
   /* ============================
    * Roublard – 2024
    * ============================ */
-  'ame aceree': ['Âme acérée', 'Ame aceree', 'Soulknife'],
+ 'ame aceree': ['Âme acérée', 'Ame aceree', 'Soulknife'],
   'arnaqueur arcanique': ['Arnaqueur arcanique', 'Arcane Trickster'],
   assassin: ['Assassin'],
   voleur: ['Voleur', 'Thief'],
