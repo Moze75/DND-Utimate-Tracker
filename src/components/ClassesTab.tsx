@@ -65,7 +65,7 @@ type Props = {
 const DEBUG = typeof window !== 'undefined' && (window as any).UT_DEBUG === true;
 
 /* ===========================================================
-   Aides noms / alias (aligné “règles 2024”
+   Aides noms / alias (aligné “règles 2024”)
    =========================================================== */
 
 const CLASS_ALIASES: Record<string, string[]> = {
@@ -89,49 +89,50 @@ const SUBCLASS_ALIASES: Record<string, string[]> = {
   /* ============================
    * Barbare – 2024
    * ============================ */
-
-    'voie de l arbre monde': ['Voie de l’Arbre-Monde', 'Voie de l Arbre Monde', 'Path of the World Tree'],
+  'voie de l arbre monde': [
+    'Voie de l’Arbre-Monde',
+    'Voie de l Arbre Monde',
+    'Path of the World Tree',
+    'World Tree',
+    'World-Tree',
+  ],
   'voie du berserker': ['Voie du Berserker', 'Berserker', 'Path of the Berserker'],
-  'voie du coeur sauvage': ['Voie du Cœur sauvage', 'Voie du Coeur sauvage', 'Path of the Wild Heart'],
-  'voie du zelateur': ['Voie du Zélateur', 'Voie du Zelateur', 'Path of the Zealot'],
+  'voie du coeur sauvage': ['Voie du Cœur sauvage', 'Voie du Coeur sauvage', 'Path of the Wild Heart', 'Wild Heart'],
+  'voie du zelateur': ['Voie du Zélateur', 'Voie du Zelateur', 'Path of the Zealot', 'Zealot'],
 
   /* ============================
    * Barde – 2024
    * ============================ */
-  
   'college de la danse': ['Collège de la Danse', 'College de la Danse', 'College of Dance'],
   'college du savoir': ['Collège du Savoir', 'College du savoir', 'College of Lore', 'Lore'],
-  'college de la seduction': ['Collège de la Séduction', 'College de la Seduction', 'College of     Glamour', 'Glamour'],
-  'college de la vaillance': ['Collège de la Vaillance', 'College de la Vaillance', 'College of   Valor', 'Valor'],
-
+  'college de la seduction': ['Collège de la Séduction', 'College de la Seduction', 'College of Glamour', 'Glamour'],
+  'college de la vaillance': ['Collège de la Vaillance', 'College de la Vaillance', 'College of Valor', 'Valor'],
 
   /* ============================
    * Clerc – 2024
    * ============================ */
-'domaine de la guerre': ['Domaine de la Guerre', 'War Domain'],
+  'domaine de la guerre': ['Domaine de la Guerre', 'War Domain'],
   'domaine de la lumiere': ['Domaine de la Lumière', 'Light Domain'],
   'domaine de la ruse': ['Domaine de la Ruse', 'Trickery Domain'],
   'domaine de la vie': ['Domaine de la Vie', 'Life Domain'],
 
-
   /* ============================
    * Druide – 2024
    * ============================ */
-'cercle des astres': ['Cercle des Astres', 'Circle of Stars', 'Stars'],
+  'cercle des astres': ['Cercle des Astres', 'Circle of Stars', 'Stars'],
   'cercle de la lune': ['Cercle de la Lune', 'Circle of the Moon', 'Moon'],
   'cercle des mers': ['Cercle des Mers', 'Circle of the Sea', 'Sea'],
   'cercle de la terre': ['Cercle de la Terre', 'Circle of the Land', 'Land'],
-
 
   /* ============================
    * Ensorceleur – 2024
    * (Les "Options de Métamagie" ne sont pas une sous-classe mais un regroupement)
    * ============================ */
- 'sorcellerie aberrante': ['Sorcellerie aberrante', 'Aberrant Sorcery', 'Aberrant Mind'],
-  'sorcellerie draconique': ['Sorcellerie draconique', 'Draconic Sorcery', 'Draconic Bloodline'],
+  'options de metamagie': ['Options de Métamagie', 'Metamagic Options', 'Metamagie'],
+  'sorcellerie aberrante': ['Sorcellerie aberrante', 'Aberrant Sorcery', 'Aberrant Mind'],
+  'sorcellerie arcanique': ['Sorcellerie arcanique', 'Arcane Sorcery', 'Arcane'],
   'sorcellerie mecanique': ['Sorcellerie mécanique', 'Clockwork Sorcery', 'Clockwork Soul'],
   'sorcellerie sauvage': ['Sorcellerie sauvage', 'Wild Magic', 'Wild Sorcery'],
-
 
   /* ============================
    * Guerrier – 2024
@@ -141,42 +142,53 @@ const SUBCLASS_ALIASES: Record<string, string[]> = {
   'maitre de guerre': ['Maître de guerre', 'Maitre de guerre', 'Battle Master', 'Battlemaster'],
   'soldat psi': ['Soldat psi', 'Psi Warrior', 'Psychic Warrior'],
 
-
   /* ============================
    * Magicien – 2024
    * ============================ */
- abjurateur: ['Abjurateur', 'Abjuration', 'School of Abjuration'],
-  devin: ['Devin', 'Divination', 'School of Divination'],
+  abjurateur: ['Abjurateur', 'Abjuration', 'School of Abjuration'],
   evocation: ['Évocation', 'Evocation', 'School of Evocation'],
   illusionniste: ['Illusionniste', 'Illusion', 'School of Illusion'],
 
   /* ============================
    * Moine – 2024
    * ============================ */
-'credo des elements': ['Crédo des Éléments', 'Credo des Elements', 'Way of the Four Elements'],
+  'credo des elements': [
+    'Crédo des Éléments',
+    'Credo des Elements',
+    'Way of the Four Elements',
+    'Warrior of the Elements',
+  ],
   'credo de la misericorde': ['Crédo de la Miséricorde', 'Credo de la Misericorde', 'Way of Mercy'],
   'credo de l ombre': ['Crédo de l’Ombre', 'Credo de l Ombre', 'Way of Shadow', 'Shadow'],
-  'credo de la paume': ['Crédo de la Paume', 'Credo de la Paume', 'Crédo de la paume','Way of the Open Hand', 'Open Hand'],
-
+  'credo de la paume': [
+    'Crédo de la Paume',
+    'Credo de la Paume',
+    'Voie de la Paume',
+    'Voie de la Main Ouverte',
+    'Way of the Open Hand',
+    'Open Hand',
+  ],
 
   /* ============================
    * Occultiste (Warlock) – 2024
    * ============================ */
-'protecteur archifee': ['Protecteur Archifée', 'Archfey', 'The Archfey'],
+  'options de manifestation occulte': [
+    'Options de Manifestation occulte',
+    'Eldritch Options',
+    'Eldritch Invocations (options)',
+  ],
+  'protecteur archange': ['Protecteur Archange', 'Archfey', 'The Archfey'],
   'protecteur celeste': ['Protecteur Céleste', 'Celeste', 'The Celestial', 'Celestial'],
   'protecteur felon': ['Protecteur Félon', 'Protecteur Felon', 'The Fiend', 'Fiend'],
-  'protecteur grand ancien': ['Protecteur Grand Ancien', 'The Great Old One', 'Great Old One'],
-
-  // Paladin
+  'protecteur grand ancien': ['Protecteur Grand Ancien', 'The Great Old One', 'Great Old One', 'Goo'],
 
   /* ============================
    * Paladin – 2024
    * ============================ */
-  'serment de gloire': ['Serment de Gloire', 'Oath of Glory'],
+  'serment des paladins': ['Serment des Paladins', 'Oath of the Paladins', 'Paladin Oath (core)'],
   'serment des anciens': ['Serment des Anciens', 'Oath of the Ancients'],
   'serment de devotion': ['Serment de Dévotion', 'Serment de Devotion', 'Oath of Devotion'],
   'serment de vengeance': ['Serment de Vengeance', 'Oath of Vengeance'],
-
 
   /* ============================
    * Rôdeur – 2024
@@ -189,7 +201,7 @@ const SUBCLASS_ALIASES: Record<string, string[]> = {
   /* ============================
    * Roublard – 2024
    * ============================ */
- 'ame aceree': ['Âme acérée', 'Ame aceree', 'Soulknife'],
+  'ame aceree': ['Âme acérée', 'Ame aceree', 'Soulknife'],
   'arnaqueur arcanique': ['Arnaqueur arcanique', 'Arcane Trickster'],
   assassin: ['Assassin'],
   voleur: ['Voleur', 'Thief'],
@@ -736,28 +748,16 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   ) {
     if (!player?.id) return;
 
-    // Totaux calculés automatiquement: bloquer leur édition
     if (resource === 'bardic_inspiration') {
       toast.error("Le total d'Inspiration bardique est calculé automatiquement (modificateur de Charisme).");
-      return;
-    }
-    if (resource === 'lay_on_hands') {
-      toast.error("Le total d'Imposition des mains est calculé automatiquement (5 × niveau de Paladin).");
       return;
     }
 
     const next: any = { ...(classResources || {}) };
 
-    // Barde: clamp used à [0..cap CHA]
     if (resource === 'used_bardic_inspiration' && typeof value === 'number') {
       const cap = Math.max(0, getChaModFromPlayerLike(player));
       next.used_bardic_inspiration = Math.min(Math.max(0, value), cap);
-    }
-    // Paladin: clamp used à [0..(5 × niveau)]
-    else if (resource === 'used_lay_on_hands' && typeof value === 'number') {
-      const lvl = Number(player?.level || 0);
-      const cap = Math.max(0, lvl * 5);
-      next.used_lay_on_hands = Math.min(Math.max(0, value), cap);
     } else {
       next[resource] = value;
     }
@@ -1051,7 +1051,7 @@ function ResourceBlock({
   total: number;
   used: number;
   onUse: () => void;
-  onRestore?: () => void; // rendu optionnel et sécurisé
+  onRestore: () => void;
   onUpdateTotal: (newTotal: number) => void;
   onUpdateUsed?: (value: number) => void;
   useNumericInput?: boolean;
@@ -1169,7 +1169,7 @@ function ResourceBlock({
           <button
             onClick={() => {
               if (used <= 0) return;
-              onRestore?.(); // sécurisé
+              onRestore();
             }}
             disabled={used <= 0}
             className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
@@ -1181,7 +1181,20 @@ function ResourceBlock({
         </div>
       )}
 
-
+      {!hideEdit && (
+        <div className="mt-4 border-t border-gray-700/50 pt-4">
+          <ResourceEditModal
+            label={`Nombre total de ${label.toLowerCase()}`}
+            total={total}
+            onSave={(newTotal) => {
+              onRestore();
+              onUpdateTotal(newTotal);
+              setIsEditing(false);
+            }}
+            onCancel={() => setIsEditing(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -1408,46 +1421,39 @@ function ClassResourcesCard({
     }
 
     case 'Paladin': {
-      // Total auto = 5 × niveau
-      const lvl = Number(level || 0);
-      const totalPoints = Math.max(0, lvl * 5);
-      const used = Math.min(Math.max(0, resources.used_lay_on_hands || 0), totalPoints);
+      // Imposition des mains
+      if (typeof resources.lay_on_hands === 'number') {
+        items.push(
+          <ResourceBlock
+            key="lay_on_hands"
+            icon={<HandHeart size={20} />}
+            label="Imposition des mains"
+            total={resources.lay_on_hands}
+            used={resources.used_lay_on_hands || 0}
+            onUpdateTotal={(n) => onUpdateResource('lay_on_hands', n)}
+            onUpdateUsed={(v) => onUpdateResource('used_lay_on_hands', v)}
+            color="yellow"
+            useNumericInput
+            onGlobalPulse={onPulseScreen}
+          />
+        );
+      }
 
-      items.push(
-        <ResourceBlock
-          key="lay_on_hands"
-          icon={<HandHeart size={20} />}
-          label="Imposition des mains"
-          total={totalPoints}
-          used={used}
-          onUse={() => onUpdateResource('used_lay_on_hands', Math.min(used + 1, totalPoints))}
-          onRestore={() => onUpdateResource('used_lay_on_hands', Math.max(0, used - 1))}
-          onUpdateTotal={() => { /* no-op: total auto */ }}
-          color="yellow"
-          useNumericInput
-          hideEdit
-          onGlobalPulse={onPulseScreen}
-          onUpdateUsed={(v) => {
-            const clamped = Math.min(Math.max(0, v), totalPoints);
-            onUpdateResource('used_lay_on_hands', clamped);
-          }}
-        />
-      );
-
-      // Conduits divins (N3+) — total calculé → pas d’édition
+      // Conduits divins (N3+)
+      const lvl = level ?? 0;
       if (lvl >= 3) {
         const cap = lvl >= 11 ? 3 : 2;
-        const usedCd = resources.used_channel_divinity || 0;
+        const used = resources.used_channel_divinity || 0;
         items.push(
           <ResourceBlock
             key="paladin_channel_divinity"
             icon={<Cross size={20} />}
             label="Conduits divins"
             total={cap}
-            used={usedCd}
-            onUse={() => onUpdateResource('used_channel_divinity', Math.min(usedCd + 1, cap))}
+            used={used}
+            onUse={() => onUpdateResource('used_channel_divinity', Math.min(used + 1, cap))}
             onUpdateTotal={() => { /* cap calculé par niveau -> non éditable */ }}
-            onRestore={() => onUpdateResource('used_channel_divinity', Math.max(0, usedCd - 1))}
+            onRestore={() => onUpdateResource('used_channel_divinity', Math.max(0, used - 1))}
             color="yellow"
             hideEdit
             onGlobalPulse={onPulseScreen}
