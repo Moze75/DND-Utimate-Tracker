@@ -1150,5 +1150,5 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
         />
       </div>
     </div>
-  ); 
+  );
 }
