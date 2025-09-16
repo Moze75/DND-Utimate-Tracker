@@ -1,33 +1,24 @@
 /* Service de chargement et parsing des contenus de classes/sous-classes pour l’app
    Aligné avec la nomenclature “règles 2024”.
+
+   Hypothèses & règles:
+   - Structures de dépôts (Ultimate_Tracker):
+       RAW_BASE/Classes/<Classe>/(README.md|index.md|<Classe>.md|<ClasseTitle>.md)
+       RAW_BASE/Classes/<Classe>/Subclasses/(“Sous-classe - <Nom>.md” | “<Nom>.md” | dossier "<Nom>" contenant README.md/index.md)
+   - On tolère autant que possible les variantes d'écriture (accents, apostrophes, casse) via des maps.
+   - On crée des “sections” à partir des titres Markdown ###. Si un niveau (Niveau X / Niv. X / Level X) est détecté, il est saisi;
+     sinon, on affecte level=0 (toujours affiché dans l’UI).
 */
 
 export type AbilitySection = {
-  level: number;
-  title: string;
-  content: string;
+  level: number;            // 0 = sans niveau explicite, affiché tout le temps
+  title: string;            // titre parsé après nettoyage
+  content: string;          // contenu Markdown du bloc
   origin: "class" | "subclass";
 };
 
-export type ClassAndSubclassContent = {
-  className: string;
-  subclassesRequested?: string[];
-  sections: AbilitySection[];
-  classSections: AbilitySection[];
-  subclassSections: Record<string, AbilitySection[]>;
-};
-
-// Activer les logs détaillés en mettant window.UT_DEBUG = true dans la console
-const DEBUG: boolean =
-  typeof window !== "undefined" && (window as any).UT_DEBUG === true;
-
-/* ===========================================================
-   Bases RAW — structure réelle du dépôt
-   =========================================================== */
-const RAW_BASES = [
-  "https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main/Classes",
-  "https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/master/Classes",
-];
+const RAW_BASE =
+  "https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main/Classes";
 
 /* ===========================================================
    Normalisation & helpers
@@ -36,41 +27,23 @@ const RAW_BASES = [
 function stripDiacritics(s: string): string {
   return (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
-function lowerNoAccents(s: string): string {
-  return stripDiacritics((s || "").toLowerCase());
-}
+
 function normalizeName(name: string): string {
   return (name || "").trim();
 }
-function normalizeApos(s: string): string {
-  return (s || "").replace(/[’]/g, "'");
+
+function lowerNoAccents(s: string): string {
+  return stripDiacritics((s || "").toLowerCase());
 }
-function titleCaseFrench(input: string): string {
-  // TitleCase fr avec petits mots conservés en minuscule
-  const small = new Set(["de", "des", "du", "la", "le", "les", "et", "d'", "l'"]);
-  return (input || "")
-    .trim()
-    .split(/(\s+)/)
-    .map((part, idx) => {
-      if (/^\s+$/.test(part)) return part;
-      const p = part.toLowerCase();
-      if (idx !== 0 && small.has(p)) return p;
-      const head = p.charAt(0).toUpperCase();
-      return head + p.slice(1);
-    })
+
+function titleCase(input: string): string {
+  return input
+    .toLowerCase()
+    .split(/([\s\-\u2019']+)/) // conserver séparateurs
+    .map((part) =>
+      /[\s\-\u2019']+/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1)
+    )
     .join("");
-}
-function sentenceCaseFrench(input: string): string {
-  // Premier mot capitalisé, reste en minuscule (utile pour “Collège du savoir”, “Credo de la paume”)
-  const s = (input || "").trim().toLowerCase();
-  if (!s) return s;
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-function stripParentheses(s: string): string {
-  return (s || "").replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s{2,}/g, " ").trim();
-}
-function uniq<T>(arr: T[]): T[] {
-  return Array.from(new Set(arr));
 }
 
 // Jointure d’URL: n’encode pas la base, encode chaque segment
@@ -80,68 +53,26 @@ function urlJoin(base: string, ...segments: string[]) {
   return [cleanBase, ...encodedSegments].join("/");
 }
 
-/* ===========================================================
-   Cache “positif” + cache “négatif” (anti-404 répétées)
-   =========================================================== */
-
-const textCache = new Map<string, string>();
-
-type NegativeEntry = { ts: number };
-const negativeCache = new Map<string, NegativeEntry>();
-const NEGATIVE_TTL_MS = 5 * 60 * 1000; // 5 min
-
-function negativeHas(url: string): boolean {
-  const e = negativeCache.get(url);
-  if (!e) return false;
-  if (Date.now() - e.ts > NEGATIVE_TTL_MS) {
-    negativeCache.delete(url);
-    return false;
-  }
-  return true;
-}
-function negativeSet(url: string): void {
-  negativeCache.set(url, { ts: Date.now() });
-}
-
-async function fetchFirstExisting(urls: string[], dbgLabel?: string): Promise<string | null> {
-  if (DEBUG) {
-    console.debug("[classesContent] Try candidates", dbgLabel || "", {
-      count: urls.length,
-      firsts: urls.slice(0, 8),
-    });
-  }
+async function fetchFirstExisting(urls: string[]): Promise<string | null> {
   for (const url of urls) {
     try {
-      if (negativeHas(url)) {
-        if (DEBUG) console.debug("[classesContent] skip known 404:", url);
-        continue;
-      }
-      if (textCache.has(url)) {
-        if (DEBUG) console.debug("[classesContent] cache hit:", url);
-        return textCache.get(url)!;
-      }
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(url, { cache: "no-cache" });
       if (res.ok) {
-        const txt = await res.text();
-        textCache.set(url, txt);
-        if (DEBUG) console.debug("[classesContent] OK:", url);
-        return txt;
-      } else {
-        negativeSet(url);
-        if (DEBUG) console.debug("[classesContent] not OK:", res.status, url);
+        return await res.text();
       }
-    } catch (e) {
-      if (DEBUG) console.debug("[classesContent] fetch error -> continue", url, e);
+    } catch {
+      // ignore and try next
     }
   }
-  if (DEBUG) console.debug("[classesContent] No match for", dbgLabel || "", "(tried:", urls.length, "urls)");
   return null;
 }
 
 /* ===========================================================
-   Mappings classes & sous-classes (2024)
+   Mappings classes & sous-classes (2024) — clés en minuscule sans accents
+   Valeurs = Nom exact utilisé dans le dépôt (dossier/fichier)
    =========================================================== */
 
+// Classes (dossier) — inclure FR/EN/alias
 const CLASS_NAME_MAP: Record<string, string> = {
   "barbare": "Barbare",
   "barbarian": "Barbare",
@@ -155,7 +86,6 @@ const CLASS_NAME_MAP: Record<string, string> = {
   "prete": "Clerc",
   "pretres": "Clerc",
   "pretresse": "Clerc",
-  "prêtre": "Clerc",
 
   "druide": "Druide",
   "druid": "Druide",
@@ -181,103 +111,247 @@ const CLASS_NAME_MAP: Record<string, string> = {
   "ranger": "Rôdeur",
 
   "roublard": "Roublard",
-  "rogue": "Roublard",
   "voleur": "Roublard",
+  "rogue": "Roublard",
   "thief": "Roublard",
 
-  // 2024: Occultiste (Warlock) — résolution dossiers via getClassFolderNames
+  // Occultiste (Warlock) : alias “Sorcier”
   "occultiste": "Occultiste",
   "warlock": "Occultiste",
   "sorcier": "Occultiste",
 };
 
-// On garde une table minimale et on s’appuie surtout sur les variantes générées.
-// Ajoute ici si tu veux forcer des renommages officiels.
+// Sous-classes (fichier/dossier) — clés normalisées (minuscules, sans accents)
 const SUBCLASS_NAME_MAP: Record<string, string> = {
-  // Paladin — casse exacte dans le dépôt
+  /* ============================
+   * Barbare – 2024
+   * ============================ */
+  "voie de l arbre monde": "Voie de l’Arbre-Monde",
+  "path of the world tree": "Voie de l’Arbre-Monde",
+  "world tree": "Voie de l’Arbre-Monde",
+  "world tree path": "Voie de l’Arbre-Monde",
+
+  "voie du berserker": "Voie du Berserker",
+  "berserker": "Voie du Berserker",
+  "path of the berserker": "Voie du Berserker",
+
+  "voie du coeur sauvage": "Voie du Cœur sauvage",
+  "path of the wild heart": "Voie du Cœur sauvage",
+  "wild heart": "Voie du Cœur sauvage",
+
+  "voie du zelateur": "Voie du Zélateur",
+  "path of the zealot": "Voie du Zélateur",
+  "zealot": "Voie du Zélateur",
+
+  /* ============================
+   * Barde – 2024
+   * ============================ */
+  "college de la danse": "Collège de la Danse",
+  "college of dance": "Collège de la Danse",
+
+  "college du savoir": "Collège du Savoir",
+  "college of lore": "Collège du Savoir",
+  "lore": "Collège du Savoir",
+
+  // Séduction ~ Glamour (2017) — choix 2024: “Séduction”
+  "college de la seduction": "Collège de la Séduction",
+  "college of glamour": "Collège de la Séduction",
+  "glamour": "Collège de la Séduction",
+
+  "college de la vaillance": "Collège de la Vaillance",
+  "college of valor": "Collège de la Vaillance",
+  "valor": "Collège de la Vaillance",
+
+  /* ============================
+   * Clerc – 2024
+   * ============================ */
+  "domaine de la guerre": "Domaine de la Guerre",
+  "war domain": "Domaine de la Guerre",
+
+  "domaine de la lumiere": "Domaine de la Lumière",
+  "light domain": "Domaine de la Lumière",
+
+  "domaine de la ruse": "Domaine de la Ruse",
+  "trickery domain": "Domaine de la Ruse",
+
+  "domaine de la vie": "Domaine de la Vie",
+  "life domain": "Domaine de la Vie",
+
+  /* ============================
+   * Druide – 2024
+   * ============================ */
+  "cercle des astres": "Cercle des Astres",
+  "circle of stars": "Cercle des Astres",
+  "stars": "Cercle des Astres",
+
+  "cercle de la lune": "Cercle de la Lune",
+  "circle of the moon": "Cercle de la Lune",
+  "moon": "Cercle de la Lune",
+
+  "cercle des mers": "Cercle des Mers",
+  "circle of the sea": "Cercle des Mers",
+  "sea": "Cercle des Mers",
+
+  "cercle de la terre": "Cercle de la Terre",
+  "circle of the land": "Cercle de la Terre",
+  "land": "Cercle de la Terre",
+
+  /* ============================
+   * Ensorceleur – 2024
+   * (Options != sous-classe, mais on tente un chargement direct)
+   * ============================ */
+  "options de metamagie": "Options de Métamagie",
+
+  "sorcellerie aberrante": "Sorcellerie aberrante",
+  "aberrant sorcery": "Sorcellerie aberrante",
+  "aberrant mind": "Sorcellerie aberrante",
+
+  "sorcellerie arcanique": "Sorcellerie arcanique",
+  "arcane sorcery": "Sorcellerie arcanique",
+
+  "sorcellerie mecanique": "Sorcellerie mécanique",
+  "clockwork sorcery": "Sorcellerie mécanique",
+  "clockwork soul": "Sorcellerie mécanique",
+
+  "sorcellerie sauvage": "Sorcellerie sauvage",
+  "wild magic": "Sorcellerie sauvage",
+  "wild sorcery": "Sorcellerie sauvage",
+
+  /* ============================
+   * Guerrier – 2024
+   * ============================ */
+  "champion": "Champion",
+  "champion fighter": "Champion",
+
+  "chevalier occultiste": "Chevalier occultiste",
+  "eldritch knight": "Chevalier occultiste",
+
+  "maitre de guerre": "Maître de guerre",
+  "battle master": "Maître de guerre",
+  "battlemaster": "Maître de guerre",
+
+  "soldat psi": "Soldat psi",
+  "psi warrior": "Soldat psi",
+  "psychic warrior": "Soldat psi",
+
+  /* ============================
+   * Magicien – 2024
+   * ============================ */
+  "abjurateur": "Abjurateur",
+  "abjuration": "Abjurateur",
+  "school of abjuration": "Abjurateur",
+
+  "evocation": "Évocation",
+  "école d evocation": "Évocation",
+  "school of evocation": "Évocation",
+
+  "illusionniste": "Illusionniste",
+  "illusion": "Illusionniste",
+  "school of illusion": "Illusionniste",
+
+  /* ============================
+   * Moine – 2024
+   * ============================ */
+  "credo des elements": "Crédo des Éléments",
+  "warrior of the elements": "Crédo des Éléments",
+  "way of the four elements": "Crédo des Éléments",
+
+  "credo de la misericorde": "Crédo de la Miséricorde",
+  "way of mercy": "Crédo de la Miséricorde",
+
+  "credo de l ombre": "Crédo de l’Ombre",
+  "way of shadow": "Crédo de l’Ombre",
+  "shadow": "Crédo de l’Ombre",
+
+  "credo de la paume": "Crédo de la Paume",
+  "voie de la paume": "Crédo de la Paume",
+  "voie de la main ouverte": "Crédo de la Paume",
+  "way of the open hand": "Crédo de la Paume",
+  "open hand": "Crédo de la Paume",
+
+  /* ============================
+   * Occultiste (Warlock) – 2024
+   * (Options != sous-classe, tentative directe)
+   * ============================ */
+  "options de manifestation occulte": "Options de Manifestation occulte",
+
+  "protecteur archange": "Protecteur Archange",
+  "the archfey": "Protecteur Archange",
+  "archfey": "Protecteur Archange",
+
+  "protecteur celeste": "Protecteur Céleste",
+  "the celestial": "Protecteur Céleste",
+  "celestial": "Protecteur Céleste",
+
+  "protecteur felon": "Protecteur Félon",
+  "the fiend": "Protecteur Félon",
+  "fiend": "Protecteur Félon",
+
+  "protecteur grand ancien": "Protecteur Grand Ancien",
+  "the great old one": "Protecteur Grand Ancien",
+  "great old one": "Protecteur Grand Ancien",
+  "goo": "Protecteur Grand Ancien",
+
+  /* ============================
+   * Paladin – 2024
+   * ============================ */
+  "serment des paladins": "Serment des Paladins",
+  "oath of the paladins": "Serment des Paladins",
+
   "serment des anciens": "Serment des Anciens",
   "oath of the ancients": "Serment des Anciens",
 
-  "serment de devotion": "Serment de dévotion",
-  "serment de dévotion": "Serment de dévotion",
-  "oath of devotion": "Serment de dévotion",
+  "serment de devotion": "Serment de Dévotion",
+  "oath of devotion": "Serment de Dévotion",
 
   "serment de vengeance": "Serment de Vengeance",
   "oath of vengeance": "Serment de Vengeance",
-  "serment de gloire": "Serment de Gloire",
-  "oath of glory": "Serment de Gloire",
+
+  /* ============================
+   * Rôdeur – 2024
+   * ============================ */
+  "belluaire": "Belluaire",
+  "beast master": "Belluaire",
+  "beastmaster": "Belluaire",
+
+  "chasseur": "Chasseur",
+  "hunter": "Chasseur",
+
+  "traqueur des tenebres": "Traqueur des ténèbres",
+  "gloom stalker": "Traqueur des ténèbres",
+
+  "vagabond feerique": "Vagabond féérique",
+  "fey wanderer": "Vagabond féérique",
+
+  /* ============================
+   * Roublard – 2024
+   * ============================ */
+  "ame aceree": "Âme acérée",
+  "soulknife": "Âme acérée",
+
+  "arnaqueur arcanique": "Arnaqueur arcanique",
+  "arcane trickster": "Arnaqueur arcanique",
+
+  "assassin": "Assassin",
+
+  "voleur": "Voleur",
+  "thief": "Voleur",
 };
 
-function canonicalizeClassName(input?: string | null): string {
-  const key = lowerNoAccents(input || "");
-  return CLASS_NAME_MAP[key] || titleCaseFrench(input || "");
-}
-function canonicalizeSubclassName(_classCanonical: string, input?: string | null): string {
-  if (!input) return "";
-  const key = lowerNoAccents(input);
-  return SUBCLASS_NAME_MAP[key] || titleCaseFrench(input);
-}
+/* ===========================================================
+   Mapping des noms en entrée (App) vers noms exacts (dépôt)
+   =========================================================== */
 
-/**
- * Dossiers possibles pour une classe dans le dépôt.
- * - nom canonique
- * - variante sans accents (ex: Rôdeur -> Rodeur)
- * - “Sorcier” et “Warlock” en plus pour Occultiste
- */
-function getClassFolderNames(appClassName: string): string[] {
-  const primary = canonicalizeClassName(appClassName);
-  const variants = [primary];
-
-  const k = lowerNoAccents(primary);
-  if (k === "occultiste") variants.push("Sorcier", "Warlock");
-
-  // Ajouter une variante sans accents pour tous (utile si certains dossiers n’ont pas d’accents)
-  variants.push(stripDiacritics(primary));
-
-  return uniq(variants);
+function mapClassName(appClassName: string): string {
+  const raw = normalizeName(appClassName);
+  const key = lowerNoAccents(raw);
+  return CLASS_NAME_MAP[key] ?? raw;
 }
 
-/**
- * Dossiers possibles pour les sous-classes — “Subclasses” en premier (structure réelle),
- * garder d’autres variantes par tolérance.
- */
-function getSubclassDirNames(): string[] {
-  return ["Subclasses", "Sous-classes", "Sous classes", "SousClasses", "SubClasses", "Sous_Classes"];
-}
-
-/**
- * Variantes robustes pour un nom de sous-classe:
- * - base d’entrée, TitleCase fr, tout en minuscule, “Phrase” (premier mot cap),
- * - sans parenthèses, apostrophes normalisées,
- * - chaque variante déclinée aussi en “sans accents”.
- */
-function buildSubclassNameVariants(name: string): string[] {
-  const base = normalizeName(name);
-  const lower = base.toLowerCase();
-  const tFr = titleCaseFrench(base);
-  const sent = sentenceCaseFrench(base);
-  const noParen = stripParentheses(base);
-  const noParenLower = noParen.toLowerCase();
-  const noParenT = titleCaseFrench(noParen);
-  const noParenSent = sentenceCaseFrench(noParen);
-  const apos = normalizeApos(base);
-  const aposLower = apos.toLowerCase();
-  const aposT = titleCaseFrench(apos);
-  const aposSent = sentenceCaseFrench(apos);
-
-  const withAccents = [
-    base, lower, tFr, sent,
-    noParen, noParenLower, noParenT, noParenSent,
-    apos, aposLower, aposT, aposSent,
-  ];
-
-  const noAccents = withAccents.map(stripDiacritics);
-
-  // Cas particulier: “... de dévotion” -> forcer aussi “... de Dévotion”
-  const altDev = (s: string) => s.replace(/(de)\s+(d[ée]votion)/i, "de Dévotion");
-  const withAltDev = uniq([...withAccents, ...withAccents.map(altDev)]);
-
-  return uniq([...withAltDev, ...noAccents, ...noAccents.map(altDev)]);
+function mapSubclassName(subclassName: string): string {
+  const raw = normalizeName(subclassName);
+  const key = lowerNoAccents(raw);
+  return SUBCLASS_NAME_MAP[key] ?? raw;
 }
 
 /* ===========================================================
@@ -285,231 +359,153 @@ function buildSubclassNameVariants(name: string): string[] {
    =========================================================== */
 
 async function loadClassMarkdown(className: string): Promise<string | null> {
-  const classFolders = getClassFolderNames(className);
-  const candidates: string[] = [];
+  const c = mapClassName(className); // ex: "Ensorceleur"
+  const folder = urlJoin(RAW_BASE, c);
+  const cTitle = titleCase(c);
 
-  for (const base of RAW_BASES) {
-    for (const c of classFolders) {
-      const folder = urlJoin(base, c);
-
-      // 1) Chemin réel observé
-      candidates.push(urlJoin(folder, `${c}.md`)); // ex: Paladin/Paladin.md
-
-      // 2) Fallbacks classiques
-      candidates.push(
-        urlJoin(folder, "README.md"),
-        urlJoin(folder, "index.md"),
-      );
-    }
-  }
-  return fetchFirstExisting(candidates, `class:${className}`);
+  const candidates = [
+    urlJoin(folder, "README.md"),
+    urlJoin(folder, "index.md"),
+    urlJoin(folder, `${c}.md`),
+    urlJoin(folder, `${cTitle}.md`),
+  ];
+  return fetchFirstExisting(candidates);
 }
 
-async function loadSubclassMarkdown(className: string, subclassName: string): Promise<string | null> {
-  const classFolders = getClassFolderNames(className);
-  const subdirs = getSubclassDirNames();
-  const sc = canonicalizeSubclassName(canonicalizeClassName(className), subclassName);
-  const nameVariants = buildSubclassNameVariants(sc);
+async function loadSubclassMarkdown(
+  className: string,
+  subclassName: string
+): Promise<string | null> {
+  const c = mapClassName(className);
+  const sBase = mapSubclassName(subclassName); // ex: "Sorcellerie mécanique"
+  const sTitle = titleCase(sBase);             // ex: "Sorcellerie Mécanique"
 
+  const baseSub = urlJoin(RAW_BASE, c, "Subclasses");
+
+  // 1) CAS FICHIER DIRECT DANS Subclasses (avec ou sans préfixe "Sous-classe - ")
   const dash = "-";
   const enDash = "–"; // \u2013
   const emDash = "—"; // \u2014
+  const directFileCandidates = [
+    urlJoin(baseSub, `Sous-classe ${dash} ${sBase}.md`),
+    urlJoin(baseSub, `Sous-classe ${dash} ${sTitle}.md`),
+    urlJoin(baseSub, `Sous-classe ${enDash} ${sBase}.md`),
+    urlJoin(baseSub, `Sous-classe ${enDash} ${sTitle}.md`),
+    urlJoin(baseSub, `Sous-classe ${emDash} ${sBase}.md`),
+    urlJoin(baseSub, `Sous-classe ${emDash} ${sTitle}.md`),
+    urlJoin(baseSub, `${sBase}.md`),
+    urlJoin(baseSub, `${sTitle}.md`),
+  ];
+  const direct = await fetchFirstExisting(directFileCandidates);
+  if (direct) return direct;
 
-  const bestPrefix = "Sous-classe"; // forme réellement observée
-  const extraPrefixes = ["Sous classe", "Subclass", "Sous-Classe"];
+  // 2) CAS DOSSIER Subclasses/<Nom> + fichier interne (README/index/<Nom>.md)
+  const subFolderCandidates = [
+    urlJoin(baseSub, `Sous-classe ${dash} ${sBase}`),
+    urlJoin(baseSub, `Sous-classe ${dash} ${sTitle}`),
+    urlJoin(baseSub, `Sous-classe ${enDash} ${sBase}`),
+    urlJoin(baseSub, `Sous-classe ${enDash} ${sTitle}`),
+    urlJoin(baseSub, `Sous-classe ${emDash} ${sBase}`),
+    urlJoin(baseSub, `Sous-classe ${emDash} ${sTitle}`),
+    urlJoin(baseSub, sBase),
+    urlJoin(baseSub, sTitle),
+  ];
+  const fileCandidatesInside = ["README.md", "index.md", `${sBase}.md`, `${sTitle}.md`];
 
-  const candidates: string[] = [];
-
-  for (const base of RAW_BASES) {
-    for (const c of classFolders) {
-      for (const subdir of subdirs) {
-        const baseSub = urlJoin(base, c, subdir);
-
-        // 1) Fichiers directs — d’abord le format observé
-        for (const nm of nameVariants) {
-          candidates.push(
-            urlJoin(baseSub, `${bestPrefix} ${dash} ${nm}.md`),
-            urlJoin(baseSub, `${bestPrefix} ${enDash} ${nm}.md`),
-            urlJoin(baseSub, `${bestPrefix} ${emDash} ${nm}.md`),
-            urlJoin(baseSub, `${nm}.md`),
-          );
-        }
-
-        // 2) Autres préfixes (moins probables)
-        for (const nm of nameVariants) {
-          for (const p of extraPrefixes) {
-            candidates.push(
-              urlJoin(baseSub, `${p} ${dash} ${nm}.md`),
-              urlJoin(baseSub, `${p} ${enDash} ${nm}.md`),
-              urlJoin(baseSub, `${p} ${emDash} ${nm}.md`),
-            );
-          }
-        }
-
-        // 3) Dossiers “<Nom>/{README.md,index.md}”
-        const inside = ["README.md", "index.md"];
-        for (const nm of nameVariants) {
-          const subFolderVariants = uniq([
-            nm,
-            `${bestPrefix} ${dash} ${nm}`,
-            `${bestPrefix} ${enDash} ${nm}`,
-            `${bestPrefix} ${emDash} ${nm}`,
-          ]);
-          for (const sf of subFolderVariants) {
-            for (const f of inside) candidates.push(urlJoin(baseSub, sf, f));
-            candidates.push(urlJoin(baseSub, nm, `${nm}.md`)); // <Nom>/<Nom>.md
-          }
-        }
-      }
-
-      // 4) Fallback: racine de la classe
-      const classFolder = urlJoin(base, c);
-      for (const nm of nameVariants) candidates.push(urlJoin(classFolder, `${nm}.md`));
-    }
+  for (const subFolder of subFolderCandidates) {
+    const urls = fileCandidatesInside.map((f) => urlJoin(subFolder, f));
+    const text = await fetchFirstExisting(urls);
+    if (text) return text;
   }
 
-  return fetchFirstExisting(candidates, `subclass:${className}/${subclassName}`);
+  // 3) FALLBACK: certains contenus “options …” peuvent être à la racine de la classe
+  const classFolderFallback = urlJoin(RAW_BASE, c);
+  const classLevelFiles = [
+    urlJoin(classFolderFallback, `${sBase}.md`),
+    urlJoin(classFolderFallback, `${sTitle}.md`),
+  ];
+  const fallbackText = await fetchFirstExisting(classLevelFiles);
+  if (fallbackText) return fallbackText;
+
+  return null;
 }
 
 /* ===========================================================
-   Parsing Markdown -> Sections
+   Parser markdown -> sections (### titres)
+   - Détecte “Niveau X”, “Niv. X”, “Level X” → level
+   - Sinon level=0
+   - Le titre est nettoyé des préfixes “Niveau … -”
    =========================================================== */
 
-const LEVEL_REGEXES: RegExp[] = [
-  /\bNiveau\s*(\d+)\b/i,
-  /\bNiv\.?\s*(\d+)\b/i,
-  /\bLevel\s*(\d+)\b/i,
-  /\bLvl\.?\s*(\d+)\b/i,
-  /\bAu\s+niveau\s+(\d+)\b/i,
-];
-
-function extractLevelFromTitle(title: string): number {
-  for (const re of LEVEL_REGEXES) {
-    const m = title.match(re);
-    if (m && m[1]) {
-      const n = parseInt(m[1], 10);
-      if (Number.isFinite(n)) return n;
-    }
-  }
-  return 0;
-}
-
-function cleanTitle(raw: string): string {
-  return (raw || "")
-    .replace(/^#+\s*/, "")
-    .replace(/\s*:+\s*$/, "")
-    .trim();
-}
-
-function parseMarkdownToSections(md: string, origin: "class" | "subclass"): AbilitySection[] {
-  if (!md || typeof md !== "string") return [];
-  const text = md.replace(/\r\n/g, "\n");
-  const chunks = text.split(/\n(?=###\s+)/g);
-  const work = chunks.length > 1 ? chunks : text.split(/\n(?=##\s+)/g);
+function parseMarkdownToSections(mdText: string, origin: "class" | "subclass"): AbilitySection[] {
+  const lines = (mdText || "").replace(/\r\n/g, "\n").split("\n");
 
   const sections: AbilitySection[] = [];
+  let currentTitle: string | null = null;
+  let currentLevel: number = 0;
+  let buffer: string[] = [];
 
-  for (const chunk of work) {
-    const lines = chunk.split("\n");
-    const first = lines[0] || "";
-    const isSection = /^#{2,3}\s+/.test(first);
-
-    if (!isSection) {
-      const content = chunk.trim();
-      if (content) {
-        sections.push({
-          level: 0,
-          title: "Général",
-          content,
-          origin,
-        });
-      }
-      continue;
-    }
-
-    const rawTitle = cleanTitle(first);
-    const level = extractLevelFromTitle(rawTitle);
-    const body = lines.slice(1).join("\n").trim();
-
+  const flush = () => {
+    if (!currentTitle && buffer.join("").trim() === "") return;
     sections.push({
-      level,
-      title: rawTitle,
-      content: body,
+      level: Number.isFinite(currentLevel) ? currentLevel : 0,
+      title: currentTitle || "Aptitudes",
+      content: buffer.join("\n").trim(),
       origin,
     });
+    currentTitle = null;
+    currentLevel = 0;
+    buffer = [];
+  };
+
+  const parseHeading = (raw: string) => {
+    const text = raw.replace(/^#+\s*/, "").trim();
+
+    // Tenter d’extraire le niveau
+    // Ex: "Niveau 3 - Truc", "Niv. 5: Machin", "Level 2 — Bidule"
+    const levelMatch =
+      text.match(/\b(?:niveau|niv\.?|level)\s+(\d+)\b/i) || text.match(/\b(\d+)\b/);
+
+    const lvl = levelMatch ? parseInt(levelMatch[1], 10) : 0;
+
+    // Nettoyer le titre en retirant le préfixe “Niveau X -/–/—/:”
+    let title = text
+      .replace(/\b(?:niveau|niv\.?|level)\s+\d+\s*[-–—:]?\s*/i, "")
+      .trim();
+
+    if (!title) {
+      // Si aucun titre évident, garder le texte source sans le marqueur
+      title = text;
+    }
+
+    return { lvl: Number.isFinite(lvl) ? lvl : 0, title };
+  };
+
+  for (const line of lines) {
+    if (/^\s*###\s+/.test(line)) {
+      // nouveau bloc
+      if (buffer.length > 0 || currentTitle !== null) {
+        flush();
+      }
+      const { lvl, title } = parseHeading(line);
+      currentLevel = lvl;
+      currentTitle = title || `Aptitude (Niv. ${lvl || 0})`;
+    } else {
+      buffer.push(line);
+    }
   }
 
+  // Dernier bloc
+  flush();
+
+  // Nettoyage: supprimer sections vides (sans contenu et sans titre utile)
   return sections.filter(
     (s) => (s.content && s.content.trim().length > 0) || (s.title && s.title.trim().length > 0)
   );
 }
 
 /* ===========================================================
-   API moderne
-   =========================================================== */
-
-export async function loadClassSections(inputClass: string): Promise<AbilitySection[]> {
-  const classFolders = getClassFolderNames(inputClass);
-  const candidates: string[] = [];
-
-  for (const base of RAW_BASES) {
-    for (const c of classFolders) {
-      const folder = urlJoin(base, c);
-      // Essayer d’abord <Classe>/<Classe>.md (réel)
-      candidates.push(urlJoin(folder, `${c}.md`));
-      // Fallbacks ensuite
-      candidates.push(urlJoin(folder, "README.md"), urlJoin(folder, "index.md"));
-    }
-  }
-  const md = await fetchFirstExisting(candidates, `class:${inputClass}`);
-  if (!md) return [];
-  return parseMarkdownToSections(md, "class");
-}
-
-export async function loadSubclassSections(inputClass: string, inputSubclass: string): Promise<AbilitySection[]> {
-  const classCanonical = canonicalizeClassName(inputClass);
-  const subclassCanonical = canonicalizeSubclassName(classCanonical, inputSubclass);
-  const md = await loadSubclassMarkdown(classCanonical, subclassCanonical);
-  if (!md) return [];
-  return parseMarkdownToSections(md, "subclass");
-}
-
-export async function loadClassAndSubclassContent(
-  inputClass: string,
-  inputSubclasses?: string[] | null
-): Promise<ClassAndSubclassContent> {
-  const classCanonical = canonicalizeClassName(inputClass);
-
-  const classSections = await loadClassSections(classCanonical);
-
-  const subclassSections: Record<string, AbilitySection[]> = {};
-  const subclassesRequested: string[] = [];
-
-  if (inputSubclasses && inputSubclasses.length > 0) {
-    for (const sc of inputSubclasses) {
-      const subclassCanonical = canonicalizeSubclassName(classCanonical, sc);
-      subclassesRequested.push(subclassCanonical);
-      const sections = await loadSubclassSections(classCanonical, subclassCanonical);
-      subclassSections[subclassCanonical] = sections;
-    }
-  }
-
-  const sections: AbilitySection[] = [
-    ...classSections,
-    ...subclassesRequested.flatMap((sc) => subclassSections[sc] || []),
-  ];
-
-  return {
-    className: classCanonical,
-    subclassesRequested,
-    sections,
-    classSections,
-    subclassSections,
-  };
-}
-
-/* ===========================================================
-   API rétro-compatible avec l’app
+   API publique
    =========================================================== */
 
 export async function loadAbilitySections(params: {
@@ -521,14 +517,23 @@ export async function loadAbilitySections(params: {
 
   const out: AbilitySection[] = [];
 
+  // Classe
   const classMd = await loadClassMarkdown(className);
-  if (classMd) out.push(...parseMarkdownToSections(classMd, "class"));
-
-  if (subclassName && subclassName.trim().length > 0) {
-    const subMd = await loadSubclassMarkdown(className, subclassName);
-    if (subMd) out.push(...parseMarkdownToSections(subMd, "subclass"));
+  if (classMd) {
+    const classSections = parseMarkdownToSections(classMd, "class");
+    out.push(...classSections);
   }
 
+  // Sous-classe (si fournie)
+  if (subclassName && subclassName.trim().length > 0) {
+    const subMd = await loadSubclassMarkdown(className, subclassName);
+    if (subMd) {
+      const subSections = parseMarkdownToSections(subMd, "subclass");
+      out.push(...subSections);
+    }
+  }
+
+  // Tri par niveau croissant, puis par origine (class avant subclass à niveau égal)
   out.sort((a, b) => {
     const la = Number(a.level) || 0;
     const lb = Number(b.level) || 0;
@@ -538,18 +543,4 @@ export async function loadAbilitySections(params: {
   });
 
   return { sections: out };
-}
-
-/* ===========================================================
-   Utils
-   =========================================================== */
-
-export function displayClassName(cls?: string | null): string {
-  if (!cls) return "";
-  return canonicalizeClassName(cls);
-}
-
-export function resetClassesContentCache(): void {
-  textCache.clear();
-  negativeCache.clear();
 }
