@@ -151,13 +151,6 @@ const getDefaultClassResources = (player: Player): ClassResources => {
     case 'Paladin':
       resources.lay_on_hands = level * 5;
       resources.used_lay_on_hands = 0;
-      if (level >= 3) {
-        resources.channel_divinity = level >= 11 ? 3 : 2;
-        resources.used_channel_divinity = 0;
-      } else {
-        delete (resources as any).channel_divinity;
-        delete (resources as any).used_channel_divinity;
-      }
       break;
 
     case 'Rôdeur':
@@ -641,25 +634,6 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
             />
           );
         }
-        // Conduits divins Paladin (N3+), total calculé (non éditable)
-        if ((player.level ?? 0) >= 3) {
-          const cap = (player.level ?? 0) >= 11 ? 3 : 2;
-          const used = classResources.used_channel_divinity || 0;
-          items.push(
-            <ResourceBlock
-              key="paladin_channel_divinity"
-              icon={<Cross size={20} />}
-              label="Conduits divins"
-              total={cap}
-              used={used}
-              onUse={() => updateClassResource('used_channel_divinity', Math.min(used + 1, cap))}
-              onUpdateTotal={() => { /* cap calculé -> non éditable */ }}
-              onRestore={() => updateClassResource('used_channel_divinity', Math.max(0, used - 1))}
-              color="yellow"
-              hideEdit
-            />
-          );
-        }
         break;
 
       case 'Rôdeur':
@@ -742,25 +716,8 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
     }
   };
 
-  // Récupère la sous-classe depuis plusieurs clés possibles
-  const getSubclass = (p: Player): string | null => {
-    const anyP: any = p as any;
-    const candidates = [
-      anyP?.subclass,
-      anyP?.sub_class,
-      anyP?.subClass,
-      anyP?.sousClasse,
-      anyP?.['sous-classe'],
-    ];
-    const found = candidates.find((v) => typeof v === 'string' && v.trim().length > 0);
-    return found ? (found as string).trim() : null;
-  };
-
-  const subclass = getSubclass(player);
-
   return (
     <div className="space-y-8">
-
       <KnownSpellsSection player={player} onUpdate={onUpdate} />
 
       {/* Section "Emplacements de sorts" masquée */}
