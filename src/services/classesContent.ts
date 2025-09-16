@@ -1,38 +1,32 @@
 /* Service de chargement et parsing des contenus de classes/sous-classes pour l’app
    Aligné avec la nomenclature “règles 2024”.
-
-   Hypothèses & règles:
-   - Structures de dépôts (Ultimate_Tracker):
-       RAW_BASE(S)/Classes/<Classe>/(README.md|index.md|<Classe>.md|<ClasseTitle>.md)
-       RAW_BASE(S)/Classes/<Classe>/(Subclasses|Sous-classes)/(
-         “Sous-classe - <Nom>.md” | “Sous–classe – <Nom>.md” | “<Nom>.md”
-         | dossier "<Nom>" contenant README.md/index.md
-       )
-   - On tolère au maximum les variantes d'écriture (accents, apostrophes, casse) via normalisation + maps.
-   - On crée des “sections” à partir des titres Markdown ###. Si un niveau (Niveau X / Niv. X / Level X) est détecté, il est saisi;
-     sinon, on affecte level=0 (toujours affiché).
-   - Compat 2024: “Occultiste” remplace “Sorcier” (Warlock) côté app; le parseur essaie les dossiers Occultiste/Sorcier/Warlock côté dépôt.
 */
 
 export type AbilitySection = {
-  level: number;            // 0 = sans niveau explicite, affiché tout le temps
-  title: string;            // titre parsé
-  content: string;          // contenu Markdown
+  level: number;
+  title: string;
+  content: string;
   origin: "class" | "subclass";
 };
 
 export type ClassAndSubclassContent = {
-  className: string;                 // nom canonique (ex: "Magicien")
-  subclassesRequested?: string[];    // sous-classes demandées (canonisées)
-  sections: AbilitySection[];        // sections concaténées class + subclasses (dans l’ordre)
-  classSections: AbilitySection[];   // sections de classe
-  subclassSections: Record<string, AbilitySection[]>; // par sous-classe
+  className: string;
+  subclassesRequested?: string[];
+  sections: AbilitySection[];
+  classSections: AbilitySection[];
+  subclassSections: Record<string, AbilitySection[]>;
 };
 
-// Essaye d'abord files/Classes (nouvelle structure), puis Classes (historique)
+// Activer les logs détaillés en mettant window.UT_DEBUG = true dans la console
+const DEBUG: boolean =
+  typeof window !== "undefined" && (window as any).UT_DEBUG === true;
+
+// Essaye d'abord files/Classes (nouvelle structure), puis Classes (historique), sur main puis master
 const RAW_BASES = [
   "https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main/files/Classes",
   "https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main/Classes",
+  "https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/master/files/Classes",
+  "https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/master/Classes",
 ];
 
 /* ===========================================================
@@ -48,15 +42,24 @@ function lowerNoAccents(s: string): string {
 function normalizeName(name: string): string {
   return (name || "").trim();
 }
+function normalizeApos(s: string): string {
+  return (s || "").replace(/[’]/g, "'");
+}
 function titleCase(input: string): string {
   return (input || "")
     .trim()
     .toLowerCase()
-    .split(/([\s\-\u2019'])+/) // conserver séparateurs (espace, -, apostrophes)
+    .split(/([\s\-\u2019'])+/)
     .map((part) =>
       /[\s\-\u2019']+/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1)
     )
     .join("");
+}
+function stripParentheses(s: string): string {
+  return (s || "").replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s{2,}/g, " ").trim();
+}
+function uniq<T>(arr: T[]): T[] {
+  return Array.from(new Set(arr));
 }
 
 // Jointure d’URL: n’encode pas la base, encode chaque segment
@@ -66,26 +69,36 @@ function urlJoin(base: string, ...segments: string[]) {
   return [cleanBase, ...encodedSegments].join("/");
 }
 
-async function fetchFirstExisting(urls: string[]): Promise<string | null> {
+async function fetchFirstExisting(urls: string[], dbgLabel?: string): Promise<string | null> {
+  if (DEBUG) {
+    // Limiter le spam: n’affiche que les 6 premières et le total
+    console.debug("[classesContent] Try candidates", dbgLabel || "", {
+      count: urls.length,
+      firsts: urls.slice(0, 6),
+    });
+  }
   for (const url of urls) {
     try {
       const res = await fetch(url, { cache: "no-store" });
       if (res.ok) {
+        if (DEBUG) console.debug("[classesContent] OK:", url);
         return await res.text();
+      } else {
+        if (DEBUG) console.debug("[classesContent] 404:", url);
       }
-    } catch {
-      // ignore and try next
+    } catch (e) {
+      if (DEBUG) console.debug("[classesContent] fetch error -> continue", url, e);
     }
   }
+  if (DEBUG) console.debug("[classesContent] No match for", dbgLabel || "", "(tried:", urls.length, "urls)");
   return null;
 }
 
 /* ===========================================================
    Mappings classes & sous-classes (2024) — clés en minuscule sans accents
-   Valeurs = Nom exact utilisé dans le dépôt (dossier/fichier)
+   Valeurs = Nom “canon app”. Résolution dossier plus bas.
    =========================================================== */
 
-// Classes (dossier) — inclure FR/EN/alias
 const CLASS_NAME_MAP: Record<string, string> = {
   "barbare": "Barbare",
   "barbarian": "Barbare",
@@ -129,19 +142,14 @@ const CLASS_NAME_MAP: Record<string, string> = {
   "voleur": "Roublard",
   "thief": "Roublard",
 
-  // 2024: Occultiste (Warlock) — compat anciens contenus “Sorcier”
-  // La valeur ici reste la dénomination App; la résolution vers un dossier dépôt
-  // se fait via getClassFolderNames pour essayer Occultiste et Sorcier.
+  // 2024: Occultiste (Warlock) — résolution dossiers via getClassFolderNames
   "occultiste": "Occultiste",
   "warlock": "Occultiste",
   "sorcier": "Occultiste",
 };
 
-// Sous-classes (fichier/dossier) — clés normalisées (minuscules, sans accents)
 const SUBCLASS_NAME_MAP: Record<string, string> = {
-  /* ============================
-   * Barbare – 2024
-   * ============================ */
+  // Barbare
   "voie de l arbre monde": "Voie de l’Arbre-Monde",
   "path of the world tree": "Voie de l’Arbre-Monde",
   "world tree": "Voie de l’Arbre-Monde",
@@ -159,9 +167,7 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
   "path of the zealot": "Voie du Zélateur",
   "zealot": "Voie du Zélateur",
 
-  /* ============================
-   * Barde – 2024
-   * ============================ */
+  // Barde
   "college de la danse": "Collège de la Danse",
   "college of dance": "Collège de la Danse",
 
@@ -177,9 +183,7 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
   "college of valor": "Collège de la Vaillance",
   "valor": "Collège de la Vaillance",
 
-  /* ============================
-   * Clerc – 2024
-   * ============================ */
+  // Clerc
   "domaine de la guerre": "Domaine de la Guerre",
   "war domain": "Domaine de la Guerre",
 
@@ -192,9 +196,7 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
   "domaine de la vie": "Domaine de la Vie",
   "life domain": "Domaine de la Vie",
 
-  /* ============================
-   * Druide – 2024
-   * ============================ */
+  // Druide
   "cercle des astres": "Cercle des Astres",
   "circle of stars": "Cercle des Astres",
   "stars": "Cercle des Astres",
@@ -211,9 +213,7 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
   "circle of the land": "Cercle de la Terre",
   "land": "Cercle de la Terre",
 
-  /* ============================
-   * Ensorceleur – 2024
-   * ============================ */
+  // Ensorceleur
   "options de metamagie": "Options de Métamagie",
 
   "sorcellerie aberrante": "Sorcellerie aberrante",
@@ -231,9 +231,7 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
   "wild magic": "Sorcellerie sauvage",
   "wild sorcery": "Sorcellerie sauvage",
 
-  /* ============================
-   * Guerrier – 2024
-   * ============================ */
+  // Guerrier
   "champion": "Champion",
   "champion fighter": "Champion",
 
@@ -248,9 +246,7 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
   "psi warrior": "Soldat psi",
   "psychic warrior": "Soldat psi",
 
-  /* ============================
-   * Magicien – 2024
-   * ============================ */
+  // Magicien
   "abjurateur": "Abjurateur",
   "abjuration": "Abjurateur",
   "school of abjuration": "Abjurateur",
@@ -263,9 +259,7 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
   "illusion": "Illusionniste",
   "school of illusion": "Illusionniste",
 
-  /* ============================
-   * Occultiste (Warlock) – 2024
-   * ============================ */
+  // Occultiste
   "options de manifestation occulte": "Options de Manifestation occulte",
 
   "protecteur archange": "Protecteur Archange",
@@ -285,9 +279,7 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
   "great old one": "Protecteur Grand Ancien",
   "goo": "Protecteur Grand Ancien",
 
-  /* ============================
-   * Paladin – 2024
-   * ============================ */
+  // Paladin
   "serment des paladins": "Serment des Paladins",
   "oath of the paladins": "Serment des Paladins",
 
@@ -300,9 +292,7 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
   "serment de vengeance": "Serment de Vengeance",
   "oath of vengeance": "Serment de Vengeance",
 
-  /* ============================
-   * Rôdeur – 2024
-   * ============================ */
+  // Rôdeur
   "belluaire": "Belluaire",
   "beast master": "Belluaire",
   "beastmaster": "Belluaire",
@@ -316,9 +306,7 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
   "vagabond feerique": "Vagabond féérique",
   "fey wanderer": "Vagabond féérique",
 
-  /* ============================
-   * Roublard – 2024
-   * ============================ */
+  // Roublard
   "ame aceree": "Âme acérée",
   "soulknife": "Âme acérée",
 
@@ -332,7 +320,7 @@ const SUBCLASS_NAME_MAP: Record<string, string> = {
 };
 
 /* ===========================================================
-   Mapping entrée -> noms exacts dépôt
+   Mapping entrée -> noms app, puis résolution de dossiers dépôt
    =========================================================== */
 
 function mapClassName(appClassName: string): string {
@@ -348,27 +336,49 @@ function mapSubclassName(subclassName: string): string {
 }
 
 /**
- * Donne la liste des noms de dossier possibles pour une classe dans le dépôt.
- * - Par défaut: le nom mappé (ex: "Magicien").
- * - Pour “Occultiste” (2024) on essaie aussi “Sorcier” (hist.) et “Warlock” par compat.
+ * Dossiers possibles pour une classe dans le dépôt.
+ * Pour “Occultiste” on essaie aussi “Sorcier” et “Warlock”.
  */
 function getClassFolderNames(appClassName: string): string[] {
-  const primary = mapClassName(appClassName); // nom app canonique mappé
+  const primary = mapClassName(appClassName);
   const variants = [primary];
-
-  const key = lowerNoAccents(primary);
-  if (key === "occultiste") {
-    // ordre: Occultiste (si le repo a évolué) -> Sorcier (héritage FR) -> Warlock (rare)
-    variants.push("Sorcier", "Warlock");
-  }
-  return Array.from(new Set(variants));
+  const k = lowerNoAccents(primary);
+  if (k === "occultiste") variants.push("Sorcier", "Warlock");
+  return uniq(variants);
 }
 
 /**
- * Donne la liste des noms de dossier “Subclasses” possibles (EN/FR).
+ * Dossiers possibles pour les sous-classes: génériques + spécifiques par classe (fréquent en FR).
  */
-function getSubclassDirNames(): string[] {
-  return ["Subclasses", "Sous-classes"];
+function getSubclassDirNamesForClass(appClassName: string): string[] {
+  const generic = ["Subclasses", "Sous-classes", "Sous classes", "SousClasses", "SubClasses", "Sous_Classes"];
+  const k = lowerNoAccents(mapClassName(appClassName));
+  const specific: string[] = [];
+  if (k === "paladin") specific.push("Serments", "Serment");
+  if (k === "clerc") specific.push("Domaines", "Domaines (Clerc)");
+  if (k === "druide") specific.push("Cercles", "Cercle");
+  if (k === "occultiste") specific.push("Protecteurs", "Patrons", "Pactes");
+  if (k === "roublard") specific.push("Archetypes", "Archétypes");
+  if (k === "guerrier") specific.push("Archetypes", "Archétypes");
+  if (k === "barde") specific.push("Colleges", "Collèges");
+  if (k === "rodeur" || k === "rôdeur") specific.push("Archetypes", "Archétypes");
+  if (k === "magicien") specific.push("Ecoles", "Écoles");
+  return uniq([...generic, ...specific]);
+}
+
+/**
+ * Construit des variantes robustes pour un nom de sous-classe.
+ */
+function buildSubclassNameVariants(name: string): string[] {
+  const base = normalizeName(name);
+  const t = titleCase(base);
+  const noParen = stripParentheses(base);
+  const tNoParen = titleCase(noParen);
+  const apos = normalizeApos(base);
+  const aposT = titleCase(apos);
+
+  // On conserve les diacritiques (les fichiers FR les utilisent généralement)
+  return uniq([base, t, noParen, tNoParen, apos, aposT]);
 }
 
 /* ===========================================================
@@ -388,10 +398,12 @@ async function loadClassMarkdown(className: string): Promise<string | null> {
         urlJoin(folder, "index.md"),
         urlJoin(folder, `${c}.md`),
         urlJoin(folder, `${cTitle}.md`),
+        urlJoin(folder, `Classe - ${c}.md`),
+        urlJoin(folder, `${c} - Classe.md`),
       );
     }
   }
-  return fetchFirstExisting(candidates);
+  return fetchFirstExisting(candidates, `class:${className}`);
 }
 
 async function loadSubclassMarkdown(
@@ -399,67 +411,73 @@ async function loadSubclassMarkdown(
   subclassName: string
 ): Promise<string | null> {
   const classFolders = getClassFolderNames(className);
-  const sBase = mapSubclassName(subclassName); // ex: "Sorcellerie mécanique"
-  const sTitle = titleCase(sBase);             // ex: "Sorcellerie Mécanique"
+  const subdirs = getSubclassDirNamesForClass(className);
+  const nameVariants = buildSubclassNameVariants(mapSubclassName(subclassName));
 
   const dash = "-";
   const enDash = "–"; // \u2013
   const emDash = "—"; // \u2014
 
+  const prefixes = ["Sous-classe", "Sous classe", "Subclass", "Sous-Classe"];
+
   const candidates: string[] = [];
 
   for (const base of RAW_BASES) {
     for (const c of classFolders) {
-      for (const subdir of getSubclassDirNames()) {
+      for (const subdir of subdirs) {
         const baseSub = urlJoin(base, c, subdir);
 
         // 1) Fichier direct dans le dossier de sous-classes
-        candidates.push(
-          urlJoin(baseSub, `Sous-classe ${dash} ${sBase}.md`),
-          urlJoin(baseSub, `Sous-classe ${dash} ${sTitle}.md`),
-          urlJoin(baseSub, `Sous-classe ${enDash} ${sBase}.md`),
-          urlJoin(baseSub, `Sous-classe ${enDash} ${sTitle}.md`),
-          urlJoin(baseSub, `Sous-classe ${emDash} ${sBase}.md`),
-          urlJoin(baseSub, `Sous-classe ${emDash} ${sTitle}.md`),
-          urlJoin(baseSub, `${sBase}.md`),
-          urlJoin(baseSub, `${sTitle}.md`),
-        );
+        for (const nm of nameVariants) {
+          candidates.push(
+            urlJoin(baseSub, `${nm}.md`),
+            urlJoin(baseSub, `${prefixes[0]} ${dash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[0]} ${enDash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[0]} ${emDash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[1]} ${dash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[1]} ${enDash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[1]} ${emDash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[2]} ${dash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[2]} ${enDash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[2]} ${emDash} ${nm}.md`),
+          );
+        }
 
         // 2) Dossier de sous-classe + fichier interne
-        const fileCandidatesInside = ["README.md", "index.md", `${sBase}.md`, `${sTitle}.md`];
-        const subFolderCandidates = [
-          `Sous-classe ${dash} ${sBase}`,
-          `Sous-classe ${dash} ${sTitle}`,
-          `Sous-classe ${enDash} ${sBase}`,
-          `Sous-classe ${enDash} ${sTitle}`,
-          `Sous-classe ${emDash} ${sBase}`,
-          `Sous-classe ${emDash} ${sTitle}`,
-          sBase,
-          sTitle,
-        ];
-        for (const subFolder of subFolderCandidates) {
-          for (const f of fileCandidatesInside) {
-            candidates.push(urlJoin(baseSub, subFolder, f));
+        const fileInside = ["README.md", "index.md"];
+        for (const nm of nameVariants) {
+          const subFolderVariants = uniq([
+            nm,
+            `${prefixes[0]} ${dash} ${nm}`,
+            `${prefixes[0]} ${enDash} ${nm}`,
+            `${prefixes[0]} ${emDash} ${nm}`,
+            `${prefixes[1]} ${dash} ${nm}`,
+            `${prefixes[1]} ${enDash} ${nm}`,
+            `${prefixes[1]} ${emDash} ${nm}`,
+          ]);
+          for (const sf of subFolderVariants) {
+            for (const f of fileInside) {
+              candidates.push(urlJoin(baseSub, sf, f));
+            }
+            // Essayer aussi un fichier “<nm>.md” dans le dossier
+            candidates.push(urlJoin(baseSub, nm, `${nm}.md`));
           }
         }
       }
 
-      // 3) FALLBACK: certains contenus “options …” sont parfois à la racine de la classe
-      const classFolderFallback = urlJoin(base, c);
-      candidates.push(
-        urlJoin(classFolderFallback, `${sBase}.md`),
-        urlJoin(classFolderFallback, `${sTitle}.md`),
-      );
+      // 3) Fallback à la racine de la classe (certains dépôts rangent des options ici)
+      const classFolder = urlJoin(base, c);
+      for (const nm of nameVariants) {
+        candidates.push(urlJoin(classFolder, `${nm}.md`));
+      }
     }
   }
 
-  return fetchFirstExisting(candidates);
+  return fetchFirstExisting(candidates, `subclass:${className}/${subclassName}`);
 }
 
 /* ===========================================================
    Parsing Markdown -> Sections
-   - On prend chaque "### " comme début d’une section (fallback "## " si besoin)
-   - Le “Niveau” est détecté si le titre contient: “Niveau X”, “Niv. X”, “Level X”, “Lvl X”, “Au niveau X”
    =========================================================== */
 
 const LEVEL_REGEXES: RegExp[] = [
@@ -483,21 +501,15 @@ function extractLevelFromTitle(title: string): number {
 
 function cleanTitle(raw: string): string {
   return (raw || "")
-    .replace(/^#+\s*/, "") // enleve ##, ###, etc
-    .replace(/\s*:+\s*$/, "") // trailing colons
+    .replace(/^#+\s*/, "")
+    .replace(/\s*:+\s*$/, "")
     .trim();
 }
 
 function parseMarkdownToSections(md: string, origin: "class" | "subclass"): AbilitySection[] {
   if (!md || typeof md !== "string") return [];
-
-  // Normaliser les fins de lignes
   const text = md.replace(/\r\n/g, "\n");
-
-  // Couper sur "### " (sections d’aptitudes principales)
   const chunks = text.split(/\n(?=###\s+)/g);
-
-  // Si aucune "###" trouvée, essayer "## " comme fallback (certains docs)
   const work = chunks.length > 1 ? chunks : text.split(/\n(?=##\s+)/g);
 
   const sections: AbilitySection[] = [];
@@ -508,7 +520,6 @@ function parseMarkdownToSections(md: string, origin: "class" | "subclass"): Abil
     const isSection = /^#{2,3}\s+/.test(first);
 
     if (!isSection) {
-      // bloc initial avant la première section -> on peut le mettre en section "0"
       const content = chunk.trim();
       if (content) {
         sections.push({
@@ -533,26 +544,26 @@ function parseMarkdownToSections(md: string, origin: "class" | "subclass"): Abil
     });
   }
 
-  // Nettoyage: supprimer sections totalement vides
   return sections.filter(
     (s) => (s.content && s.content.trim().length > 0) || (s.title && s.title.trim().length > 0)
   );
 }
 
 /* ===========================================================
-   Cache simple en mémoire (process)
+   Cache simple
    =========================================================== */
 
 const textCache = new Map<string, string>();
 
-async function getTextWithCache(urls: string[]): Promise<string | null> {
-  // si déjà en cache sous l’une des URLs candidates, renvoyer
+async function getTextWithCache(urls: string[], dbgLabel?: string): Promise<string | null> {
   for (const u of urls) {
-    if (textCache.has(u)) return textCache.get(u)!;
+    if (textCache.has(u)) {
+      if (DEBUG) console.debug("[classesContent] cache hit:", u);
+      return textCache.get(u)!;
+    }
   }
-  const txt = await fetchFirstExisting(urls);
+  const txt = await fetchFirstExisting(urls, dbgLabel);
   if (txt) {
-    // stocker sous la première URL candidate pour simplicité
     const chosen = urls[0];
     textCache.set(chosen, txt);
     return txt;
@@ -561,7 +572,7 @@ async function getTextWithCache(urls: string[]): Promise<string | null> {
 }
 
 /* ===========================================================
-   API moderne (helpers)
+   API moderne
    =========================================================== */
 
 export function canonicalizeClassName(input?: string | null): string {
@@ -571,7 +582,6 @@ export function canonicalizeClassName(input?: string | null): string {
 
 export function canonicalizeSubclassName(classCanonical: string, input?: string | null): string {
   const sub = titleCase(input || "");
-  // Si besoin, on peut spécialiser selon la classe plus tard
   if (!input) return sub;
   const key = lowerNoAccents(input);
   return SUBCLASS_NAME_MAP[key] || sub;
@@ -590,61 +600,81 @@ export async function loadClassSections(inputClass: string): Promise<AbilitySect
         urlJoin(folder, "index.md"),
         urlJoin(folder, `${c}.md`),
         urlJoin(folder, `${cTitle}.md`),
+        urlJoin(folder, `Classe - ${c}.md`),
+        urlJoin(folder, `${c} - Classe.md`),
       );
     }
   }
 
-  const md = await getTextWithCache(candidates);
+  const md = await getTextWithCache(candidates, `class:${inputClass}`);
   if (!md) return [];
   return parseMarkdownToSections(md, "class");
 }
 
 export async function loadSubclassSections(inputClass: string, inputSubclass: string): Promise<AbilitySection[]> {
   const classFolders = getClassFolderNames(inputClass);
+  const subdirs = getSubclassDirNamesForClass(inputClass);
   const subclassCanonical = canonicalizeSubclassName(mapClassName(inputClass), inputSubclass);
+  const nameVariants = buildSubclassNameVariants(subclassCanonical);
 
   const dash = "-";
   const enDash = "–";
   const emDash = "—";
+  const prefixes = ["Sous-classe", "Sous classe", "Subclass", "Sous-Classe"];
 
   const candidates: string[] = [];
 
   for (const base of RAW_BASES) {
     for (const c of classFolders) {
-      for (const subdir of getSubclassDirNames()) {
+      for (const subdir of subdirs) {
         const baseSub = urlJoin(base, c, subdir);
 
         // Fichiers directs
-        candidates.push(
-          urlJoin(baseSub, `Sous-classe ${dash} ${subclassCanonical}.md`),
-          urlJoin(baseSub, `Sous-classe ${enDash} ${subclassCanonical}.md`),
-          urlJoin(baseSub, `Sous-classe ${emDash} ${subclassCanonical}.md`),
-          urlJoin(baseSub, `${subclassCanonical}.md`),
-        );
+        for (const nm of nameVariants) {
+          candidates.push(
+            urlJoin(baseSub, `${nm}.md`),
+            urlJoin(baseSub, `${prefixes[0]} ${dash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[0]} ${enDash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[0]} ${emDash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[1]} ${dash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[1]} ${enDash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[1]} ${emDash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[2]} ${dash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[2]} ${enDash} ${nm}.md`),
+            urlJoin(baseSub, `${prefixes[2]} ${emDash} ${nm}.md`),
+          );
+        }
 
         // Dossiers
-        candidates.push(
-          urlJoin(baseSub, `Sous-classe ${dash} ${subclassCanonical}`, "README.md"),
-          urlJoin(baseSub, `Sous-classe ${dash} ${subclassCanonical}`, "index.md"),
-          urlJoin(baseSub, `Sous-classe ${enDash} ${subclassCanonical}`, "README.md"),
-          urlJoin(baseSub, `Sous-classe ${enDash} ${subclassCanonical}`, "index.md"),
-          urlJoin(baseSub, `Sous-classe ${emDash} ${subclassCanonical}`, "README.md"),
-          urlJoin(baseSub, `Sous-classe ${emDash} ${subclassCanonical}`, "index.md"),
-          urlJoin(baseSub, subclassCanonical, "README.md"),
-          urlJoin(baseSub, subclassCanonical, "index.md"),
-          urlJoin(baseSub, subclassCanonical, `${subclassCanonical}.md`),
-        );
+        const fileInside = ["README.md", "index.md"];
+        for (const nm of nameVariants) {
+          const subFolderVariants = uniq([
+            nm,
+            `${prefixes[0]} ${dash} ${nm}`,
+            `${prefixes[0]} ${enDash} ${nm}`,
+            `${prefixes[0]} ${emDash} ${nm}`,
+            `${prefixes[1]} ${dash} ${nm}`,
+            `${prefixes[1]} ${enDash} ${nm}`,
+            `${prefixes[1]} ${emDash} ${nm}`,
+          ]);
+          for (const sf of subFolderVariants) {
+            for (const f of fileInside) {
+              candidates.push(urlJoin(baseSub, sf, f));
+            }
+            candidates.push(urlJoin(baseSub, nm, `${nm}.md`));
+          }
+        }
       }
 
       // Fallback à la racine de la classe
       const classFolder = urlJoin(base, c);
-      candidates.push(
-        urlJoin(classFolder, `${subclassCanonical}.md`)
-      );
+      for (const nm of nameVariants) {
+        candidates.push(urlJoin(classFolder, `${nm}.md`));
+      }
     }
   }
 
-  const md = await getTextWithCache(candidates);
+  const md = await getTextWithCache(candidates, `subclass:${inputClass}/${inputSubclass}`);
   if (!md) return [];
   return parseMarkdownToSections(md, "subclass");
 }
@@ -687,18 +717,6 @@ export async function loadClassAndSubclassContent(
    API rétro-compatible avec l’app (import { loadAbilitySections })
    =========================================================== */
 
-/**
- * Signature rétro-compatible:
- * export async function loadAbilitySections(params: {
- *   className: string;
- *   subclassName: string | null;
- *   characterLevel: number;
- * }): Promise<{ sections: AbilitySection[] }>
- *
- * Comportement: charge sections de classe + (optionnel) sous-classe,
- * puis effectue un tri par niveau croissant, et à niveau égal: class avant subclass, puis titre.
- * Note: comme dans ta version, characterLevel n’est pas utilisé pour filtrer (UI peut filtrer ensuite).
- */
 export async function loadAbilitySections(params: {
   className: string;
   subclassName: string | null;
@@ -724,7 +742,7 @@ export async function loadAbilitySections(params: {
     }
   }
 
-  // Tri identique à l’existant: niveau asc, class avant subclass, titre fr
+  // Tri: niveau asc, class avant subclass, puis titre fr
   out.sort((a, b) => {
     const la = Number(a.level) || 0;
     const lb = Number(b.level) || 0;
@@ -737,21 +755,15 @@ export async function loadAbilitySections(params: {
 }
 
 /* ===========================================================
-   Utils d’affichage et de maintenance
+   Utils
    =========================================================== */
 
-/**
- * Affichage: canonicalise les anciens “Sorcier” en “Occultiste”.
- */
 export function displayClassName(cls?: string | null): string {
   if (!cls) return "";
   const canon = canonicalizeClassName(cls);
   return canon;
 }
 
-/**
- * Réinitialise le cache (utile en dev).
- */
 export function resetClassesContentCache(): void {
   textCache.clear();
 }
