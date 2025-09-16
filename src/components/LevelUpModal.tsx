@@ -324,7 +324,7 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         return { ...player.spell_slots, ...slots };
       };
 
-      // Ressources de classe — inclut Paladin Conduits divins (N3+)
+      // Ressources de classe (inchangé)
       const getClassResourcesByLevel = (playerClass: string | null | undefined, level: number) => {
         const resources: any = { ...player.class_resources };
 
@@ -343,7 +343,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
           }
           case 'Clerc':
             resources.channel_divinity = level >= 6 ? 2 : 1;
-            // on garde used_channel_divinity tel quel
             break;
           case 'Druide':
             resources.wild_shape = 2;
@@ -360,19 +359,9 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
           case 'Moine':
             resources.ki_points = level;
             break;
-          case 'Paladin': {
+          case 'Paladin':
             resources.lay_on_hands = level * 5;
-            if (level >= 3) {
-              const cap = level >= 11 ? 3 : 2;
-              resources.channel_divinity = cap;
-              const used = resources.used_channel_divinity || 0;
-              resources.used_channel_divinity = Math.min(used, cap);
-            } else {
-              delete resources.channel_divinity;
-              delete resources.used_channel_divinity;
-            }
             break;
-          }
           case 'Rôdeur':
             resources.favored_foe = Math.max(1, Math.floor((level + 3) / 4));
             break;
@@ -524,7 +513,7 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         return { ...player.spell_slots, ...slots };
       };
 
-      // Ressources de classe — inclut Paladin Conduits divins (N3+)
+      // Ressources de classe (inchangé)
       const getClassResourcesByLevel = (playerClass: string | null | undefined, level: number) => {
         const resources: any = { ...player.class_resources };
 
@@ -559,19 +548,9 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
           case 'Moine':
             resources.ki_points = level;
             break;
-          case 'Paladin': {
+          case 'Paladin':
             resources.lay_on_hands = level * 5;
-            if (level >= 3) {
-              const cap = level >= 11 ? 3 : 2;
-              resources.channel_divinity = cap;
-              const used = resources.used_channel_divinity || 0;
-              resources.used_channel_divinity = Math.min(used, cap);
-            } else {
-              delete resources.channel_divinity;
-              delete resources.used_channel_divinity;
-            }
             break;
-          }
           case 'Rôdeur':
             resources.favored_foe = Math.max(1, Math.floor((level + 3) / 4));
             break;
@@ -786,11 +765,7 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
             <button
               onClick={handleLevelUpWithAutoSave}
               disabled={isProcessing || !hpGain || parseInt(hpGain) < 1}
-              className={`flex-1 px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
-                isProcessing || !hpGain || parseInt(hpGain) < 1
-                  ? 'bg-gray-700 text-gray-300 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white'
-              }`}
+              className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
             >
               {isProcessing ? (
                 <>
