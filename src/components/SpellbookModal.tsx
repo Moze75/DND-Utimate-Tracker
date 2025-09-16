@@ -45,44 +45,7 @@ const MAGIC_SCHOOLS = [
 
 const SPELL_LEVELS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-/* ===================== Helpers de canonicalisation classes ===================== */
-
-function stripDiacritics(s: string) {
-  return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-}
-function normalize(s: string) {
-  return stripDiacritics((s || '').toLowerCase().trim());
-}
-function canonicalizeClass(name: string | null | undefined): string {
-  if (!name) return '';
-  const n = normalize(name);
-  if (['barbare', 'barbarian'].includes(n)) return 'Barbare';
-  if (['barde', 'bard'].includes(n)) return 'Barde';
-  if (['clerc', 'cleric', 'pretre', 'prêtre', 'prete', 'pretresse', 'pretres'].includes(n)) return 'Clerc';
-  if (['druide', 'druid'].includes(n)) return 'Druide';
-  if (['ensorceleur', 'sorcerer', 'sorceror'].includes(n)) return 'Ensorceleur';
-  if (['guerrier', 'fighter'].includes(n)) return 'Guerrier';
-  if (['magicien', 'wizard', 'mage'].includes(n)) return 'Magicien';
-  if (['moine', 'monk'].includes(n)) return 'Moine';
-  if (['paladin'].includes(n)) return 'Paladin';
-  if (['rodeur', 'rôdeur', 'ranger'].includes(n)) return 'Rôdeur';
-  if (['roublard', 'voleur', 'rogue', 'thief'].includes(n)) return 'Roublard';
-  // Occultiste (Warlock) — alias “Sorcier” legacy
-  if (['occultiste', 'warlock', 'sorcier'].includes(n)) return 'Occultiste';
-  return name;
-}
-function classListsInclude(list: string[] | undefined, cls: string | null | undefined): boolean {
-  if (!list || !cls) return false;
-  const target = canonicalizeClass(cls);
-  return list.some((c) => canonicalizeClass(c) === target);
-}
-const canonicalPlayerClassBadge = (playerClass?: DndClass | null | undefined) =>
-  canonicalizeClass(playerClass || '') || (playerClass || '');
-
-/* ===================== Données de fallback (SAMPLE_SPELLS) ===================== */
-/* Note: mise à jour pour 2024 — remplacer “Sorcier” par “Occultiste”
-         corriger quelques incohérences (ex: Flèche acide niveau 2) */
-
+// Données de sorts simulées - en attendant l'intégration avec Supabase Storage
 const SAMPLE_SPELLS: Spell[] = [
   {
     id: '550e8400-e29b-41d4-a716-446655440001',
@@ -93,10 +56,8 @@ const SAMPLE_SPELLS: Spell[] = [
     range: '36 mètres',
     components: { V: true, S: true, M: null },
     duration: 'Instantané',
-    description:
-      "Vous créez trois fléchettes scintillantes d'énergie magique. Chaque fléchette touche une créature de votre choix que vous pouvez voir à portée.",
-    higher_levels:
-      "Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 2 ou supérieur, le sort crée une fléchette de plus pour chaque niveau d'emplacement au-delà du niveau 1.",
+    description: 'Vous créez trois fléchettes scintillantes d\'énergie magique. Chaque fléchette touche une créature de votre choix que vous pouvez voir à portée.',
+    higher_levels: 'Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 2 ou supérieur, le sort crée une fléchette de plus pour chaque niveau d\'emplacement au-delà du niveau 1.',
     classes: ['Ensorceleur', 'Magicien']
   },
   {
@@ -108,10 +69,8 @@ const SAMPLE_SPELLS: Spell[] = [
     range: 'Contact',
     components: { V: true, S: true, M: null },
     duration: 'Instantané',
-    description:
-      "Une créature que vous touchez récupère un nombre de points de vie égal à 1d8 + votre modificateur de caractéristique d'incantation.",
-    higher_levels:
-      "Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 2 ou supérieur, les soins augmentent de 1d8 pour chaque niveau d'emplacement au-delà du niveau 1.",
+    description: 'Une créature que vous touchez récupère un nombre de points de vie égal à 1d8 + votre modificateur de caractéristique d\'incantation.',
+    higher_levels: 'Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 2 ou supérieur, les soins augmentent de 1d8 pour chaque niveau d\'emplacement au-delà du niveau 1.',
     classes: ['Barde', 'Clerc', 'Druide', 'Paladin', 'Rôdeur']
   },
   {
@@ -123,8 +82,7 @@ const SAMPLE_SPELLS: Spell[] = [
     range: 'Personnelle',
     components: { V: true, S: true, M: null },
     duration: '1 round',
-    description:
-      "Une barrière invisible de force magique apparaît et vous protège. Jusqu'au début de votre prochain tour, vous avez un bonus de +5 à la CA.",
+    description: 'Une barrière invisible de force magique apparaît et vous protège. Jusqu\'au début de votre prochain tour, vous avez un bonus de +5 à la CA.',
     classes: ['Ensorceleur', 'Magicien']
   },
   {
@@ -134,12 +92,10 @@ const SAMPLE_SPELLS: Spell[] = [
     school: 'Évocation',
     casting_time: '1 action',
     range: '45 mètres',
-    components: { V: true, S: true, M: "une petite boule de guano de chauve-souris et de soufre" },
+    components: { V: true, S: true, M: 'une petite boule de guano de chauve-souris et de soufre' },
     duration: 'Instantané',
-    description:
-      'Une traînée brillante jaillit de votre doigt pointé vers un point que vous choisissez à portée, puis explose en un rugissement de flammes.',
-    higher_levels:
-      "Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 4 ou supérieur, les dégâts augmentent de 1d6 pour chaque niveau d'emplacement au-delà du niveau 3.",
+    description: 'Une traînée brillante jaillit de votre doigt pointé vers un point que vous choisissez à portée, puis explose en un rugissement de flammes.',
+    higher_levels: 'Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 4 ou supérieur, les dégâts augmentent de 1d6 pour chaque niveau d\'emplacement au-delà du niveau 3.',
     classes: ['Ensorceleur', 'Magicien']
   },
   {
@@ -151,8 +107,7 @@ const SAMPLE_SPELLS: Spell[] = [
     range: '18 mètres',
     components: { V: true, S: false, M: null },
     duration: 'Concentration, jusqu\'à 1 minute',
-    description:
-      'Une créature volontaire que vous pouvez voir à portée est inspirée par vos paroles encourageantes.',
+    description: 'Une créature volontaire que vous pouvez voir à portée est inspirée par vos paroles encourageantes.',
     classes: ['Barde']
   },
   {
@@ -164,8 +119,7 @@ const SAMPLE_SPELLS: Spell[] = [
     range: 'Contact',
     components: { V: true, S: true, M: 'un morceau de cuir tanné' },
     duration: '8 heures',
-    description:
-      "Vous touchez une créature volontaire qui ne porte pas d'armure. Jusqu'à la fin du sort, la CA de base de la cible devient 13 + son modificateur de Dextérité.",
+    description: 'Vous touchez une créature volontaire qui ne porte pas d\'armure. Jusqu\'à la fin du sort, la CA de base de la cible devient 13 + son modificateur de Dextérité.',
     classes: ['Ensorceleur', 'Magicien']
   },
   {
@@ -177,9 +131,8 @@ const SAMPLE_SPELLS: Spell[] = [
     range: '9 mètres',
     components: { V: true, S: true, M: null },
     duration: 'Concentration, jusqu\'à 10 minutes',
-    description:
-      'Pendant la durée du sort, vous ressentez la présence de magie dans un rayon de 9 mètres autour de vous.',
-    classes: ['Barde', 'Clerc', 'Druide', 'Magicien', 'Paladin', 'Rôdeur', 'Ensorceleur', 'Occultiste']
+    description: 'Pendant la durée du sort, vous ressentez la présence de magie dans un rayon de 9 mètres autour de vous.',
+    classes: ['Barde', 'Clerc', 'Druide', 'Magicien', 'Paladin', 'Rôdeur', 'Ensorceleur', 'Sorcier']
   },
   {
     id: '550e8400-e29b-41d4-a716-446655440008',
@@ -190,8 +143,7 @@ const SAMPLE_SPELLS: Spell[] = [
     range: 'Contact',
     components: { V: true, S: false, M: 'une luciole ou de la mousse phosphorescente' },
     duration: '1 heure',
-    description:
-      "Vous touchez un objet qui ne fait pas plus de 3 mètres dans chaque dimension. Jusqu'à la fin du sort, l'objet émet une lumière vive dans un rayon de 6 mètres.",
+    description: 'Vous touchez un objet qui ne fait pas plus de 3 mètres dans chaque dimension. Jusqu\'à la fin du sort, l\'objet émet une lumière vive dans un rayon de 6 mètres.',
     classes: ['Barde', 'Clerc', 'Ensorceleur', 'Magicien']
   },
   {
@@ -203,21 +155,19 @@ const SAMPLE_SPELLS: Spell[] = [
     range: '3 mètres',
     components: { V: true, S: true, M: null },
     duration: 'Jusqu\'à 1 heure',
-    description:
-      "Ce sort est un tour de magie mineur que les lanceurs de sorts novices utilisent pour s'entraîner.",
-    classes: ['Barde', 'Ensorceleur', 'Occultiste', 'Magicien']
+    description: 'Ce sort est un tour de magie mineur que les lanceurs de sorts novices utilisent pour s\'entraîner.',
+    classes: ['Barde', 'Ensorceleur', 'Sorcier', 'Magicien']
   },
   {
     id: '550e8400-e29b-41d4-a716-446655440010',
     name: 'Flèche acide',
-    level: 2,
+    level: 0,
     school: 'Invocation',
     casting_time: '1 action',
     range: '27 mètres',
     components: { V: true, S: true, M: null },
     duration: 'Instantané',
-    description:
-      "Une flèche scintillante d'énergie acide file vers une créature à portée.",
+    description: 'Une flèche scintillante d\'énergie acide file vers une créature à portée.',
     classes: ['Ensorceleur', 'Magicien']
   },
   {
@@ -227,10 +177,9 @@ const SAMPLE_SPELLS: Spell[] = [
     school: 'Enchantement',
     casting_time: '1 action',
     range: '9 mètres',
-    components: { V: true, S: true, M: "une aspersion d'eau bénite" },
+    components: { V: true, S: true, M: 'une aspersion d\'eau bénite' },
     duration: 'Concentration, jusqu\'à 1 minute',
-    description:
-      'Vous bénissez jusqu’à trois créatures de votre choix à portée.',
+    description: 'Vous bénissez jusqu\'à trois créatures de votre choix à portée.',
     classes: ['Clerc', 'Paladin']
   },
   {
@@ -242,9 +191,8 @@ const SAMPLE_SPELLS: Spell[] = [
     range: '9 mètres',
     components: { V: true, S: true, M: null },
     duration: '1 heure',
-    description:
-      'Vous tentez de charmer un humanoïde que vous pouvez voir à portée.',
-    classes: ['Barde', 'Druide', 'Ensorceleur', 'Occultiste', 'Magicien']
+    description: 'Vous tentez de charmer un humanoïde que vous pouvez voir à portée.',
+    classes: ['Barde', 'Druide', 'Ensorceleur', 'Sorcier', 'Magicien']
   },
   {
     id: '550e8400-e29b-41d4-a716-446655440013',
@@ -255,23 +203,20 @@ const SAMPLE_SPELLS: Spell[] = [
     range: 'Contact',
     components: { V: true, S: true, M: 'un cil enrobé de gomme arabique' },
     duration: 'Concentration, jusqu\'à 1 heure',
-    description:
-      'Une créature que vous touchez devient invisible jusqu’à la fin du sort.',
-    higher_levels:
-      "Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 3 ou supérieur, vous pouvez cibler une créature supplémentaire pour chaque niveau d'emplacement au-delà du niveau 2.",
-    classes: ['Barde', 'Ensorceleur', 'Occultiste', 'Magicien']
+    description: 'Une créature que vous touchez devient invisible jusqu\'à la fin du sort.',
+    higher_levels: 'Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 3 ou supérieur, vous pouvez cibler une créature supplémentaire pour chaque niveau d\'emplacement au-delà du niveau 2.',
+    classes: ['Barde', 'Ensorceleur', 'Sorcier', 'Magicien']
   },
   {
     id: '550e8400-e29b-41d4-a716-446655440014',
-    name: "Toile d'araignée",
+    name: 'Toile d\'araignée',
     level: 2,
     school: 'Invocation',
     casting_time: '1 action',
     range: '18 mètres',
-    components: { V: true, S: true, M: "un peu de toile d'araignée" },
+    components: { V: true, S: true, M: 'un peu de toile d\'araignée' },
     duration: 'Concentration, jusqu\'à 1 heure',
-    description:
-      "Vous invoquez une masse de toiles d'araignée épaisses et collantes en un point que vous pouvez voir à portée.",
+    description: 'Vous invoquez une masse de toiles d\'araignée épaisses et collantes en un point que vous pouvez voir à portée.',
     classes: ['Ensorceleur', 'Magicien']
   },
   {
@@ -281,12 +226,10 @@ const SAMPLE_SPELLS: Spell[] = [
     school: 'Évocation',
     casting_time: '1 action',
     range: '30 mètres',
-    components: { V: true, S: true, M: "un peu de fourrure et une baguette d'ambre, de cristal ou de verre" },
+    components: { V: true, S: true, M: 'un peu de fourrure et une baguette d\'ambre, de cristal ou de verre' },
     duration: 'Instantané',
-    description:
-      "Un éclair forme une ligne de 30 mètres de long et 1,50 mètre de large partant de vous dans une direction de votre choix.",
-    higher_levels:
-      "Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 4 ou supérieur, les dégâts augmentent de 1d6 pour chaque niveau d'emplacement au-delà du niveau 3.",
+    description: 'Un éclair forme une ligne de 30 mètres de long et 1,50 mètre de large partant de vous dans une direction de votre choix.',
+    higher_levels: 'Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 4 ou supérieur, les dégâts augmentent de 1d6 pour chaque niveau d\'emplacement au-delà du niveau 3.',
     classes: ['Ensorceleur', 'Magicien']
   },
   {
@@ -298,10 +241,9 @@ const SAMPLE_SPELLS: Spell[] = [
     range: '18 mètres',
     components: { V: false, S: true, M: null },
     duration: 'Instantané',
-    description: "Vous tentez d'interrompre une créature en train de lancer un sort.",
-    higher_levels:
-      "Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 4 ou supérieur, l'interruption est automatique si le niveau du sort est inférieur ou égal au niveau de l'emplacement utilisé.",
-    classes: ['Ensorceleur', 'Occultiste', 'Magicien']
+    description: 'Vous tentez d\'interrompre une créature en train de lancer un sort.',
+    higher_levels: 'Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 4 ou supérieur, l\'interruption est automatique si le niveau du sort est inférieur ou égal au niveau de l\'emplacement utilisé.',
+    classes: ['Ensorceleur', 'Sorcier', 'Magicien']
   },
   {
     id: '550e8400-e29b-41d4-a716-446655440017',
@@ -312,8 +254,7 @@ const SAMPLE_SPELLS: Spell[] = [
     range: '9 mètres',
     components: { V: true, S: true, M: 'un copeau de racine de réglisse' },
     duration: 'Concentration, jusqu\'à 1 minute',
-    description:
-      "Choisissez une créature volontaire que vous pouvez voir à portée. Jusqu'à la fin du sort, la vitesse de la cible est doublée.",
+    description: 'Choisissez une créature volontaire que vous pouvez voir à portée. Jusqu\'à la fin du sort, la vitesse de la cible est doublée.',
     classes: ['Ensorceleur', 'Magicien']
   },
   {
@@ -325,10 +266,8 @@ const SAMPLE_SPELLS: Spell[] = [
     range: '18 mètres',
     components: { V: true, S: true, M: null },
     duration: 'Instantané',
-    description:
-      "Une vague d'énergie curative émane d'un point de votre choix à portée.",
-    higher_levels:
-      "Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 4 ou supérieur, les soins augmentent de 1d8 pour chaque niveau d'emplacement au-delà du niveau 3.",
+    description: 'Une vague d\'énergie curative émane d\'un point de votre choix à portée.',
+    higher_levels: 'Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 4 ou supérieur, les soins augmentent de 1d8 pour chaque niveau d\'emplacement au-delà du niveau 3.',
     classes: ['Barde', 'Clerc', 'Druide']
   },
   {
@@ -340,9 +279,8 @@ const SAMPLE_SPELLS: Spell[] = [
     range: '150 mètres',
     components: { V: true, S: false, M: null },
     duration: 'Instantané',
-    description:
-      "Vous vous téléportez depuis votre position actuelle vers n'importe quel autre endroit à portée.",
-    classes: ['Barde', 'Ensorceleur', 'Occultiste', 'Magicien']
+    description: 'Vous vous téléportez depuis votre position actuelle vers n\'importe quel autre endroit à portée.',
+    classes: ['Barde', 'Ensorceleur', 'Sorcier', 'Magicien']
   },
   {
     id: '550e8400-e29b-41d4-a716-446655440020',
@@ -354,8 +292,7 @@ const SAMPLE_SPELLS: Spell[] = [
     components: { V: true, S: true, M: 'un petit morceau de phosphore' },
     duration: 'Concentration, jusqu\'à 1 minute',
     description: 'Vous créez un mur de feu sur une surface solide à portée.',
-    higher_levels:
-      "Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 5 ou supérieur, les dégâts augmentent de 1d8 pour chaque niveau d'emplacement au-delà du niveau 4.",
+    higher_levels: 'Quand vous lancez ce sort en utilisant un emplacement de sort de niveau 5 ou supérieur, les dégâts augmentent de 1d8 pour chaque niveau d\'emplacement au-delà du niveau 4.',
     classes: ['Druide', 'Ensorceleur', 'Magicien']
   }
 ];
@@ -386,23 +323,29 @@ export function SpellbookModal({
       
       setLoading(true);
       try {
+        console.log('Tentative de chargement des sorts depuis Supabase Storage...');
+        
         // Essayer de charger depuis le bucket public
         const { data, error } = await supabase.storage
           .from('sorts')
           .download('Sorts 2024.md');
 
         if (error) {
-          // Fallback en cas d'accès impossible
+          console.error('Erreur Supabase Storage:', error);
           throw new Error('Fichier de sorts non accessible');
         }
 
         const text = await data.text();
+        console.log(`Fichier chargé, taille: ${text.length} caractères`);
+        
         const parsedSpells = parseSpellsFromMarkdown(text);
+        console.log(`Sorts parsés: ${parsedSpells.length}`);
         
         setTotalSpellsCount(parsedSpells.length);
         setSpells(parsedSpells);
       } catch (error) {
-        // Fallback local
+        console.error('Erreur lors du chargement des sorts:', error);
+        console.log('Utilisation des sorts d\'exemple en fallback');
         setTotalSpellsCount(SAMPLE_SPELLS.length);
         setSpells(SAMPLE_SPELLS);
       } finally {
@@ -416,6 +359,7 @@ export function SpellbookModal({
   // Empêcher le défilement de l'arrière-plan
   useEffect(() => {
     if (isOpen) {
+      // Ne pas bloquer le défilement de l'arrière-plan
       // Le modal gère son propre défilement
     }
   }, [isOpen]);
@@ -424,13 +368,18 @@ export function SpellbookModal({
   const parseSpellsFromMarkdown = (text: string): Spell[] => {
     const spells: Spell[] = [];
     
+    console.log('=== DÉBUT DU PARSING ===');
+    console.log('Taille du fichier:', text.length, 'caractères');
+    
     // Diviser le texte en sections de sorts (chaque sort commence par # suivi d'un nom)
     const sections = text.split(/(?=^# [^#])/m).filter(section => section.trim().length > 0);
     
-    sections.forEach((section) => {
+    console.log(`Sections trouvées: ${sections.length}`);
+    
+    sections.forEach((section, index) => {
       const lines = section.split('\n');
       const spell: Partial<Spell> = {
-        id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Math.random()}`,
+        id: crypto.randomUUID(),
         classes: [],
         components: { V: false, S: false, M: null },
         level: 0,
@@ -443,7 +392,8 @@ export function SpellbookModal({
       
       let descriptionLines: string[] = [];
       let higherLevelsLines: string[] = [];
-      let inHigherLevelsSection = false;
+      let foundFirstDescription = false;
+      let inHigherLevelsSection = false; // Nouvelle variable pour tracker l'état
       
       for (const line of lines) {
         const trimmedLine = line.trim();
@@ -452,6 +402,7 @@ export function SpellbookModal({
         // Nom du sort
         if (trimmedLine.startsWith('# ')) {
           spell.name = trimmedLine.substring(2).trim();
+          console.log(`📖 Sort trouvé: ${spell.name} (ID: ${spell.id})`);
           continue;
         }
         
@@ -459,13 +410,17 @@ export function SpellbookModal({
         if (trimmedLine.match(/^[A-Za-zÀ-ÿ\s]+\s+de\s+niveau\s+\d+/i) || 
             trimmedLine.match(/^Tour\s+de\s+magie/i)) {
           
+          console.log(`📋 Ligne d'info détectée: ${trimmedLine}`);
+          
           // Extraire le niveau
           if (trimmedLine.toLowerCase().includes('tour de magie')) {
             spell.level = 0;
+            console.log(`🎯 Niveau: 0 (tour de magie)`);
           } else {
             const levelMatch = trimmedLine.match(/niveau\s+(\d+)/i);
             if (levelMatch) {
               spell.level = parseInt(levelMatch[1]);
+              console.log(`🎯 Niveau: ${spell.level}`);
             }
           }
           
@@ -473,10 +428,12 @@ export function SpellbookModal({
           const schoolMatch = trimmedLine.match(/^([A-Za-zÀ-ÿ\s]+)\s+de\s+niveau/i);
           if (schoolMatch) {
             spell.school = schoolMatch[1].trim();
+            console.log(`🏫 École: ${spell.school}`);
           } else if (trimmedLine.toLowerCase().includes('tour de magie')) {
             const schoolMatch2 = trimmedLine.match(/Tour\s+de\s+magie\s+d[''']([A-Za-zÀ-ÿ\s]+)/i);
             if (schoolMatch2) {
               spell.school = schoolMatch2[1].trim();
+              console.log(`🏫 École (tour): ${spell.school}`);
             }
           }
           
@@ -484,8 +441,9 @@ export function SpellbookModal({
           const classMatch = trimmedLine.match(/\(([^)]+)\)/);
           if (classMatch) {
             const classesText = classMatch[1];
-
-            // Parser les classes avec mapping + canonicalisation 2024
+            console.log(`🎭 Classes brutes: ${classesText}`);
+            
+            // Parser les classes avec mapping
             const classMapping: { [key: string]: string } = {
               'barbare': 'Barbare',
               'barde': 'Barde',
@@ -499,66 +457,58 @@ export function SpellbookModal({
               'rôdeur': 'Rôdeur',
               'rodeur': 'Rôdeur',
               'roublard': 'Roublard',
-              // 2024: “Occultiste” au lieu de “Sorcier” (Warlock)
-              'occultiste': 'Occultiste',
-              'sorcier': 'Occultiste',
-              'warlock': 'Occultiste',
-              // on tolère aussi anglais usuels
-              'wizard': 'Magicien',
-              'bard': 'Barde',
-              'cleric': 'Clerc',
-              'druid': 'Druide',
-              'fighter': 'Guerrier',
-              'monk': 'Moine',
-              'ranger': 'Rôdeur',
-              'rogue': 'Roublard',
-              'sorcerer': 'Ensorceleur',
-              'paladin': 'Paladin',
+              'sorcier': 'Sorcier'
             };
             
             const detectedClasses: string[] = [];
-            const lc = normalize(classesText);
+            const classesLower = classesText.toLowerCase();
+            
             Object.entries(classMapping).forEach(([key, value]) => {
-              if (lc.includes(key)) {
+              if (classesLower.includes(key)) {
                 if (!detectedClasses.includes(value)) {
                   detectedClasses.push(value);
                 }
               }
             });
-            // Canonicaliser par sécurité
-            spell.classes = (detectedClasses || []).map(canonicalizeClass);
+            
+            spell.classes = detectedClasses;
+            console.log(`🎭 Classes parsées: ${spell.classes.join(', ')}`);
           }
           
           continue;
         }
         
-        // Champs "**Champ:** valeur"
+        // Champs avec format "**Champ:** valeur" ou "**Champ :** valeur"
         if (trimmedLine.match(/^\*\*[^*]+\*\*\s*:/)) {
           const match = trimmedLine.match(/^\*\*([^*]+)\*\*\s*:\s*(.+)$/);
           if (match) {
             const fieldName = match[1].trim().toLowerCase();
             const valuePart = match[2].trim();
             
+            console.log(`🔧 Champ détecté: "${fieldName}" = "${valuePart}"`);
+            
             switch (fieldName) {
-              case "temps d'incantation":
+              case 'temps d\'incantation':
               case 'temps d incantation':
               case 'incantation':
                 spell.casting_time = valuePart;
                 break;
+                
               case 'portée':
               case 'portee':
                 spell.range = valuePart;
                 break;
+                
               case 'composantes':
-              case 'composants': {
+              case 'composants':
                 const components = { V: false, S: false, M: null as string | null };
-                if (valuePart.toUpperCase().includes('V')) components.V = true;
-                if (valuePart.toUpperCase().includes('S')) components.S = true;
+                if (valuePart.includes('V')) components.V = true;
+                if (valuePart.includes('S')) components.S = true;
                 const mMatch = valuePart.match(/M[:\s]*\(?([^)]+)\)?/i);
                 if (mMatch) components.M = mMatch[1];
                 spell.components = components;
                 break;
-              }
+                
               case 'durée':
               case 'duree':
                 spell.duration = valuePart;
@@ -569,17 +519,17 @@ export function SpellbookModal({
         }
         
         // Détecter "Aux niveaux supérieurs"
-        if (
-          trimmedLine.toLowerCase().includes('aux niveaux supérieurs') ||
-          trimmedLine.toLowerCase().includes('niveaux supérieurs') ||
-          trimmedLine.toLowerCase().includes('emplacement de niveau supérieur') ||
-          trimmedLine.toLowerCase().includes('emplacements de niveaux supérieurs') ||
-          trimmedLine.toLowerCase().includes('améliorations de sorts mineurs')
-        ) {
-          inHigherLevelsSection = true;
-          higherLevelsLines.push(trimmedLine);
-          continue;
-        }
+          if (
+            trimmedLine.toLowerCase().includes('aux niveaux supérieurs') ||
+            trimmedLine.toLowerCase().includes('niveaux supérieurs') ||
+            trimmedLine.toLowerCase().includes('emplacement de niveau supérieur') ||
+            trimmedLine.toLowerCase().includes('emplacements de niveaux supérieurs') ||
+            trimmedLine.toLowerCase().includes('améliorations de sorts mineurs')
+          ) {
+            inHigherLevelsSection = true;
+            higherLevelsLines.push(trimmedLine);
+            continue;
+          }
         
         // Si on est dans la section "niveaux supérieurs"
         if (inHigherLevelsSection) {
@@ -596,8 +546,9 @@ export function SpellbookModal({
         // Si ce n'est pas un champ spécial et qu'on a déjà le nom, c'est la description
         if (!trimmedLine.startsWith('**') && !trimmedLine.startsWith('#') && spell.name && !inHigherLevelsSection) {
           descriptionLines.push(trimmedLine);
+          foundFirstDescription = true;
         }
-      } // Fin boucle lignes
+      } // Fermeture de la boucle for
       
       // Finaliser le sort
       if (spell.name) {
@@ -609,19 +560,32 @@ export function SpellbookModal({
           const trimmed = line.trim().toLowerCase();
           return !trimmed.match(/^[a-zà-ÿ\s]+\s+de\s+niveau\s+\d+/i) &&
                  !trimmed.match(/^tour\s+de\s+magie/i) &&
-                 !trimmed.includes('(') ||
-                 trimmed.length > 50;
+                 !trimmed.includes('(') || // Enlever les lignes avec parenthèses (classes)
+                 trimmed.length > 50; // Garder les longues lignes même avec parenthèses
         });
         
         spell.description = descriptionParts.join('\n').trim();
-        spell.higher_levels = (higherLevelsLines.join('\n').trim() || undefined);
+        spell.higher_levels = higherLevelsLines.join('\n').trim() || undefined;
         
-        // Convertir les classes en tableau canonique
-        spell.classes = (spell.classes || []).map(canonicalizeClass);
+        // Convertir les classes en tableau de chaînes pour la base de données
+        spell.classes = spell.classes || [];
+        
+        console.log(`✅ Sort finalisé: ${spell.name} (ID: ${spell.id})`);
+        console.log(`   - Niveau: ${spell.level}`);
+        console.log(`   - École: ${spell.school}`);
+        console.log(`   - Classes: ${spell.classes?.join(', ') || 'aucune'}`);
+        console.log(`   - Description: ${spell.description.substring(0, 100)}...`);
+        if (spell.higher_levels) {
+          console.log(`   - Niveaux supérieurs: ${spell.higher_levels.substring(0, 50)}...`);
+        }
         
         spells.push(spell as Spell);
       }
     });
+    
+    console.log(`=== RÉSULTAT PARSING ===`);
+    console.log(`Total de sorts parsés: ${spells.length}`);
+    console.log('Premiers IDs générés:', spells.slice(0, 3).map(s => ({ name: s.name, id: s.id })));
     
     return spells;
   };
@@ -629,19 +593,42 @@ export function SpellbookModal({
   // Filtrer les sorts selon les critères
   useEffect(() => {
     let filtered = spells;
+    
+    console.log('=== FILTRAGE DES SORTS ===');
+    console.log(`Total sorts: ${spells.length}`);
+    console.log(`Classe joueur: ${playerClass}`);
+    console.log(`Afficher toutes classes: ${showAllClasses}`);
+    console.log(`Niveaux sélectionnés: ${Array.from(selectedLevels).join(', ')}`);
+    console.log(`École sélectionnée: ${selectedSchool}`);
+    console.log(`Terme de recherche: ${searchTerm}`);
 
     // Filtrer par classe du joueur (sauf si showAllClasses est activé)
     if (!showAllClasses && playerClass) {
-      const canon = canonicalizeClass(playerClass);
-      filtered = filtered.filter(spell => classListsInclude(spell.classes, canon));
+      console.log(`🔍 Filtrage par classe: ${playerClass}`);
+      filtered = filtered.filter(spell => {
+        const hasClass = spell.classes.some(spellClass =>
+          spellClass.toLowerCase() === playerClass.toLowerCase()
+        );
+        if (hasClass) {
+          console.log(`✅ Sort ${spell.name} correspond à la classe ${playerClass}`);
+        }
+        return hasClass;
+      });
+      console.log(`Après filtrage par classe: ${filtered.length} sorts`);
+      
+      // Debug: afficher quelques sorts qui correspondent
+      if (filtered.length > 0) {
+        console.log('Premiers sorts filtrés:', filtered.slice(0, 3).map(s => 
+          `${s.name} (classes: ${s.classes.join(', ')})`
+        ));
+      }
     }
 
     // Filtrer par terme de recherche
     if (searchTerm) {
-      const q = normalize(searchTerm);
       filtered = filtered.filter(spell =>
-        normalize(spell.name).includes(q) ||
-        normalize(spell.description).includes(q)
+        spell.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        spell.description.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -655,6 +642,12 @@ export function SpellbookModal({
       filtered = filtered.filter(spell => spell.school === selectedSchool);
     }
 
+    console.log(`=== RÉSULTAT FILTRAGE ===`);
+    console.log(`Sorts affichés: ${filtered.length}`);
+    if (filtered.length > 0) {
+      console.log('Premiers sorts:', filtered.slice(0, 3).map(s => `${s.name} (niv.${s.level})`));
+    }
+    
     setFilteredSpells(filtered);
   }, [spells, searchTerm, selectedLevels, selectedSchool, playerClass, showAllClasses]);
 
@@ -688,7 +681,7 @@ export function SpellbookModal({
                   Grimoire de sorts
                 </h3>
                 <p className="text-gray-400">
-                  {!showAllClasses && playerClass ? `Sorts de ${canonicalPlayerClassBadge(playerClass)}` : 'Tous les sorts'}
+                  {!showAllClasses && playerClass ? `Sorts de ${playerClass}` : 'Tous les sorts'}
                 </p>
               </div>
             </div>
@@ -716,6 +709,7 @@ export function SpellbookModal({
                       <h4 className="font-medium text-gray-100">
                         {selectedSpells.length} sort{selectedSpells.length > 1 ? 's' : ''} sélectionné{selectedSpells.length > 1 ? 's' : ''}
                       </h4>
+                      {/* Noms retirés volontairement pour éviter la casse de layout */}
                     </div>
                   </div>
                   <button
@@ -725,7 +719,7 @@ export function SpellbookModal({
                         onClose();
                       }
                     }}
-                    className="shrink-0 min-w-[200px] sm:min-w-[220px] bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-6 py-2 rounded-lg font-medium transition"
+                    className="shrink-0 min-w-[200px] sm:min-w-[220px] bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-6 py-2 rounded-lg font-medium transition-all duration-200 shadow-lg flex items-center gap-2 justify-center"
                   >
                     <Check size={16} />
                     Valider la sélection
@@ -751,28 +745,20 @@ export function SpellbookModal({
 
                 {/* Level Filter */}
                 <div className="relative">
-                  <div
-                    className="input-dark px-3 py-2 rounded-lg cursor-pointer"
-                    onClick={() => {
-                      const dropdown = document.getElementById('level-dropdown');
-                      if (dropdown) {
-                        dropdown.classList.toggle('hidden');
-                      }
-                    }}
-                  >
-                    {selectedLevels.size === 0
-                      ? 'Tous les niveaux'
-                      : selectedLevels.size === 1
-                      ? Array.from(selectedLevels)[0] === 0
-                        ? 'Tours de magie'
-                        : `Niveau ${Array.from(selectedLevels)[0]}`
-                      : `${selectedLevels.size} niveaux sélectionnés`}
+                  <div className="input-dark px-3 py-2 rounded-lg cursor-pointer" onClick={() => {
+                    const dropdown = document.getElementById('level-dropdown');
+                    if (dropdown) {
+                      dropdown.classList.toggle('hidden');
+                    }
+                  }}>
+                    {selectedLevels.size === 0 ? 'Tous les niveaux' : 
+                     selectedLevels.size === 1 ? 
+                       (Array.from(selectedLevels)[0] === 0 ? 'Tours de magie' : `Niveau ${Array.from(selectedLevels)[0]}`) :
+                       `${selectedLevels.size} niveaux sélectionnés`
+                    }
                   </div>
-                  <div
-                    id="level-dropdown"
-                    className="hidden absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto"
-                  >
-                    {SPELL_LEVELS.map((level) => (
+                  <div id="level-dropdown" className="hidden absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
+                    {SPELL_LEVELS.map(level => (
                       <label key={level} className="flex items-center px-3 py-2 hover:bg-gray-700 cursor-pointer">
                         <input
                           type="checkbox"
@@ -803,7 +789,7 @@ export function SpellbookModal({
                   className="input-dark px-3 py-2 rounded-lg"
                 >
                   <option value="">Toutes les écoles</option>
-                  {MAGIC_SCHOOLS.map((school) => (
+                  {MAGIC_SCHOOLS.map(school => (
                     <option key={school} value={school}>
                       {school}
                     </option>
@@ -819,18 +805,16 @@ export function SpellbookModal({
                       onChange={(e) => setShowAllClasses(e.target.checked)}
                       className="sr-only"
                     />
-                    <div
-                      className={`relative w-12 h-6 rounded-full transition-colors ${
-                        showAllClasses ? 'bg-blue-600' : 'bg-gray-600'
-                      }`}
-                    >
-                      <div
-                        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                          showAllClasses ? 'translate-x-6' : 'translate-x-0'
-                        }`}
-                      />
+                    <div className={`relative w-12 h-6 rounded-full transition-colors ${
+                      showAllClasses ? 'bg-blue-600' : 'bg-gray-600'
+                    }`}>
+                      <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                        showAllClasses ? 'translate-x-6' : 'translate-x-0'
+                      }`} />
                     </div>
-                    <span className="ml-3 text-sm text-gray-300">Toutes les classes</span>
+                    <span className="ml-3 text-sm text-gray-300">
+                      Toutes les classes
+                    </span>
                   </label>
                 </div>
 
@@ -862,21 +846,20 @@ export function SpellbookModal({
                   <div className="flex items-center gap-2">
                     {!showAllClasses && playerClass && (
                       <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full">
-                        {canonicalPlayerClassBadge(playerClass)}
+                        {playerClass}
                       </span>
                     )}
                     {totalSpellsCount > 0 && (
-                      <span className="text-xs text-gray-500">sur {totalSpellsCount} total</span>
+                      <span className="text-xs text-gray-500">
+                        sur {totalSpellsCount} total
+                      </span>
                     )}
                   </div>
                 </div>
                 
                 <div className="space-y-2">
                   {filteredSpells.map((spell) => (
-                    <div
-                      key={spell.id}
-                      className="relative border border-gray-600/50 bg-gray-800/30 rounded-lg overflow-hidden hover:bg-gray-700/30 transition-colors"
-                    >
+                    <div key={spell.id} className="relative border border-gray-600/50 bg-gray-800/30 rounded-lg overflow-hidden hover:bg-gray-700/30 transition-colors">
                       {selectionMode && (
                         <div className="absolute top-3 right-3 z-10">
                           <button
@@ -885,19 +868,19 @@ export function SpellbookModal({
                               onSpellSelect?.(spell);
                             }}
                             className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${
-                              selectedSpells.find((s) => s.id === spell.id)
+                              selectedSpells.find(s => s.id === spell.id)
                                 ? 'bg-blue-500 border-blue-500 text-white'
                                 : 'border-gray-600 hover:border-blue-500'
                             }`}
                           >
-                            {selectedSpells.find((s) => s.id === spell.id) && <Check size={14} />}
+                            {selectedSpells.find(s => s.id === spell.id) && (
+                              <Check size={14} />
+                            )}
                           </button>
                         </div>
                       )}
                       <button
-                        onClick={() =>
-                          setSelectedSpell(selectedSpell?.id === spell.id ? null : spell)
-                        }
+                        onClick={() => setSelectedSpell(selectedSpell?.id === spell.id ? null : spell)}
                         className="w-full text-left p-3 pr-12 transition-all duration-200"
                       >
                         <div className="flex items-start justify-between mb-2 pr-2">
@@ -908,17 +891,10 @@ export function SpellbookModal({
                             <div className="text-xs bg-gray-700/50 px-2 py-1 rounded-full font-medium text-gray-300">
                               {spell.level === 0 ? 'Tour' : `Niv. ${spell.level}`}
                             </div>
-                            <div
-                              className={`transform transition-transform duration-200 ${
-                                selectedSpell?.id === spell.id ? 'rotate-180' : ''
-                              }`}
-                            >
-                              <svg
-                                className="w-5 h-5 text-gray-400"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
+                            <div className={`transform transition-transform duration-200 ${
+                              selectedSpell?.id === spell.id ? 'rotate-180' : ''
+                            }`}>
+                              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
                             </div>
@@ -928,22 +904,18 @@ export function SpellbookModal({
                           {spell.school} • {spell.casting_time} • {spell.range}
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          {spell.classes.slice(0, 4).map((className) => {
-                            const isPlayerClass =
-                              canonicalizeClass(className) === canonicalizeClass(playerClass || '');
-                            return (
-                              <span
-                                key={className}
-                                className={`text-xs px-2 py-1 rounded-full ${
-                                  isPlayerClass
-                                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
-                                    : 'bg-gray-700/50 text-gray-500'
-                                }`}
-                              >
-                                {className}
-                              </span>
-                            );
-                          })}
+                          {spell.classes.slice(0, 4).map(className => (
+                            <span
+                              key={className}
+                              className={`text-xs px-2 py-1 rounded-full ${
+                                className === playerClass
+                                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                                  : 'bg-gray-700/50 text-gray-500'
+                              }`}
+                            >
+                              {className}
+                            </span>
+                          ))}
                           {spell.classes.length > 4 && (
                             <span className="text-xs text-gray-500 px-2 py-1">
                               +{spell.classes.length - 4} autres
@@ -983,14 +955,14 @@ export function SpellbookModal({
                             </div>
                           </div>
 
-                          {/* Description + Niveaux supérieurs */}
-                          <div className="bg-gray-800/30 p-3 rounded-lg">
-                            <h5 className="font-semibold text-gray-200 mb-2">Description</h5>
-                            <div className="text-gray-300 leading-relaxed whitespace-pre-line">
-                              {spell.description}
-                              {spell.higher_levels && `\n\n${spell.higher_levels}`}
-                            </div>
-                          </div>
+              {/* Description + Higher Levels ensemble */}
+              <div className="bg-gray-800/30 p-3 rounded-lg">
+                <h5 className="font-semibold text-gray-200 mb-2">Description</h5>
+                <div className="text-gray-300 leading-relaxed whitespace-pre-line">
+                  {spell.description}
+                  {spell.higher_levels && `\n\n${spell.higher_levels}`}
+                </div>
+              </div>
 
                           {/* All Classes */}
                           <div className="bg-gray-800/30 p-3 rounded-lg">
@@ -1000,7 +972,7 @@ export function SpellbookModal({
                                 <span
                                   key={`${className}-${idx}`}
                                   className={`px-2 py-1 rounded-lg text-sm font-medium ${
-                                    canonicalizeClass(className) === canonicalizeClass(playerClass || '')
+                                    className.toLowerCase() === playerClass?.toLowerCase()
                                       ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
                                       : 'bg-gray-700/50 text-gray-400 border border-gray-600/30'
                                   }`}
@@ -1018,7 +990,9 @@ export function SpellbookModal({
                   {filteredSpells.length === 0 && !loading && (
                     <div className="text-center py-8">
                       <Book className="w-12 h-12 mx-auto mb-3 text-gray-600" />
-                      <p className="text-gray-400">Aucun sort trouvé</p>
+                      <p className="text-gray-400">
+                        Aucun sort trouvé
+                      </p>
                       <p className="text-gray-500 text-sm mt-1">
                         Essayez de modifier vos filtres ou activez "Toutes les classes"
                       </p>
