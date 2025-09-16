@@ -65,7 +65,7 @@ type Props = {
 const DEBUG = typeof window !== 'undefined' && (window as any).UT_DEBUG === true;
 
 /* ===========================================================
-   Aides noms / alias (aligné “règles 2024”)
+   Aides noms / alias (aligné “règles 2024”
    =========================================================== */
 
 const CLASS_ALIASES: Record<string, string[]> = {
@@ -748,16 +748,28 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
   ) {
     if (!player?.id) return;
 
+    // Totaux calculés automatiquement: bloquer leur édition
     if (resource === 'bardic_inspiration') {
       toast.error("Le total d'Inspiration bardique est calculé automatiquement (modificateur de Charisme).");
+      return;
+    }
+    if (resource === 'lay_on_hands') {
+      toast.error("Le total d'Imposition des mains est calculé automatiquement (5 × niveau de Paladin).");
       return;
     }
 
     const next: any = { ...(classResources || {}) };
 
+    // Barde: clamp used à [0..cap CHA]
     if (resource === 'used_bardic_inspiration' && typeof value === 'number') {
       const cap = Math.max(0, getChaModFromPlayerLike(player));
       next.used_bardic_inspiration = Math.min(Math.max(0, value), cap);
+    }
+    // Paladin: clamp used à [0..(5 × niveau)]
+    else if (resource === 'used_lay_on_hands' && typeof value === 'number') {
+      const lvl = Number(player?.level || 0);
+      const cap = Math.max(0, lvl * 5);
+      next.used_lay_on_hands = Math.min(Math.max(0, value), cap);
     } else {
       next[resource] = value;
     }
@@ -1051,7 +1063,7 @@ function ResourceBlock({
   total: number;
   used: number;
   onUse: () => void;
-  onRestore: () => void;
+  onRestore?: () => void; // rendu optionnel et sécurisé
   onUpdateTotal: (newTotal: number) => void;
   onUpdateUsed?: (value: number) => void;
   useNumericInput?: boolean;
@@ -1169,7 +1181,7 @@ function ResourceBlock({
           <button
             onClick={() => {
               if (used <= 0) return;
-              onRestore();
+              onRestore?.(); // sécurisé
             }}
             disabled={used <= 0}
             className={`flex-1 h-8 flex items-center justify-center rounded-md transition-colors ${
@@ -1181,18 +1193,29 @@ function ResourceBlock({
         </div>
       )}
 
-      {!hideEdit && (
+      {isEditing && !hideEdit && (
         <div className="mt-4 border-t border-gray-700/50 pt-4">
           <ResourceEditModal
             label={`Nombre total de ${label.toLowerCase()}`}
             total={total}
             onSave={(newTotal) => {
-              onRestore();
+              onRestore?.(); // reset used si fourni
               onUpdateTotal(newTotal);
               setIsEditing(false);
             }}
             onCancel={() => setIsEditing(false)}
           />
+        </div>
+      )}
+
+      {!hideEdit && (
+        <div className="mt-3 flex justify-end">
+          <button
+            onClick={() => setIsEditing(true)}
+            className="text-xs text-gray-400 hover:text-gray-300 underline underline-offset-4"
+          >
+            Modifier le total
+          </button>
         </div>
       )}
     </div>
@@ -1421,39 +1444,46 @@ function ClassResourcesCard({
     }
 
     case 'Paladin': {
-      // Imposition des mains
-      if (typeof resources.lay_on_hands === 'number') {
-        items.push(
-          <ResourceBlock
-            key="lay_on_hands"
-            icon={<HandHeart size={20} />}
-            label="Imposition des mains"
-            total={resources.lay_on_hands}
-            used={resources.used_lay_on_hands || 0}
-            onUpdateTotal={(n) => onUpdateResource('lay_on_hands', n)}
-            onUpdateUsed={(v) => onUpdateResource('used_lay_on_hands', v)}
-            color="yellow"
-            useNumericInput
-            onGlobalPulse={onPulseScreen}
-          />
-        );
-      }
+      // Total auto = 5 × niveau
+      const lvl = Number(level || 0);
+      const totalPoints = Math.max(0, lvl * 5);
+      const used = Math.min(Math.max(0, resources.used_lay_on_hands || 0), totalPoints);
 
-      // Conduits divins (N3+)
-      const lvl = level ?? 0;
+      items.push(
+        <ResourceBlock
+          key="lay_on_hands"
+          icon={<HandHeart size={20} />}
+          label="Imposition des mains"
+          total={totalPoints}
+          used={used}
+          onUse={() => onUpdateResource('used_lay_on_hands', Math.min(used + 1, totalPoints))}
+          onRestore={() => onUpdateResource('used_lay_on_hands', Math.max(0, used - 1))}
+          onUpdateTotal={() => { /* no-op: total auto */ }}
+          color="yellow"
+          useNumericInput
+          hideEdit
+          onGlobalPulse={onPulseScreen}
+          onUpdateUsed={(v) => {
+            const clamped = Math.min(Math.max(0, v), totalPoints);
+            onUpdateResource('used_lay_on_hands', clamped);
+          }}
+        />
+      );
+
+      // Conduits divins (N3+) — total calculé → pas d’édition
       if (lvl >= 3) {
         const cap = lvl >= 11 ? 3 : 2;
-        const used = resources.used_channel_divinity || 0;
+        const usedCd = resources.used_channel_divinity || 0;
         items.push(
           <ResourceBlock
             key="paladin_channel_divinity"
             icon={<Cross size={20} />}
             label="Conduits divins"
             total={cap}
-            used={used}
-            onUse={() => onUpdateResource('used_channel_divinity', Math.min(used + 1, cap))}
+            used={usedCd}
+            onUse={() => onUpdateResource('used_channel_divinity', Math.min(usedCd + 1, cap))}
             onUpdateTotal={() => { /* cap calculé par niveau -> non éditable */ }}
-            onRestore={() => onUpdateResource('used_channel_divinity', Math.max(0, used - 1))}
+            onRestore={() => onUpdateResource('used_channel_divinity', Math.max(0, usedCd - 1))}
             color="yellow"
             hideEdit
             onGlobalPulse={onPulseScreen}
