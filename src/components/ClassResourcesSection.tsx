@@ -1,5 +1,22 @@
 import React, { useState } from 'react';
-import { Save, X, Minus, Plus, Flame, Music, Cross, Leaf, Wand2, Swords, BookOpen, Footprints, HandHeart, Target, Skull, Sparkles } from 'lucide-react';
+import {
+  Save,
+  X,
+  Minus,
+  Plus,
+  Flame,
+  Music,
+  Cross,
+  Leaf,
+  Wand2,
+  Swords,
+  BookOpen,
+  Footprints,
+  HandHeart,
+  Target,
+  Skull,
+  Sparkles,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { Player, ClassResources } from '../types/dnd';
@@ -27,7 +44,6 @@ function getChaModFromPlayer(player: Player): number {
   let cha: AbilityLike | null = null;
 
   const getFromObj = (obj: Record<string, any>): AbilityLike | null => {
-    // Essaye différentes clés possibles
     const candidates = ['charisme', 'charisma', 'cha', 'car'];
     for (const k of candidates) {
       const key = Object.keys(obj).find((o) => o.toLowerCase() === k);
@@ -37,7 +53,6 @@ function getChaModFromPlayer(player: Player): number {
   };
 
   if (Array.isArray(abilities)) {
-    // Format tableau [{ name: 'Charisme', ... }]
     const found = abilities.find((a: any) => {
       const n = (a?.name || a?.label || '').toString().trim().toLowerCase();
       return n === 'charisme' || n === 'charisma' || n === 'cha' || n === 'car';
@@ -131,7 +146,7 @@ function ResourceBlock({
   total: number;
   used: number;
   onUse: () => void;
-  onRestore?: () => void; // rendu optionnel
+  onRestore?: () => void; // optionnel et sécurisé
   onUpdateTotal: (newTotal: number) => void;
   onUpdateUsed?: (value: number) => void;
   useNumericInput?: boolean;
@@ -235,7 +250,7 @@ function ResourceBlock({
             label={`Nombre total de ${label.toLowerCase()}`}
             total={total}
             onSave={(newTotal) => {
-              onRestore?.(); // sécurisé
+              onRestore?.(); // reset used si fourni
               onUpdateTotal(newTotal);
               setIsEditing(false);
             }}
@@ -274,15 +289,19 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
   ) => {
     if (!player?.id) return;
 
-    // Barde: total auto → refuse toute écriture du total
+    // Barde: total auto → refuse écriture du total
     if (resource === 'bardic_inspiration') {
-      toast.error("Le total d'Inspiration bardique est calculé automatiquement (modificateur de Charisme).");
+      toast.error(
+        "Le total d'Inspiration bardique est calculé automatiquement (modificateur de Charisme)."
+      );
       return;
     }
 
     // Paladin: total auto (5 × niveau) → refuse écriture du total
     if (resource === 'lay_on_hands') {
-      toast.error("Le total d'Imposition des mains est calculé automatiquement (5 × niveau de Paladin).");
+      toast.error(
+        "Le total d'Imposition des mains est calculé automatiquement (5 × niveau de Paladin)."
+      );
       return;
     }
 
@@ -292,7 +311,7 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
     if (resource === 'used_bardic_inspiration' && typeof value === 'number') {
       const cap = Math.max(0, getChaModFromPlayer(player));
       cr.used_bardic_inspiration = Math.min(Math.max(0, value), cap);
-      if (cr.bardic_inspiration !== undefined) delete cr.bardic_inspiration; // purge override si existait
+      if (cr.bardic_inspiration !== undefined) delete cr.bardic_inspiration;
     }
     // Paladin: clamp du used à [0..(5 × niveau)]
     else if (resource === 'used_lay_on_hands' && typeof value === 'number') {
@@ -381,7 +400,6 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
       break;
 
     case 'Barde': {
-      // Total auto = modificateur de Charisme
       const cap = Math.max(0, getChaModFromPlayer(player));
       const used = Math.min(cr.used_bardic_inspiration || 0, cap);
 
@@ -497,10 +515,7 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
             total={cr.action_surge}
             used={cr.used_action_surge || 0}
             onUse={() =>
-              updateClassResource(
-                'used_action_surge',
-                (cr.used_action_surge || 0) + 1
-              )
+              updateClassResource('used_action_surge', (cr.used_action_surge || 0) + 1)
             }
             onUpdateTotal={(n) => updateClassResource('action_surge', n)}
             onRestore={() =>
@@ -529,10 +544,7 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
               </div>
               <button
                 onClick={() =>
-                  updateClassResource(
-                    'used_arcane_recovery',
-                    !cr.used_arcane_recovery
-                  )
+                  updateClassResource('used_arcane_recovery', !cr.used_arcane_recovery)
                 }
                 className={`h-8 px-3 flex items-center justify-center rounded-md transition-colors ${
                   cr.used_arcane_recovery
@@ -574,7 +586,7 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
       break;
 
     case 'Paladin': {
-      // Imposition des mains: total auto = 5 × niveau (pas d’édition)
+      // Total auto = 5 × niveau — aucune édition du total
       const level = Number(player.level || 0);
       const totalPoints = Math.max(0, level * 5);
       const used = Math.min(Math.max(0, cr.used_lay_on_hands || 0), totalPoints);
@@ -593,7 +605,7 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
             updateClassResource('used_lay_on_hands', Math.max(0, used - 1))
           }
           onUpdateTotal={() => {
-            /* no-op: total auto-calc, non éditable dans l’onglet Classe */
+            /* no-op: total auto, pas d’édition */
           }}
           color="yellow"
           hideEdit
@@ -601,9 +613,8 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
       );
 
       // Conduits divins (N3+) — total calculé → pas d’édition
-      const lvl = level;
-      if (lvl >= 3) {
-        const cap = lvl >= 11 ? 3 : 2;
+      if (level >= 3) {
+        const cap = level >= 11 ? 3 : 2;
         const usedCd = cr.used_channel_divinity || 0;
         items.push(
           <ResourceBlock
@@ -613,19 +624,13 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
             total={cap}
             used={usedCd}
             onUse={() =>
-              updateClassResource(
-                'used_channel_divinity',
-                Math.min(usedCd + 1, cap)
-              )
+              updateClassResource('used_channel_divinity', Math.min(usedCd + 1, cap))
             }
             onUpdateTotal={() => {
               /* cap calculé -> non éditable */
             }}
             onRestore={() =>
-              updateClassResource(
-                'used_channel_divinity',
-                Math.max(0, usedCd - 1)
-              )
+              updateClassResource('used_channel_divinity', Math.max(0, usedCd - 1))
             }
             color="yellow"
             hideEdit
@@ -645,10 +650,7 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
             total={cr.favored_foe}
             used={cr.used_favored_foe || 0}
             onUse={() =>
-              updateClassResource(
-                'used_favored_foe',
-                (cr.used_favored_foe || 0) + 1
-              )
+              updateClassResource('used_favored_foe', (cr.used_favored_foe || 0) + 1)
             }
             onUpdateTotal={(n) => updateClassResource('favored_foe', n)}
             onRestore={() =>
