@@ -156,7 +156,7 @@ const SUBCLASS_ALIASES: Record<string, string[]> = {
 'credo des elements': ['Crédo des Éléments', 'Credo des Elements', 'Way of the Four Elements'],
   'credo de la misericorde': ['Crédo de la Miséricorde', 'Credo de la Misericorde', 'Way of Mercy'],
   'credo de l ombre': ['Crédo de l’Ombre', 'Credo de l Ombre', 'Way of Shadow', 'Shadow'],
-  'credo de la paume': ['Crédo de la Paume', 'Credo de la Paume', 'Crédo de la paume','Way of the Open Hand', 'Open Hand'],
+  'credo de la paume': ['Crédo de la Paume'],
 
 
   /* ============================
