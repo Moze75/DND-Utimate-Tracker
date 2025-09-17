@@ -128,9 +128,9 @@ const SUBCLASS_ALIASES: Record<string, string[]> = {
    * (Les "Options de Métamagie" ne sont pas une sous-classe mais un regroupement)
    * ============================ */
  'sorcellerie aberrante': ['Sorcellerie aberrante', 'Aberrant Sorcery', 'Aberrant Mind'],
-  'sorcellerie draconique': ['Sorcellerie draconique', 'Draconic Sorcery', 'Draconic Bloodline'],
-  'sorcellerie mecanique': ['Sorcellerie mécanique', 'Clockwork Sorcery', 'Clockwork Soul'],
-  'sorcellerie sauvage': ['Sorcellerie sauvage', 'Wild Magic', 'Wild Sorcery'],
+  'sorcellerie draconique': ['Sorcellerie draconique'],
+  'sorcellerie mecanique': ['Sorcellerie mécanique'],
+  'sorcellerie sauvage': ['Sorcellerie sauvage'],
 
 
   /* ============================
