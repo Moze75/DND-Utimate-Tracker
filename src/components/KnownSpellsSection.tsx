@@ -77,7 +77,7 @@ const getSpellcastingAbilityName = (cls?: string): 'Charisme' | 'Sagesse' | 'Int
   if (c.includes('magicien') || c.includes('wizard')) return 'Intelligence';
   if (c.includes('paladin')) return 'Charisme';
   if (c.includes('rôdeur') || c.includes('rodeur') || c.includes('ranger')) return 'Sagesse';
-  if (c.includes('sorcier') || c.includes('warlock')) return 'Charisme';
+  if (c.includes('occultiste') || c.includes('warlock')) return 'Charisme';
   return null;
 };
 const getAbilityModFromPlayer = (player: Player, abilityNameFr: 'Charisme' | 'Sagesse' | 'Intelligence'): number => {
