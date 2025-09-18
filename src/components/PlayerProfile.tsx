@@ -54,8 +54,6 @@ const DND_CLASSES: DndClass[] = [
   'Roublard',
   // Nouveau: classe 2024
   'Occultiste',
-  // Compatibilité données existantes (Warlock historique)
-  'Sorcier',
 ];
 
 const DND_RACES = [
