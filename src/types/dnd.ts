@@ -2,7 +2,6 @@
 
 // IMPORTANT — Compatibilité classes
 // - Ajout de "Occultiste" (Warlock) conformément aux règles 2024.
-// - On conserve "Sorcier" temporairement pour compatibilité avec des données existantes.
 //   Idéalement, migrez vos données vers "Occultiste" puis retirez "Sorcier".
 export type DndClass =
   | ''
