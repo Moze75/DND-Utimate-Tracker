@@ -268,7 +268,6 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
         return <Sword className="w-5 h-5 text-red-500" />;
       case 'Magicien':
       case 'Ensorceleur':
-      case 'Sorcier': // compat (Warlock)
       case 'Occultiste': // nouveau 2024
         return <Sparkles className="w-5 h-5 text-purple-500" />;
       case 'Clerc':
