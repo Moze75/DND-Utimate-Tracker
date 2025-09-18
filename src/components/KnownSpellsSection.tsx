@@ -111,7 +111,7 @@ const getCasterType = (cls?: string): CasterType => {
   if (['paladin'].some(k => c.includes(k))) return 'half';
   if (['ranger','rodeur','rôdeur'].some(k => c.includes(k))) return 'half';
   if (['artificer','artificier'].some(k => c.includes(k))) return 'half';
-  if (['warlock','sorcier'].some(k => c.includes(k))) return 'warlock';
+  if (['warlock','occultiste'].some(k => c.includes(k))) return 'warlock';
   return 'none';
 };
 const getWarlockPactSlotLevel = (level: number): number => {
