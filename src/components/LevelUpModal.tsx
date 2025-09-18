@@ -146,7 +146,7 @@ const getSpellKnowledgeInfo = (player: Player, newLevel: number): SpellInfo => {
         note: 'Valeurs totales au nouveau niveau'
       };
     }
-    case 'Sorcier': {   // nom de classe utilisé dans le code (Warlock)
+    case 'Occultiste': {   // nom de classe utilisé dans le code (Warlock)
       return {
         kind: 'known',
         cantrips: WARLOCK_CANTRIPS[lvl],
