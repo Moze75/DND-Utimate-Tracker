@@ -146,7 +146,6 @@ const getSpellKnowledgeInfo = (player: Player, newLevel: number): SpellInfo => {
         note: 'Valeurs totales au nouveau niveau'
       };
     }
-    case 'Occultiste': // alias utilisateur
     case 'Sorcier': {   // nom de classe utilisé dans le code (Warlock)
       return {
         kind: 'known',
