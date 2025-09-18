@@ -25,7 +25,7 @@ const getHitDieSize = (playerClass: DndClass | null | undefined): number => {
     case 'Druide':
     case 'Moine':
     case 'Roublard':
-    case 'Sorcier': return 8; // Sorcier = Occultiste (Warlock) dans ce projet
+    case 'Occultiste': return 8; 
     case 'Magicien':
     case 'Ensorceleur': return 6;
     default: return 8;
