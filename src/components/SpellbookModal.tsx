@@ -132,7 +132,7 @@ const SAMPLE_SPELLS: Spell[] = [
     components: { V: true, S: true, M: null },
     duration: 'Concentration, jusqu\'à 10 minutes',
     description: 'Pendant la durée du sort, vous ressentez la présence de magie dans un rayon de 9 mètres autour de vous.',
-    classes: ['Barde', 'Clerc', 'Druide', 'Magicien', 'Paladin', 'Rôdeur', 'Ensorceleur', 'Sorcier']
+    classes: ['Barde', 'Clerc', 'Druide', 'Magicien', 'Paladin', 'Rôdeur', 'Ensorceleur', 'Occultiste']
   },
   {
     id: '550e8400-e29b-41d4-a716-446655440008',
