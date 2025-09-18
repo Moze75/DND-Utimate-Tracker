@@ -19,7 +19,7 @@ const getHitDieSize = (playerClass: DndClass | null | undefined): number => {
     case 'Barbare': return 12;
     case 'Guerrier':
     case 'Paladin':
-    case 'Rôdeur': return 10;
+    case 'Rodeur': return 10;
     case 'Barde':
     case 'Clerc':
     case 'Druide':
@@ -199,11 +199,11 @@ const getSpellKnowledgeInfo = (player: Player, newLevel: number): SpellInfo => {
         note: 'Valeur totale des sorts connus au nouveau niveau'
       };
     }
-    case 'Rôdeur': {
+    case 'Rodeur': {
       return {
         kind: 'known',
         known: RANGER_KNOWN[lvl],
-        label: 'Rôdeur',
+        label: 'Rodeur',
         note: 'Valeur totale des sorts connus au nouveau niveau'
       };
     }
@@ -258,7 +258,7 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         }
         
         const fullCasters = ['Magicien', 'Ensorceleur', 'Barde', 'Clerc', 'Druide'];
-        const halfCasters = ['Paladin', 'Rôdeur'];
+        const halfCasters = ['Paladin', 'Rodeur'];
         
         if (fullCasters.includes(playerClass || '')) {
           if (level >= 1) {
@@ -372,7 +372,7 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
             }
             break;
           }
-          case 'Rôdeur':
+          case 'Rodeur':
             resources.favored_foe = Math.max(1, Math.floor((level + 3) / 4));
             break;
           case 'Roublard':
