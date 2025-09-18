@@ -40,7 +40,7 @@ BEGIN
             subclasses := jsonb_build_array(
                 'Voie du Berserker',
                 'Cœur sauvage',
-                'Voie de l'Arbre-Monde',
+                'Voie de l Arbre-Monde',
                 'Zélote'
             );
         WHEN 'Barde' THEN
