@@ -129,7 +129,7 @@ const getDexModFromPlayer = (player: Player): number => {
 
 // Canonicalisation minimale pour compat RPC (backend encore sur "Sorcier")
 function mapClassForRpc(pClass: DndClass | null | undefined): string | null | undefined {
-  if (pClass === 'Occultiste') return 'Sorcier';
+  if (pClass === 'Occultiste') return 'Occultiste';
   return pClass;
 }
 
