@@ -270,7 +270,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           case 'Druide':
           case 'Moine':
           case 'Roublard':
-          case 'Sorcier':     // compat (Warlock)
           case 'Occultiste':  // nouveau 2024
             return 8;
           case 'Magicien':
