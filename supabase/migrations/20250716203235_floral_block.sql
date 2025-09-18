@@ -38,9 +38,9 @@ BEGIN
     CASE p_class
         WHEN 'Barbare' THEN
             subclasses := jsonb_build_array(
-                'Berserker',
+                'Voie du Berserker',
                 'Cœur sauvage',
-                'Arbre du Monde',
+                'Voie de l'Arbre-Monde',
                 'Zélote'
             );
         WHEN 'Barde' THEN
