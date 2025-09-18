@@ -457,7 +457,7 @@ export function SpellbookModal({
               'rôdeur': 'Rôdeur',
               'rodeur': 'Rôdeur',
               'roublard': 'Roublard',
-              'sorcier': 'Sorcier'
+              'occultiste': 'Occultiste'
             };
             
             const detectedClasses: string[] = [];
