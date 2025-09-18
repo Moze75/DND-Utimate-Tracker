@@ -501,7 +501,6 @@ export function SpellbookModal({
               'roublard': 'Roublard',
               // 2024: “Occultiste” au lieu de “Sorcier” (Warlock)
               'occultiste': 'Occultiste',
-              'sorcier': 'Occultiste',
               'warlock': 'Occultiste',
               // on tolère aussi anglais usuels
               'wizard': 'Magicien',
