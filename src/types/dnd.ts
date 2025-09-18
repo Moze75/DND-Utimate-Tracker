@@ -18,7 +18,6 @@ export type DndClass =
   | 'Rôdeur'
   | 'Roublard'
   | 'Occultiste'
-  | 'Sorcier'; // legacy alias (Warlock) — à migrer vers "Occultiste"
 
 export type PlayerBackground =
   | ''
