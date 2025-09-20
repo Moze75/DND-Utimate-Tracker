@@ -5,10 +5,11 @@ import type { Player } from '../types/dnd';
 /**
  * Profil tab sans dépendances externes.
  * Améliorations:
- * - Italique _texte_
- * - Sous-titres = lignes entièrement en **gras** -> uppercase + spacing
+ * - Gras **texte**, italique _texte_
+ * - Sous-titres = lignes entièrement en **gras** -> uppercase + léger tracking
  * - Sections repliables (Race / Historique / Dons)
- * - Encadrés inline pour [texte] (badges)
+ * - Encadrés de pavés avec balises II (début) et || (fin)
+ * - Badges inline pour [texte] (optionnel; l'encadré n'utilise plus les crochets)
  */
 
 const RAW_BASE = 'https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main';
@@ -170,7 +171,7 @@ function renderInlineNoBracket(text: string): React.ReactNode {
   return out;
 }
 
-// Rendu encadrés [texte] + gras/italique
+// Badges inline pour [texte] (facultatif)
 function renderInline(text: string): React.ReactNode {
   if (!text) return null;
   const out: React.ReactNode[] = [];
@@ -180,18 +181,15 @@ function renderInline(text: string): React.ReactNode {
   while (i < text.length) {
     const start = text.indexOf('[', i);
     if (start === -1) {
-      // pas de crochet restant
       const tail = text.slice(i);
       if (tail) out.push(<span key={`tail-${k++}`}>{renderInlineNoBracket(tail)}</span>);
       break;
     }
-    // push avant le crochet
     if (start > i) {
       out.push(<span key={`pre-${k++}`}>{renderInlineNoBracket(text.slice(i, start))}</span>);
     }
     const end = text.indexOf(']', start + 1);
     if (end === -1) {
-      // pas de fermeture -> tout le reste
       out.push(<span key={`rest-${k++}`}>{renderInlineNoBracket(text.slice(start))}</span>);
       break;
     }
@@ -220,6 +218,10 @@ function MarkdownLite({ content }: { content: string }) {
     let ulBuffer: string[] = [];
     let olBuffer: string[] = [];
     let quoteBuffer: string[] = [];
+
+    // Encadré par II ... ||
+    let inBox = false;
+    let boxBuffer: string[] = [];
 
     const flushUL = () => {
       if (ulBuffer.length > 0) {
@@ -265,8 +267,44 @@ function MarkdownLite({ content }: { content: string }) {
       flushOL();
     };
 
+    const flushBox = () => {
+      if (!boxBuffer.length) return;
+      const inner = boxBuffer.join('\n');
+      out.push(
+        <div
+          key={`box-${out.length}`}
+          className="rounded-lg border border-white/15 bg-white/5 p-3"
+        >
+          {/* On réutilise le parseur pour le contenu du pavé */}
+          <MarkdownLite content={inner} />
+        </div>
+      );
+      boxBuffer = [];
+    };
+
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
+
+      // Gestion du bloc encadré
+      if (inBox) {
+        // Fin du pavé
+        if (/^\s*\|\|\s*$/.test(raw)) {
+          inBox = false;
+          flushBox();
+          continue;
+        }
+        boxBuffer.push(raw);
+        continue;
+      }
+
+      // Début du pavé encadré
+      if (/^\s*II\s*$/.test(raw)) {
+        // sortir proprement des autres blocs
+        flushAllBlocks();
+        inBox = true;
+        boxBuffer = [];
+        continue;
+      }
 
       // Listes à puces
       const mUL = raw.match(/^\s*[-*]\s+(.*)$/);
@@ -311,7 +349,7 @@ function MarkdownLite({ content }: { content: string }) {
         continue;
       }
 
-      // Titres ###
+      // Titres ### (internes)
       const h3 = raw.match(/^\s*###\s+(.*)$/);
       if (h3) {
         out.push(
@@ -322,7 +360,7 @@ function MarkdownLite({ content }: { content: string }) {
         continue;
       }
 
-      // Ligne entièrement en **gras** => “sous-titre” stylé
+      // Ligne entièrement en **gras** => “sous-titre” stylé (plus distinct du corps)
       const fullBold = raw.match(/^\s*\*\*(.+?)\*\*\s*$/);
       if (fullBold) {
         out.push(
@@ -365,6 +403,11 @@ function MarkdownLite({ content }: { content: string }) {
 
     // Fin: flush des blocs restants
     flushAllBlocks();
+    if (inBox) {
+      // Si le marqueur de fin "||" manque, on flush quand même
+      inBox = false;
+      flushBox();
+    }
 
     return out;
   }, [content]);
