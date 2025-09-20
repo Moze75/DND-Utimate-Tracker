@@ -1,17 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Shield, ScrollText, Sparkles, Loader2 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import type { Player } from '../types/dnd';
 
 /**
- * Profil tab: renders Race, Historique, Dons by parsing remote markdown files.
- *
- * Parsing rules:
- * - Sections start with a heading line "### <TITLE>"
- * - Titles are normalized for matching (NFC, case-insensitive, spaces collapsed, apostrophes and hyphens unified).
- * - We keep accents and punctuation for display; normalization is for matching only.
- * - Duplicate titles in a same source are logged and the first occurrence is kept.
+ * Profil tab sans dépendances externes (pas de react-markdown/remark-gfm).
+ * Affiche Race, Historique, Dons en parsant les fichiers Markdown distants par titres ###
+ * et rend le contenu en “lite” (titres, listes à puces, paragraphes).
  */
 
 const RAW_BASE = 'https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main';
@@ -24,26 +18,17 @@ const URLS = {
   stylesCombat: `${RAW_BASE}/DONS/STYLES_DE_COMBAT.md`,
 };
 
-// Unicode helpers: normalize text for matching
+// Normalisation pour la correspondance
 function normalizeKey(input: string): string {
-  // NFC normalization
   let s = input.normalize('NFC').trim();
-
-  // unify apostrophes and quotes
-  s = s.replace(/[\u2019\u2018\u2032]/g, "'"); // ’ ‘ ′ -> '
-  // unify hyphens/dashes to ASCII hyphen-minus
-  s = s.replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, '-'); // hyphen, non-breaking hyphen, figure dash, en dash, em dash, minus
-
-  // collapse multiple spaces (including non-breaking)
-  s = s.replace(/[\u00A0]/g, ' ').replace(/\s+/g, ' ');
-
-  // case-insensitive compare -> use lower
+  s = s.replace(/[\u2019\u2018\u2032]/g, "'"); // apostrophes typographiques -> '
+  s = s.replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, '-'); // tirets variés -> -
+  s = s.replace(/[\u00A0]/g, ' ').replace(/\s+/g, ' '); // espaces
   s = s.toLowerCase();
-
   return s;
 }
 
-// Parse a markdown file into a map: normalizedTitle -> { title, content }
+// Parse le Markdown en sections par titres ### ...
 function parseMarkdownByH3(md: string): Record<string, { title: string; content: string }> {
   const lines = md.split(/\r?\n/);
   const result: Record<string, { title: string; content: string }> = {};
@@ -53,13 +38,11 @@ function parseMarkdownByH3(md: string): Record<string, { title: string; content:
   const flush = () => {
     if (currentTitle !== null) {
       const normalized = normalizeKey(currentTitle);
-      if (result[normalized]) {
-        // Duplicate heading detected; keep the first, warn once.
-        // You may decide to merge instead.
+      if (!result[normalized]) {
+        result[normalized] = { title: currentTitle, content: currentBuffer.join('\n').trim() };
+      } else {
         // eslint-disable-next-line no-console
         console.warn('[ProfilTab] Duplicate section title:', currentTitle);
-      } else {
-        result[normalized] = { title: currentTitle, content: currentBuffer.join('\n').trim() };
       }
     }
   };
@@ -68,21 +51,17 @@ function parseMarkdownByH3(md: string): Record<string, { title: string; content:
     const line = rawLine.trimEnd();
     const m = line.match(/^###\s+(.+?)\s*$/);
     if (m) {
-      // new section
       flush();
       currentTitle = m[1];
       currentBuffer = [];
-    } else {
-      if (currentTitle !== null) currentBuffer.push(line);
+    } else if (currentTitle !== null) {
+      currentBuffer.push(line);
     }
   }
-  // last section
   flush();
-
   return result;
 }
 
-// Simple in-memory cache for fetched markdown
 type IndexCache = {
   content?: string;
   index?: Record<string, { title: string; content: string }>;
@@ -128,7 +107,88 @@ function useMarkdownIndex(url: string) {
   return state;
 }
 
-// Render helpers
+// Rendu lite du “markdown” (sans librairies)
+function MarkdownLite({ content }: { content: string }) {
+  // On convertit les lignes en paragraphes/listes/titres basiques
+  const elements = useMemo(() => {
+    const lines = content.split(/\r?\n/);
+    const out: React.ReactNode[] = [];
+    let listBuffer: string[] = [];
+
+    const flushList = () => {
+      if (listBuffer.length > 0) {
+        out.push(
+          <ul className="list-disc pl-5 space-y-1" key={`ul-${out.length}`}>
+            {listBuffer.map((item, i) => (
+              <li key={`li-${i}`}>{item}</li>
+            ))}
+          </ul>
+        );
+        listBuffer = [];
+      }
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Regrouper listes "- " ou "* "
+      const mList = line.match(/^\s*[-*]\s+(.*)$/);
+      if (mList) {
+        listBuffer.push(mList[1]);
+        continue;
+      }
+
+      // Si on quitte une liste, on flush
+      if (!mList && listBuffer.length > 0 && line.trim() !== '') {
+        flushList();
+      }
+
+      const h4 = line.match(/^\s*####\s+(.*)$/);
+      if (h4) {
+        flushList();
+        out.push(
+          <div className="font-semibold mt-3 mb-1" key={`h4-${out.length}`}>
+            {h4[1]}
+          </div>
+        );
+        continue;
+      }
+
+      const h3 = line.match(/^\s*###\s+(.*)$/);
+      if (h3) {
+        flushList();
+        out.push(
+          <div className="font-bold text-base mt-4 mb-2" key={`h3-${out.length}`}>
+            {h3[1]}
+          </div>
+        );
+        continue;
+      }
+
+      // Ligne vide -> espace vertical
+      if (line.trim() === '') {
+        flushList();
+        out.push(<div className="h-2" key={`sp-${out.length}`} />);
+        continue;
+      }
+
+      // Paragraphe simple
+      out.push(
+        <p className="mb-2 leading-relaxed" key={`p-${out.length}`}>
+          {line}
+        </p>
+      );
+    }
+    // Fin: si une liste est en cours
+    if (listBuffer.length > 0) flushList();
+
+    return out;
+  }, [content]);
+
+  if (!content) return null;
+  return <div className="prose prose-invert max-w-none">{elements}</div>;
+}
+
 function SectionContainer(props: { icon: React.ReactNode; title: string; children?: React.ReactNode }) {
   return (
     <div className="stat-card">
@@ -137,15 +197,6 @@ function SectionContainer(props: { icon: React.ReactNode; title: string; childre
         <h3 className="text-lg font-semibold text-gray-100">{props.title}</h3>
       </div>
       <div className="p-4">{props.children}</div>
-    </div>
-  );
-}
-
-function MarkdownBlock({ content }: { content: string }) {
-  if (!content) return null;
-  return (
-    <div className="prose prose-invert max-w-none">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
     </div>
   );
 }
@@ -177,11 +228,11 @@ export interface PlayerProfileProfileTabProps {
 }
 
 export default function PlayerProfileProfileTab({ player }: PlayerProfileProfileTabProps) {
-  // Selections from player
+  // Sélections
   const race = player.race || '';
   const historique = (player.background as string) || '';
 
-  // Feats
+  // Dons (adapter si nécessaire selon ton type Player)
   const feats: any = (player.stats as any)?.feats || {};
   const originFeats: string[] = Array.isArray(feats.origins)
     ? feats.origins
@@ -191,14 +242,14 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
   const generalFeats: string[] = Array.isArray(feats.generals) ? feats.generals : [];
   const styleFeats: string[] = Array.isArray(feats.styles) ? feats.styles : [];
 
-  // Indexes
+  // Index des sources distantes
   const racesIdx = useMarkdownIndex(URLS.races);
   const histIdx = useMarkdownIndex(URLS.historiques);
   const donsOrigIdx = useMarkdownIndex(URLS.donsOrigine);
   const donsGenIdx = useMarkdownIndex(URLS.donsGeneraux);
   const stylesIdx = useMarkdownIndex(URLS.stylesCombat);
 
-  // Lookup helpers with normalization (preserve display name)
+  // Recherche d’une section par nom choisi
   const findSection = (
     idx: IndexCache,
     name: string | undefined | null
@@ -212,22 +263,17 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
   const raceSection = useMemo(() => findSection(racesIdx, race), [racesIdx, race]);
   const historiqueSection = useMemo(() => findSection(histIdx, historique), [histIdx, historique]);
 
-  // Dons: build list of {source, name, hit}
-  type DonItem = { name: string; hit: { title: string; content: string } | null; kind: 'origine' | 'general' | 'style' };
+  type DonItem = {
+    name: string;
+    hit: { title: string; content: string } | null;
+    kind: 'origine' | 'general' | 'style';
+  };
+
   const donsList: DonItem[] = useMemo(() => {
     const out: DonItem[] = [];
-    // Origins
-    for (const n of originFeats) {
-      out.push({ name: n, hit: findSection(donsOrigIdx, n), kind: 'origine' });
-    }
-    // Generals
-    for (const n of generalFeats) {
-      out.push({ name: n, hit: findSection(donsGenIdx, n), kind: 'general' });
-    }
-    // Styles
-    for (const n of styleFeats) {
-      out.push({ name: n, hit: findSection(stylesIdx, n), kind: 'style' });
-    }
+    for (const n of originFeats) out.push({ name: n, hit: findSection(donsOrigIdx, n), kind: 'origine' });
+    for (const n of generalFeats) out.push({ name: n, hit: findSection(donsGenIdx, n), kind: 'general' });
+    for (const n of styleFeats) out.push({ name: n, hit: findSection(stylesIdx, n), kind: 'style' });
     return out;
   }, [originFeats, generalFeats, styleFeats, donsOrigIdx, donsGenIdx, stylesIdx]);
 
@@ -242,7 +288,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
         ) : raceSection ? (
           <>
             <div className="text-base font-semibold mb-2">{raceSection.title}</div>
-            <MarkdownBlock content={raceSection.content} />
+            <MarkdownLite content={raceSection.content} />
           </>
         ) : (
           <NotFound label="Race" value={race} />
@@ -258,7 +304,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
         ) : historiqueSection ? (
           <>
             <div className="text-base font-semibold mb-2">{historiqueSection.title}</div>
-            <MarkdownBlock content={historiqueSection.content} />
+            <MarkdownLite content={historiqueSection.content} />
           </>
         ) : (
           <NotFound label="Historique" value={historique} />
@@ -287,7 +333,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
                 </div>
                 <div className="text-base font-semibold mt-1 mb-2">{item.name}</div>
                 {item.hit ? (
-                  <MarkdownBlock content={item.hit.content} />
+                  <MarkdownLite content={item.hit.content} />
                 ) : (
                   <div className="text-sm text-gray-400">Non trouvé dans la source distante.</div>
                 )}
