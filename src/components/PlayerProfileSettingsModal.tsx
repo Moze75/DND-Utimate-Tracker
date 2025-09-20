@@ -73,7 +73,7 @@ const DND_BACKGROUNDS: PlayerBackground[] = [
   'Voyageur',
 ];
 
-/* Classes inchangées ici */
+/* Classes (inchangées) */
 const DND_CLASSES: DndClass[] = [
   '',
   'Barbare',
@@ -88,6 +88,82 @@ const DND_CLASSES: DndClass[] = [
   'Rôdeur',
   'Roublard',
   'Occultiste',
+];
+
+/* Dons d'origine (sélection simple) */
+const ORIGIN_FEATS: string[] = [
+  '',
+  'Bagarreur de tavernes',
+  'Chanceux',
+  'Doué',
+  'Façonneur',
+  'Façonnage rapide',
+  'Guérisseur',
+  'Initié à la magie',
+  'Musicien',
+  'Robuste',
+  'Sauvagerie martiale',
+  'Vigilant',
+];
+
+/* Dons généraux (multi-sélection) */
+const GENERAL_FEATS: string[] = [
+  'Adepte élémentaire',
+  'Affinité féerique',
+  'Affinité ombreuse',
+  'Amélioration de caractéristique',
+  'Athlète',
+  'Broyeur',
+  'Chef cuisinier',
+  'Cogneur lourd',
+  'Combattant à deux armes',
+  'Combattant monté',
+  'Comédien',
+  'Discret',
+  'Duelliste défensif',
+  'Empoisonneur',
+  'Esprit affûté',
+  'Expert',
+  'Expert de la charge',
+  'Figure de proue',
+  'Formation aux armes de guerre',
+  'Gaillard',
+  'Incantateur d\'élite',
+  'Mage de guerre',
+  'Magie rituelle',
+  'Maître d\'armes',
+  'Maître du hast',
+  'Maître-arbalétrier',
+  'Maître des armures intermédiaires',
+  'Maître des armures lourdes',
+  'Maître des boucliers',
+  'Mobile',
+  'Observateur',
+  'Perforateur',
+  'Protection intermédiaire',
+  'Protection légère',
+  'Protection lourde',
+  'Résilient',
+  'Sentinelle',
+  'Télékinésiste',
+  'Télépathe',
+  'Tireur d\'élite',
+  'Trancheur',
+  'Tueur de mages',
+];
+
+/* Styles de combat (multi-sélection) */
+const FIGHTING_STYLES: string[] = [
+  'Archerie',
+  'Armes à deux mains',
+  'Armes de lancer',
+  'Combat à deux armes',
+  'Combat à mains nues',
+  'Combat en aveugle',
+  'Défense',
+  'Duel',
+  'Interception',
+  'Protection',
 ];
 
 export interface PlayerProfileSettingsModalProps {
@@ -135,8 +211,16 @@ export function PlayerProfileSettingsModal({
   const [speedField, setSpeedField] = useState<string>('');
   const [profField, setProfField] = useState<string>('');
 
+  // Dons: états
+  const [originFeat, setOriginFeat] = useState<string>('');
+  const [generalFeats, setGeneralFeats] = useState<string[]>([]);
+  const [fightingStyles, setFightingStyles] = useState<string[]>([]);
+
   const ALLOWED_RACES = useMemo(() => new Set(DND_RACES.filter(Boolean)), []);
   const ALLOWED_BACKGROUNDS = useMemo(() => new Set(DND_BACKGROUNDS.filter(Boolean)), []);
+  const ALLOWED_ORIGIN_FEATS = useMemo(() => new Set(ORIGIN_FEATS.filter(Boolean)), []);
+  const ALLOWED_GENERAL_FEATS = useMemo(() => new Set(GENERAL_FEATS), []);
+  const ALLOWED_FIGHTING_STYLES = useMemo(() => new Set(FIGHTING_STYLES), []);
 
   // Sync local state quand la modale s'ouvre ou quand le player change
   useEffect(() => {
@@ -155,7 +239,7 @@ export function PlayerProfileSettingsModal({
     setSelectedClass(player.class || undefined);
     setSelectedSubclass(player.subclass || '');
 
-    // Race et historique: si non-conformes à la liste 2024, force à vide pour choisir
+    // Race & historique: forcer à vide si non conformes
     const nextRace = player.race && ALLOWED_RACES.has(player.race) ? player.race : '';
     setSelectedRace(nextRace);
 
@@ -172,6 +256,7 @@ export function PlayerProfileSettingsModal({
     setCharacterHistory(player.character_history || '');
     setAvatarUrl(player.avatar_url || '');
 
+    // Stats par défaut
     const dexMod = getDexModFromPlayer(player);
     const profAuto = getProficiencyBonusForLevel(player.level);
 
@@ -184,7 +269,25 @@ export function PlayerProfileSettingsModal({
     setInitField(initInitial !== undefined && initInitial !== null ? String(initInitial) : String(dexMod));
     setSpeedField(speedInitial > 0 ? String(speedInitial) : String(9));
     setProfField(profInitial > 0 ? String(profInitial) : String(profAuto));
-  }, [open, player, ALLOWED_RACES, ALLOWED_BACKGROUNDS]);
+
+    // Dons: lecture depuis stats.feats si présent
+    const feats: any = (player.stats as any)?.feats || {};
+    const ori = typeof feats.origin === 'string' && ALLOWED_ORIGIN_FEATS.has(feats.origin) ? feats.origin : '';
+    const gens = Array.isArray(feats.generals) ? feats.generals.filter((f: string) => ALLOWED_GENERAL_FEATS.has(f)) : [];
+    const styles = Array.isArray(feats.styles) ? feats.styles.filter((s: string) => ALLOWED_FIGHTING_STYLES.has(s)) : [];
+
+    setOriginFeat(ori);
+    setGeneralFeats(gens);
+    setFightingStyles(styles);
+  }, [
+    open,
+    player,
+    ALLOWED_RACES,
+    ALLOWED_BACKGROUNDS,
+    ALLOWED_ORIGIN_FEATS,
+    ALLOWED_GENERAL_FEATS,
+    ALLOWED_FIGHTING_STYLES,
+  ]);
 
   // Charger les sous-classes disponibles quand la classe change
   useEffect(() => {
@@ -221,12 +324,20 @@ export function PlayerProfileSettingsModal({
       const speedVal = parseInt(speedField, 10);
       const profVal = parseInt(profField, 10);
 
-      const finalizedStats: PlayerStats = {
+      // Construit les feats à persister (seulement conformes)
+      const featsData = {
+        origin: originFeat || null,
+        generals: generalFeats.filter((f) => ALLOWED_GENERAL_FEATS.has(f)),
+        styles: fightingStyles.filter((s) => ALLOWED_FIGHTING_STYLES.has(s)),
+      };
+
+      const finalizedStats: any = {
         ...player.stats,
         armor_class: Number.isFinite(acVal) && acVal > 0 ? acVal : 10 + dexMod,
         initiative: Number.isFinite(initVal) ? initVal : dexMod,
         speed: Number.isFinite(speedVal) && speedVal > 0 ? speedVal : 9,
         proficiency_bonus: Number.isFinite(profVal) && profVal > 0 ? profVal : profAuto,
+        feats: featsData,
       };
 
       const updateData = {
@@ -248,7 +359,7 @@ export function PlayerProfileSettingsModal({
           total: level,
           used: Math.min(hitDice.used, level),
         },
-        stats: finalizedStats,
+        stats: finalizedStats as PlayerStats,
       };
 
       const { error } = await supabase.from('players').update(updateData).eq('id', player.id);
@@ -411,6 +522,80 @@ export function PlayerProfileSettingsModal({
           </div>
         </div>
 
+        {/* Dons */}
+        <div className="stat-card">
+          <div className="stat-header">
+            <h3 className="text-lg font-semibold text-gray-100">Dons</h3>
+          </div>
+          <div className="p-4 space-y-6">
+            {/* Dons d'origine (sélection simple) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Dons d'origine</label>
+              <select
+                value={originFeat}
+                onChange={(e) => { setOriginFeat(e.target.value); setDirty(true); }}
+                className="input-dark w-full px-3 py-2 rounded-md"
+              >
+                {ORIGIN_FEATS.map((f) => (
+                  <option key={f} value={f}>
+                    {f || 'Sélectionnez un don d’origine'}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Dons généraux (multi) */}
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-gray-300 mb-2">Dons généraux</label>
+                <span className="text-xs text-gray-500 mb-2">Astuce: Ctrl/Cmd + clic pour multi-sélection</span>
+              </div>
+              <select
+                multiple
+                value={generalFeats}
+                onChange={(e) => {
+                  const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+                  setGeneralFeats(selected);
+                  setDirty(true);
+                }}
+                className="input-dark w-full px-3 py-2 rounded-md"
+                size={Math.min(10, Math.max(6, generalFeats.length || 8))}
+              >
+                {GENERAL_FEATS.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Styles de combat (multi) */}
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-gray-300 mb-2">Styles de combat</label>
+                <span className="text-xs text-gray-500 mb-2">Astuce: Ctrl/Cmd + clic pour multi-sélection</span>
+              </div>
+              <select
+                multiple
+                value={fightingStyles}
+                onChange={(e) => {
+                  const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+                  setFightingStyles(selected);
+                  setDirty(true);
+                }}
+                className="input-dark w-full px-3 py-2 rounded-md"
+                size={Math.min(8, Math.max(5, fightingStyles.length || 6))}
+              >
+                {FIGHTING_STYLES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
         {/* Statistiques */}
         <div className="stat-card">
           <div className="stat-header">
@@ -505,46 +690,6 @@ export function PlayerProfileSettingsModal({
                   }}
                   className="input-dark w-full px-3 py-2 rounded-md"
                   placeholder="Auto si vide: selon niveau"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Points de vie */}
-        <div className="stat-card">
-          <div className="stat-header">
-            <h3 className="text-lg font-semibold text-gray-100">Points de vie</h3>
-          </div>
-          <div className="p-4 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">PV Maximum</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={maxHp}
-                  onChange={(e) => { setMaxHp(parseInt(e.target.value, 10) || 1); setDirty(true); }}
-                  className="input-dark w-full px-3 py-2 rounded-md"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Dés de vie disponibles
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  max={level}
-                  value={level - (hitDice?.used || 0)}
-                  onChange={(e) => {
-                    setHitDice({
-                      total: level,
-                      used: Math.max(0, Math.min(level, level - (parseInt(e.target.value, 10) || 0))),
-                    });
-                    setDirty(true);
-                  }}
-                  className="input-dark w-full px-3 py-2 rounded-md"
                 />
               </div>
             </div>
