@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Settings,
   Moon,
   Star,
   Dice1 as DiceD20,
@@ -58,7 +57,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           case 'Druide':
           case 'Moine':
           case 'Roublard':
-          case 'Occultiste':  // nouveau 2024
+          case 'Occultiste':
             return 8;
           case 'Magicien':
           case 'Ensorceleur': return 6;
@@ -224,9 +223,9 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
                 <button
                   onClick={() => setEditing(true)}
                   className="absolute top-2 right-2 w-9 h-9 rounded-full bg-gray-900/40 backdrop-blur-sm text-white hover:bg-gray-800/50 hover:text-white flex items-center justify-center z-10 transition-colors"
-                  title="Modifier le profil"
+                  title="Profil et caractéristiques"
                 >
-                  <Settings className="w-5 h-5" />
+                  <User className="w-5 h-5" />
                 </button>
 
                 <Avatar
@@ -381,7 +380,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           <div></div>
         </div>
 
-        {/* Mini-grille des stats (CA / Vitesse / Initiative / Maîtrise) */}
+        {/* Mini-grille des stats */}
         <div className="grid grid-cols-4 gap-4 mt-2 bg-gray-800/50 rounded-lg py-1">
           {/* CA */}
           <div className="flex flex-col items-center">
@@ -471,7 +470,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           </div>
 
           {/* Maîtrise */}
-          <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center">
             <div
               className="relative w-10 h-10 -mt-2 -mb-1 group cursor-pointer"
               onClick={() => setActiveTooltip(activeTooltip === 'proficiency' ? null : 'proficiency')}
