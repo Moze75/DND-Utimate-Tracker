@@ -4,12 +4,12 @@ import type { Player } from '../types/dnd';
 
 /**
  * Profil tab sans dépendances externes.
- * Améliorations:
- * - Gras **texte**, italique _texte_
- * - Sous-titres = lignes entièrement en **gras** -> uppercase + léger tracking
+ * - Gras **texte**
+ * - Italique _texte_
+ * - Sous-titres: ligne entièrement en **gras** -> uppercase + tracking
  * - Sections repliables (Race / Historique / Dons)
- * - Encadrés de pavés avec balises II (début) et || (fin)
- * - Badges inline pour [texte] (optionnel; l'encadré n'utilise plus les crochets)
+ * - Encadrés de pavés avec balises de ligne: "II" (début) et "||" (fin)
+ * - Nettoyage des crochets: [texte] => texte (on retire les crochets pour éviter les stigmates)
  */
 
 const RAW_BASE = 'https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main';
@@ -113,27 +113,36 @@ function useMarkdownIndex(url: string) {
 
 /* ---------- Inline rendering ---------- */
 
-// Rendu italique et gras (sans crochets)
-function renderInlineNoBracket(text: string): React.ReactNode {
+// Nettoyage simple: retirer les crochets autour d'un segment [texte] -> texte
+function stripBrackets(s: string): string {
+  // Retire chaque paire [...] mais garde le contenu
+  return s.replace(/\[([^\]]+)\]/g, '$1');
+}
+
+// Rendu gras+italique
+function renderInline(text: string): React.ReactNode {
   if (!text) return null;
 
-  // 1) Gras **texte**
+  // 0) Nettoyage des crochets
+  const cleaned = stripBrackets(text);
+
+  // 1) Découpe par **...** (gras)
   const boldRe = /\*\*(.+?)\*\*/g;
   const parts: Array<{ type: 'text' | 'bold'; value: string }> = [];
   let last = 0;
   let m: RegExpExecArray | null;
 
-  while ((m = boldRe.exec(text)) !== null) {
+  while ((m = boldRe.exec(cleaned)) !== null) {
     if (m.index > last) {
-      parts.push({ type: 'text', value: text.slice(last, m.index) });
+      parts.push({ type: 'text', value: cleaned.slice(last, m.index) });
     }
     parts.push({ type: 'bold', value: m[1] });
     last = boldRe.lastIndex;
   }
-  if (last < text.length) parts.push({ type: 'text', value: text.slice(last) });
+  if (last < cleaned.length) parts.push({ type: 'text', value: cleaned.slice(last) });
 
-  // 2) Dans chaque segment "text" ou "bold", appliquer l'italique _texte_
-  const toNodes = (str: string, keyPrefix: string) => {
+  // 2) Dans chaque segment, appliquer l'italique _..._
+  const toItalicNodes = (str: string, keyPrefix: string) => {
     const nodes: React.ReactNode[] = [];
     const italicRe = /_(.+?)_/g;
     let idx = 0;
@@ -161,51 +170,14 @@ function renderInlineNoBracket(text: string): React.ReactNode {
     if (p.type === 'bold') {
       out.push(
         <strong key={`b-${k++}`} className="font-semibold">
-          {toNodes(p.value, `b${k}`)}
+          {toItalicNodes(p.value, `b${k}`)}
         </strong>
       );
     } else {
-      out.push(<span key={`t-${k++}`}>{toNodes(p.value, `t${k}`)}</span>);
+      out.push(<span key={`t-${k++}`}>{toItalicNodes(p.value, `t${k}`)}</span>);
     }
   }
   return out;
-}
-
-// Badges inline pour [texte] (facultatif)
-function renderInline(text: string): React.ReactNode {
-  if (!text) return null;
-  const out: React.ReactNode[] = [];
-  let k = 0;
-  let i = 0;
-
-  while (i < text.length) {
-    const start = text.indexOf('[', i);
-    if (start === -1) {
-      const tail = text.slice(i);
-      if (tail) out.push(<span key={`tail-${k++}`}>{renderInlineNoBracket(tail)}</span>);
-      break;
-    }
-    if (start > i) {
-      out.push(<span key={`pre-${k++}`}>{renderInlineNoBracket(text.slice(i, start))}</span>);
-    }
-    const end = text.indexOf(']', start + 1);
-    if (end === -1) {
-      out.push(<span key={`rest-${k++}`}>{renderInlineNoBracket(text.slice(start))}</span>);
-      break;
-    }
-    const inner = text.slice(start + 1, end);
-    out.push(
-      <span
-        key={`badge-${k++}`}
-        className="inline-block align-baseline px-2 py-0.5 rounded border border-white/15 bg-white/5 text-[0.9em]"
-      >
-        {renderInlineNoBracket(inner)}
-      </span>
-    );
-    i = end + 1;
-  }
-
-  return out.length ? out : null;
 }
 
 /* ---------- Block-level rendering ---------- */
@@ -275,7 +247,6 @@ function MarkdownLite({ content }: { content: string }) {
           key={`box-${out.length}`}
           className="rounded-lg border border-white/15 bg-white/5 p-3"
         >
-          {/* On réutilise le parseur pour le contenu du pavé */}
           <MarkdownLite content={inner} />
         </div>
       );
@@ -285,9 +256,8 @@ function MarkdownLite({ content }: { content: string }) {
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
 
-      // Gestion du bloc encadré
+      // Gestion du bloc encadré (II ... ||) sur lignes seules
       if (inBox) {
-        // Fin du pavé
         if (/^\s*\|\|\s*$/.test(raw)) {
           inBox = false;
           flushBox();
@@ -296,10 +266,7 @@ function MarkdownLite({ content }: { content: string }) {
         boxBuffer.push(raw);
         continue;
       }
-
-      // Début du pavé encadré
       if (/^\s*II\s*$/.test(raw)) {
-        // sortir proprement des autres blocs
         flushAllBlocks();
         inBox = true;
         boxBuffer = [];
@@ -360,7 +327,7 @@ function MarkdownLite({ content }: { content: string }) {
         continue;
       }
 
-      // Ligne entièrement en **gras** => “sous-titre” stylé (plus distinct du corps)
+      // Ligne entièrement en **gras** => sous-titre stylé
       const fullBold = raw.match(/^\s*\*\*(.+?)\*\*\s*$/);
       if (fullBold) {
         out.push(
@@ -404,7 +371,7 @@ function MarkdownLite({ content }: { content: string }) {
     // Fin: flush des blocs restants
     flushAllBlocks();
     if (inBox) {
-      // Si le marqueur de fin "||" manque, on flush quand même
+      // Si "||" manquant, on ferme quand même
       inBox = false;
       flushBox();
     }
