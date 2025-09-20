@@ -15,14 +15,15 @@ import { ClassesTab } from '../components/ClassesTab';
 import { PlayerContext } from '../contexts/PlayerContext';
 
 import { inventoryService } from '../services/inventoryService';
+import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab'; // + Profil
 
-type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class';
+type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile'; // + 'profile'
 
 const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter';
 const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
 const lastTabKeyFor = (playerId: string) => `ut:lastActiveTab:${playerId}`;
 const isValidTab = (t: string | null): t is TabKey =>
-  t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class';
+  t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class' || t === 'profile'; // + profile
 
 type GamePageProps = {
   session: any;
@@ -312,6 +313,10 @@ export function GamePage({
 
             {activeTab === 'class' && (
               <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+            )}
+
+            {activeTab === 'profile' && (
+              <PlayerProfileProfileTab player={currentPlayer} />
             )}
           </PlayerContext.Provider>
         )}
