@@ -14,7 +14,6 @@ export function TabNavigation({ activeTab, onTabChange }: TabNavigationProps) {
     { id: 'stats', icon: <Dices size={20} />, label: 'Stats' },
     { id: 'equipment', icon: <Backpack size={20} />, label: 'Sac' },
     { id: 'profile', icon: <User size={20} />, label: 'Profil' },
-    // Onglet 'web' masqué/supprimé
   ];
 
   return (
