@@ -221,6 +221,20 @@ export function PlayerProfileSettingsModal({
   const ALLOWED_GENERAL_FEATS = useMemo(() => new Set(GENERAL_FEATS), []);
   const ALLOWED_FIGHTING_STYLES = useMemo(() => new Set(FIGHTING_STYLES), []);
 
+  // Options restantes (pour désactiver "+ Ajouter" quand plus de choix)
+  const remainingOriginOptions = useMemo(
+    () => ORIGIN_FEATS.filter((f) => !originFeats.filter(Boolean).includes(f)),
+    [originFeats]
+  );
+  const remainingGeneralOptions = useMemo(
+    () => GENERAL_FEATS.filter((f) => !generalFeats.filter(Boolean).includes(f)),
+    [generalFeats]
+  );
+  const remainingStyleOptions = useMemo(
+    () => FIGHTING_STYLES.filter((s) => !fightingStyles.filter(Boolean).includes(s)),
+    [fightingStyles]
+  );
+
   // Sync local state quand la modale s'ouvre ou quand le player change
   useEffect(() => {
     if (!open) return;
@@ -334,6 +348,7 @@ export function PlayerProfileSettingsModal({
 
   // Origin feats
   const addOriginSelect = () => {
+    if (remainingOriginOptions.length === 0) return;
     setOriginFeats((prev) => [...prev, '']);
     setDirty(true);
   };
@@ -348,6 +363,7 @@ export function PlayerProfileSettingsModal({
 
   // General feats
   const addGeneralSelect = () => {
+    if (remainingGeneralOptions.length === 0) return;
     setGeneralFeats((prev) => [...prev, '']);
     setDirty(true);
   };
@@ -362,6 +378,7 @@ export function PlayerProfileSettingsModal({
 
   // Fighting styles
   const addStyleSelect = () => {
+    if (remainingStyleOptions.length === 0) return;
     setFightingStyles((prev) => [...prev, '']);
     setDirty(true);
   };
@@ -389,7 +406,6 @@ export function PlayerProfileSettingsModal({
       // Normalise les dons (filtre vides + valeurs autorisées)
       const normOrigins = originFeats
         .filter((v) => v && ALLOWED_ORIGIN_FEATS.has(v))
-        // élimine les doublons si l'UI ne les a pas empêchés pour une raison quelconque
         .filter((v, i, arr) => arr.indexOf(v) === i);
 
       const normGenerals = generalFeats
@@ -464,7 +480,7 @@ export function PlayerProfileSettingsModal({
     <div className="fixed inset-0 bg-gray-900/95 z-50 overflow-y-auto">
       <div className="max-w-4xl mx-auto p-4 py-8 space-y-6 pb-32">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-100">Profil et caractéristiques</h2>
+          <h2 className="text-2xl font-bold text-gray-100">Paramètres du personnage</h2>
           <button
             onClick={onClose}
             className="p-2 text-gray-400 hover:bg-gray-800/50 rounded-lg transition-colors"
@@ -607,18 +623,7 @@ export function PlayerProfileSettingsModal({
           <div className="p-4 space-y-8">
             {/* Dons d'origine */}
             <div>
-              <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-gray-300">Dons d'origine</label>
-                <button
-                  type="button"
-                  onClick={addOriginSelect}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
-                  title="Ajouter un don d'origine"
-                >
-                  <Plus size={16} />
-                  Ajouter
-                </button>
-              </div>
+              <label className="block text-sm font-medium text-gray-300">Dons d'origine</label>
               <div className="mt-2 space-y-2">
                 {originFeats.length === 0 ? (
                   <select
@@ -654,22 +659,21 @@ export function PlayerProfileSettingsModal({
                   })
                 )}
               </div>
+              <button
+                type="button"
+                onClick={addOriginSelect}
+                className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
+                disabled={remainingOriginOptions.length === 0}
+                title={remainingOriginOptions.length === 0 ? 'Aucun autre don disponible' : 'Ajouter un don d’origine'}
+              >
+                <Plus size={16} />
+                Ajouter
+              </button>
             </div>
 
             {/* Dons généraux */}
             <div>
-              <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-gray-300">Dons généraux</label>
-                <button
-                  type="button"
-                  onClick={addGeneralSelect}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
-                  title="Ajouter un don général"
-                >
-                  <Plus size={16} />
-                  Ajouter
-                </button>
-              </div>
+              <label className="block text-sm font-medium text-gray-300">Dons généraux</label>
               <div className="mt-2 space-y-2">
                 {generalFeats.length === 0 ? (
                   <select
@@ -705,22 +709,21 @@ export function PlayerProfileSettingsModal({
                   })
                 )}
               </div>
+              <button
+                type="button"
+                onClick={addGeneralSelect}
+                className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
+                disabled={remainingGeneralOptions.length === 0}
+                title={remainingGeneralOptions.length === 0 ? 'Aucun autre don disponible' : 'Ajouter un don général'}
+              >
+                <Plus size={16} />
+                Ajouter
+              </button>
             </div>
 
             {/* Styles de combat */}
             <div>
-              <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-gray-300">Styles de combat</label>
-                <button
-                  type="button"
-                  onClick={addStyleSelect}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
-                  title="Ajouter un style de combat"
-                >
-                  <Plus size={16} />
-                  Ajouter
-                </button>
-              </div>
+              <label className="block text-sm font-medium text-gray-300">Styles de combat</label>
               <div className="mt-2 space-y-2">
                 {fightingStyles.length === 0 ? (
                   <select
@@ -756,6 +759,16 @@ export function PlayerProfileSettingsModal({
                   })
                 )}
               </div>
+              <button
+                type="button"
+                onClick={addStyleSelect}
+                className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
+                disabled={remainingStyleOptions.length === 0}
+                title={remainingStyleOptions.length === 0 ? 'Aucun autre style disponible' : 'Ajouter un style de combat'}
+              >
+                <Plus size={16} />
+                Ajouter
+              </button>
             </div>
           </div>
         </div>
