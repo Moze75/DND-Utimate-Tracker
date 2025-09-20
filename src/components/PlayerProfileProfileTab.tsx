@@ -34,7 +34,8 @@ function normalizeKey(input: string): string {
 
 // Parse le Markdown en sections par titres ### ...
 function parseMarkdownByH3(md: string): Record<string, { title: string; content: string }> {
-  const lines = md.split(/\r?\\n/);
+  // IMPORTANT: bon split des lignes (corrige le bug)
+  const lines = md.split(/\r?\n/);
   const result: Record<string, { title: string; content: string }> = {};
   let currentTitle: string | null = null;
   let currentBuffer: string[] = [];
@@ -262,7 +263,7 @@ function MarkdownLite({ content }: { content: string }) {
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
 
-      // Gestion encadré: fermeture
+      // Fermeture encadré
       if (inBox) {
         if (closeBoxRe.test(raw)) {
           inBox = false;
