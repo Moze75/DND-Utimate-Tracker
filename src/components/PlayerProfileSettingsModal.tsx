@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { X, Save, TrendingUp, Triangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -33,7 +33,47 @@ function mapClassForRpc(pClass: DndClass | null | undefined): string | null | un
 }
 
 /* ============================ Données de sélection ============================ */
+/* D&D 2024 conformes (libellés exacts) */
 
+const DND_RACES: string[] = [
+  '',
+  'Aasimar',
+  'Drakeide',
+  'Elfe sylvestre',
+  'Haut-elfe',
+  'Drow',
+  'Demi-elfe',
+  'Humain',
+  'Gnome',
+  'Goliath',
+  'Halfelin',
+  'Nain',
+  'Orc',
+  'Demi-orc',
+  'Tieffelin',
+];
+
+const DND_BACKGROUNDS: PlayerBackground[] = [
+  '',
+  'Acolyte',
+  'Artisan',
+  'Artiste',
+  'Charlatan',
+  'Criminel',
+  'Ermite',
+  'Fermier',
+  'Garde',
+  'Guide',
+  'Marchand',
+  'Marin',
+  'Noble',
+  'Sage',
+  'Scribe',
+  'Soldat',
+  'Voyageur',
+];
+
+/* Classes inchangées ici */
 const DND_CLASSES: DndClass[] = [
   '',
   'Barbare',
@@ -48,50 +88,6 @@ const DND_CLASSES: DndClass[] = [
   'Rôdeur',
   'Roublard',
   'Occultiste',
-];
-
-const DND_RACES = [
-  '',
-  'Humain',
-  'Elfe',
-  'Nain',
-  'Halfelin',
-  'Gnome',
-  'Demi-Elfe',
-  'Demi-Orc',
-  'Tieffelin',
-  'Drakéide',
-  'Autre',
-];
-
-const DND_BACKGROUNDS: PlayerBackground[] = [
-  '',
-  'Acolyte',
-  'Artisan de guilde',
-  'Artiste',
-  'Charlatan',
-  'Criminel',
-  'Ermite',
-  'Héros du peuple',
-  'Marin',
-  'Noble',
-  'Sage',
-  'Sauvageon',
-  'Soldat',
-  'Autre',
-];
-
-const DND_ALIGNMENTS = [
-  '',
-  'Loyal Bon',
-  'Neutre Bon',
-  'Chaotique Bon',
-  'Loyal Neutre',
-  'Neutre',
-  'Chaotique Neutre',
-  'Loyal Mauvais',
-  'Neutre Mauvais',
-  'Chaotique Mauvais',
 ];
 
 export interface PlayerProfileSettingsModalProps {
@@ -117,10 +113,10 @@ export function PlayerProfileSettingsModal({
   const [avatarUrl, setAvatarUrl] = useState(player.avatar_url || '');
   const [selectedClass, setSelectedClass] = useState<DndClass | undefined>(player.class || undefined);
   const [selectedSubclass, setSelectedSubclass] = useState(player.subclass || '');
-  const [selectedRace, setSelectedRace] = useState(player.race || '');
+  const [selectedRace, setSelectedRace] = useState<string>(player.race || '');
   const [availableSubclasses, setAvailableSubclasses] = useState<string[]>([]);
   const [selectedBackground, setSelectedBackground] = useState<PlayerBackground | undefined>(
-    player.background || undefined
+    (player.background as PlayerBackground) || undefined
   );
   const [selectedAlignment, setSelectedAlignment] = useState(player.alignment || '');
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>(player.languages || []);
@@ -139,6 +135,9 @@ export function PlayerProfileSettingsModal({
   const [speedField, setSpeedField] = useState<string>('');
   const [profField, setProfField] = useState<string>('');
 
+  const ALLOWED_RACES = useMemo(() => new Set(DND_RACES.filter(Boolean)), []);
+  const ALLOWED_BACKGROUNDS = useMemo(() => new Set(DND_BACKGROUNDS.filter(Boolean)), []);
+
   // Sync local state quand la modale s'ouvre ou quand le player change
   useEffect(() => {
     if (!open) return;
@@ -155,8 +154,17 @@ export function PlayerProfileSettingsModal({
     setAdventurerName(player.adventurer_name || '');
     setSelectedClass(player.class || undefined);
     setSelectedSubclass(player.subclass || '');
-    setSelectedRace(player.race || '');
-    setSelectedBackground(player.background || undefined);
+
+    // Race et historique: si non-conformes à la liste 2024, force à vide pour choisir
+    const nextRace = player.race && ALLOWED_RACES.has(player.race) ? player.race : '';
+    setSelectedRace(nextRace);
+
+    const nextBackground =
+      player.background && ALLOWED_BACKGROUNDS.has(player.background as PlayerBackground)
+        ? (player.background as PlayerBackground)
+        : ('' as PlayerBackground);
+    setSelectedBackground(nextBackground);
+
     setSelectedAlignment(player.alignment || '');
     setSelectedLanguages(player.languages || []);
     setAge(player.age || '');
@@ -176,7 +184,7 @@ export function PlayerProfileSettingsModal({
     setInitField(initInitial !== undefined && initInitial !== null ? String(initInitial) : String(dexMod));
     setSpeedField(speedInitial > 0 ? String(speedInitial) : String(9));
     setProfField(profInitial > 0 ? String(profInitial) : String(profAuto));
-  }, [open, player]);
+  }, [open, player, ALLOWED_RACES, ALLOWED_BACKGROUNDS]);
 
   // Charger les sous-classes disponibles quand la classe change
   useEffect(() => {
@@ -226,7 +234,7 @@ export function PlayerProfileSettingsModal({
         race: selectedRace || null,
         class: selectedClass || null,
         subclass: selectedSubclass || null,
-        background: selectedBackground || null,
+        background: (selectedBackground as string) || null,
         alignment: selectedAlignment || null,
         languages: selectedLanguages,
         max_hp: maxHp,
@@ -567,17 +575,13 @@ export function PlayerProfileSettingsModal({
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Alignement</label>
-                <select
+                <input
+                  type="text"
                   value={selectedAlignment}
-                  onChange={(e) => { setSelectedAlignment(e.target.value); setDirty(true); }}
+                  onChange={(e) => setSelectedAlignment(e.target.value)}
                   className="input-dark w-full px-3 py-2 rounded-md"
-                >
-                  {DND_ALIGNMENTS.map((a) => (
-                    <option key={a} value={a}>
-                      {a || 'Sélectionnez un alignement'}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Alignement (optionnel)"
+                />
               </div>
 
               <div>
