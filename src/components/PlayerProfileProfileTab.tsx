@@ -5,6 +5,7 @@ import type { Player } from '../types/dnd';
 /**
  * Profil tab sans dépendances externes.
  * - Encadrés: ouverture avec "II" (peut être suivi de texte), fermeture avec "||" (peut être précédé de texte)
+ *   + Ajout: ouverture <!-- BOX -->, fermeture <!-- /BOX --> (peuvent avoir du contenu sur la même ligne)
  * - Gras **texte** ; Italique _texte_
  * - Sous-titres: ligne entièrement en **gras** -> uppercase + tracking
  * - Listes (-, *, 1.) ; Citations (>)
@@ -189,7 +190,7 @@ function MarkdownLite({ content }: { content: string }) {
     let olBuffer: string[] = [];
     let quoteBuffer: string[] = [];
 
-    // Encadré par II ... ||
+    // Encadré par II ... || ou <!-- BOX --> ... <!-- /BOX -->
     let inBox = false;
     let boxBuffer: string[] = [];
 
@@ -248,14 +249,28 @@ function MarkdownLite({ content }: { content: string }) {
       boxBuffer = [];
     };
 
+    // Regex commentaires pour BOX
+    const openBoxCommentRe = /^\s*<!--\s*BOX\s*-->\s*(.*)$/;
+    const closeBoxCommentRe = /^(.*)<!--\s*\/\s*BOX\s*-->\s*$/;
+
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
 
-      // Si on est dans un encadré, chercher une éventuelle fermeture "||" (peut être sur la même ligne que du contenu)
+      // Si on est dans un encadré, détecter la fermeture (commentaire ou ||)
       if (inBox) {
-        const closeMatch = raw.match(/^(.*)\s*\|\|\s*$/);
-        if (closeMatch) {
-          const before = closeMatch[1];
+        // Fermeture via commentaire avec contenu avant
+        const closeC = raw.match(closeBoxCommentRe);
+        if (closeC) {
+          const before = closeC[1];
+          if (before.trim() !== '') boxBuffer.push(before);
+          inBox = false;
+          flushBox();
+          continue;
+        }
+        // Fermeture via ||
+        const closePipe = raw.match(/^(.*)\s*\|\|\s*$/);
+        if (closePipe) {
+          const before = closePipe[1];
           if (before.trim() !== '') boxBuffer.push(before);
           inBox = false;
           flushBox();
@@ -265,10 +280,20 @@ function MarkdownLite({ content }: { content: string }) {
         continue;
       }
 
+      // Ouverture d'encadré via commentaire (peut contenir du contenu après)
+      const openC = raw.match(openBoxCommentRe);
+      if (openC) {
+        flushAllBlocks();
+        inBox = true;
+        boxBuffer = [];
+        const after = openC[1];
+        if (after.trim() !== '') boxBuffer.push(after);
+        continue;
+      }
+
       // Ouverture d'encadré: "II" au début de ligne, éventuellement suivi de contenu
       const openMatch = raw.match(/^\s*II\s*(.*)$/);
       if (openMatch) {
-        // sortir proprement des autres blocs
         flushAllBlocks();
         inBox = true;
         boxBuffer = [];
@@ -372,7 +397,6 @@ function MarkdownLite({ content }: { content: string }) {
     // Fin: flush des blocs restants
     flushAllBlocks();
     if (inBox) {
-      // Si "||" manquant, on ferme quand même
       inBox = false;
       flushBox();
     }
