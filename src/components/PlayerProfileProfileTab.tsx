@@ -4,7 +4,7 @@ import type { Player } from '../types/dnd';
 
 /**
  * Profil tab sans dépendances externes.
- * - Encadrés: <!-- BOX --> ... <!-- /BOX -->, avec option titre: <!-- BOX: Mon titre -->
+ * - Encadrés: ouverture avec "II" (peut être suivi de texte), fermeture avec "||" (peut être précédé de texte)
  * - Gras **texte** ; Italique _texte_
  * - Sous-titres: ligne entièrement en **gras** -> uppercase + tracking
  * - Listes (-, *, 1.) ; Citations (>)
@@ -34,7 +34,6 @@ function normalizeKey(input: string): string {
 
 // Parse le Markdown en sections par titres ### ...
 function parseMarkdownByH3(md: string): Record<string, { title: string; content: string }> {
-  // IMPORTANT: bon split des lignes (corrige le bug)
   const lines = md.split(/\r?\n/);
   const result: Record<string, { title: string; content: string }> = {};
   let currentTitle: string | null = null;
@@ -190,10 +189,9 @@ function MarkdownLite({ content }: { content: string }) {
     let olBuffer: string[] = [];
     let quoteBuffer: string[] = [];
 
-    // Encadré via <!-- BOX --> ... <!-- /BOX -->
+    // Encadré par II ... ||
     let inBox = false;
     let boxBuffer: string[] = [];
-    let boxTitle: string | null = null;
 
     const flushUL = () => {
       if (ulBuffer.length > 0) {
@@ -244,28 +242,21 @@ function MarkdownLite({ content }: { content: string }) {
       const inner = boxBuffer.join('\n');
       out.push(
         <div key={`box-${out.length}`} className="rounded-lg border border-white/15 bg-white/5 p-3">
-          {boxTitle && (
-            <div className="font-semibold uppercase tracking-wide text-[0.85rem] text-gray-200 mb-2">
-              {renderInline(boxTitle)}
-            </div>
-          )}
           <MarkdownLite content={inner} />
         </div>
       );
       boxBuffer = [];
-      boxTitle = null;
     };
-
-    // Regex pour les balises de boîte
-    const openBoxRe = /^\s*<!--\s*BOX(?:\s*:\s*(.*?))?\s*-->\s*$/; // capture éventuel titre
-    const closeBoxRe = /^\s*<!--\s*\/\s*BOX\s*-->\s*$/;
 
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
 
-      // Fermeture encadré
+      // Si on est dans un encadré, chercher une éventuelle fermeture "||" (peut être sur la même ligne que du contenu)
       if (inBox) {
-        if (closeBoxRe.test(raw)) {
+        const closeMatch = raw.match(/^(.*)\s*\|\|\s*$/);
+        if (closeMatch) {
+          const before = closeMatch[1];
+          if (before.trim() !== '') boxBuffer.push(before);
           inBox = false;
           flushBox();
           continue;
@@ -274,13 +265,15 @@ function MarkdownLite({ content }: { content: string }) {
         continue;
       }
 
-      // Ouverture encadré
-      const open = raw.match(openBoxRe);
-      if (open) {
+      // Ouverture d'encadré: "II" au début de ligne, éventuellement suivi de contenu
+      const openMatch = raw.match(/^\s*II\s*(.*)$/);
+      if (openMatch) {
+        // sortir proprement des autres blocs
         flushAllBlocks();
         inBox = true;
         boxBuffer = [];
-        boxTitle = (open[1] || '').trim() || null;
+        const after = openMatch[1];
+        if (after.trim() !== '') boxBuffer.push(after);
         continue;
       }
 
@@ -379,7 +372,7 @@ function MarkdownLite({ content }: { content: string }) {
     // Fin: flush des blocs restants
     flushAllBlocks();
     if (inBox) {
-      // Si fermeture manquante, on ferme proprement
+      // Si "||" manquant, on ferme quand même
       inBox = false;
       flushBox();
     }
