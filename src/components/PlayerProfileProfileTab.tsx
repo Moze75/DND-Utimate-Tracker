@@ -4,12 +4,12 @@ import type { Player } from '../types/dnd';
 
 /**
  * Profil tab sans dépendances externes.
- * - Gras **texte**
- * - Italique _texte_
+ * - Encadrés: ouverture avec "II" (peut être suivi de texte), fermeture avec "||" (peut être précédé de texte)
+ * - Gras **texte** ; Italique _texte_
  * - Sous-titres: ligne entièrement en **gras** -> uppercase + tracking
+ * - Listes (-, *, 1.) ; Citations (>)
  * - Sections repliables (Race / Historique / Dons)
- * - Encadrés de pavés avec balises de ligne: "II" (début) et "||" (fin)
- * - Nettoyage des crochets: [texte] => texte (on retire les crochets pour éviter les stigmates)
+ * - Nettoyage des crochets: [texte] => texte
  */
 
 const RAW_BASE = 'https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main';
@@ -115,7 +115,6 @@ function useMarkdownIndex(url: string) {
 
 // Nettoyage simple: retirer les crochets autour d'un segment [texte] -> texte
 function stripBrackets(s: string): string {
-  // Retire chaque paire [...] mais garde le contenu
   return s.replace(/\[([^\]]+)\]/g, '$1');
 }
 
@@ -123,7 +122,6 @@ function stripBrackets(s: string): string {
 function renderInline(text: string): React.ReactNode {
   if (!text) return null;
 
-  // 0) Nettoyage des crochets
   const cleaned = stripBrackets(text);
 
   // 1) Découpe par **...** (gras)
@@ -243,10 +241,7 @@ function MarkdownLite({ content }: { content: string }) {
       if (!boxBuffer.length) return;
       const inner = boxBuffer.join('\n');
       out.push(
-        <div
-          key={`box-${out.length}`}
-          className="rounded-lg border border-white/15 bg-white/5 p-3"
-        >
+        <div key={`box-${out.length}`} className="rounded-lg border border-white/15 bg-white/5 p-3">
           <MarkdownLite content={inner} />
         </div>
       );
@@ -256,9 +251,12 @@ function MarkdownLite({ content }: { content: string }) {
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
 
-      // Gestion du bloc encadré (II ... ||) sur lignes seules
+      // Si on est dans un encadré, chercher une éventuelle fermeture "||" (peut être sur la même ligne que du contenu)
       if (inBox) {
-        if (/^\s*\|\|\s*$/.test(raw)) {
+        const closeMatch = raw.match(/^(.*)\s*\|\|\s*$/);
+        if (closeMatch) {
+          const before = closeMatch[1];
+          if (before.trim() !== '') boxBuffer.push(before);
           inBox = false;
           flushBox();
           continue;
@@ -266,10 +264,16 @@ function MarkdownLite({ content }: { content: string }) {
         boxBuffer.push(raw);
         continue;
       }
-      if (/^\s*II\s*$/.test(raw)) {
+
+      // Ouverture d'encadré: "II" au début de ligne, éventuellement suivi de contenu
+      const openMatch = raw.match(/^\s*II\s*(.*)$/);
+      if (openMatch) {
+        // sortir proprement des autres blocs
         flushAllBlocks();
         inBox = true;
         boxBuffer = [];
+        const after = openMatch[1];
+        if (after.trim() !== '') boxBuffer.push(after);
         continue;
       }
 
@@ -331,10 +335,7 @@ function MarkdownLite({ content }: { content: string }) {
       const fullBold = raw.match(/^\s*\*\*(.+?)\*\*\s*$/);
       if (fullBold) {
         out.push(
-          <div
-            className="mt-3 mb-2 uppercase tracking-wide text-[0.95rem] text-gray-200"
-            key={`sub-${out.length}`}
-          >
+          <div className="mt-3 mb-2 uppercase tracking-wide text-[0.95rem] text-gray-200" key={`sub-${out.length}`}>
             {renderInline(fullBold[1])}
           </div>
         );
