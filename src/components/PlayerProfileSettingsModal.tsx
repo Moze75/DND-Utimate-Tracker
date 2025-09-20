@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Save, TrendingUp, Triangle } from 'lucide-react';
+import { X, Save, TrendingUp, Triangle, Plus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { Avatar } from './Avatar';
@@ -106,7 +106,7 @@ const ORIGIN_FEATS: string[] = [
   'Vigilant',
 ];
 
-/* Dons généraux (multi-sélection) */
+/* Dons généraux (ajout via select au clic) */
 const GENERAL_FEATS: string[] = [
   'Adepte élémentaire',
   'Affinité féerique',
@@ -152,7 +152,7 @@ const GENERAL_FEATS: string[] = [
   'Tueur de mages',
 ];
 
-/* Styles de combat (multi-sélection) */
+/* Styles de combat (ajout via select au clic) */
 const FIGHTING_STYLES: string[] = [
   'Archerie',
   'Armes à deux mains',
@@ -216,11 +216,27 @@ export function PlayerProfileSettingsModal({
   const [generalFeats, setGeneralFeats] = useState<string[]>([]);
   const [fightingStyles, setFightingStyles] = useState<string[]>([]);
 
+  // Dons: gestion du mode "ajout" (select qui s'ouvre au clic sur +)
+  const [isAddingGeneral, setIsAddingGeneral] = useState(false);
+  const [generalToAdd, setGeneralToAdd] = useState<string>('');
+  const [isAddingStyle, setIsAddingStyle] = useState(false);
+  const [styleToAdd, setStyleToAdd] = useState<string>('');
+
   const ALLOWED_RACES = useMemo(() => new Set(DND_RACES.filter(Boolean)), []);
   const ALLOWED_BACKGROUNDS = useMemo(() => new Set(DND_BACKGROUNDS.filter(Boolean)), []);
   const ALLOWED_ORIGIN_FEATS = useMemo(() => new Set(ORIGIN_FEATS.filter(Boolean)), []);
   const ALLOWED_GENERAL_FEATS = useMemo(() => new Set(GENERAL_FEATS), []);
   const ALLOWED_FIGHTING_STYLES = useMemo(() => new Set(FIGHTING_STYLES), []);
+
+  // Options disponibles (exclusion des déjà sélectionnés)
+  const availableGeneralOptions = useMemo(
+    () => GENERAL_FEATS.filter((f) => !generalFeats.includes(f)),
+    [generalFeats]
+  );
+  const availableStyleOptions = useMemo(
+    () => FIGHTING_STYLES.filter((s) => !fightingStyles.includes(s)),
+    [fightingStyles]
+  );
 
   // Sync local state quand la modale s'ouvre ou quand le player change
   useEffect(() => {
@@ -279,6 +295,12 @@ export function PlayerProfileSettingsModal({
     setOriginFeat(ori);
     setGeneralFeats(gens);
     setFightingStyles(styles);
+
+    // Reset UI ajout
+    setIsAddingGeneral(false);
+    setGeneralToAdd('');
+    setIsAddingStyle(false);
+    setStyleToAdd('');
   }, [
     open,
     player,
@@ -311,6 +333,47 @@ export function PlayerProfileSettingsModal({
     };
     loadSubclasses();
   }, [open, selectedClass]);
+
+  /* ============================ Handlers Dons ============================ */
+
+  const handleOriginChange = (val: string) => {
+    setOriginFeat(val);
+    setDirty(true);
+  };
+
+  const handleAddGeneral = () => {
+    setIsAddingGeneral(true);
+    setGeneralToAdd('');
+  };
+  const handleConfirmAddGeneral = () => {
+    if (!generalToAdd) return;
+    if (generalFeats.includes(generalToAdd)) return;
+    setGeneralFeats((prev) => [...prev, generalToAdd]);
+    setDirty(true);
+    setIsAddingGeneral(false);
+    setGeneralToAdd('');
+  };
+  const handleRemoveGeneral = (val: string) => {
+    setGeneralFeats((prev) => prev.filter((f) => f !== val));
+    setDirty(true);
+  };
+
+  const handleAddStyle = () => {
+    setIsAddingStyle(true);
+    setStyleToAdd('');
+  };
+  const handleConfirmAddStyle = () => {
+    if (!styleToAdd) return;
+    if (fightingStyles.includes(styleToAdd)) return;
+    setFightingStyles((prev) => [...prev, styleToAdd]);
+    setDirty(true);
+    setIsAddingStyle(false);
+    setStyleToAdd('');
+  };
+  const handleRemoveStyle = (val: string) => {
+    setFightingStyles((prev) => prev.filter((s) => s !== val));
+    setDirty(true);
+  };
 
   /* ============================ Sauvegarde ============================ */
 
@@ -533,7 +596,7 @@ export function PlayerProfileSettingsModal({
               <label className="block text-sm font-medium text-gray-300 mb-2">Dons d'origine</label>
               <select
                 value={originFeat}
-                onChange={(e) => { setOriginFeat(e.target.value); setDirty(true); }}
+                onChange={(e) => handleOriginChange(e.target.value)}
                 className="input-dark w-full px-3 py-2 rounded-md"
               >
                 {ORIGIN_FEATS.map((f) => (
@@ -544,54 +607,152 @@ export function PlayerProfileSettingsModal({
               </select>
             </div>
 
-            {/* Dons généraux (multi) */}
+            {/* Dons généraux (badges + ajout via +) */}
             <div>
               <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-gray-300 mb-2">Dons généraux</label>
-                <span className="text-xs text-gray-500 mb-2">Astuce: Ctrl/Cmd + clic pour multi-sélection</span>
+                <label className="block text-sm font-medium text-gray-300">Dons généraux</label>
+                <button
+                  type="button"
+                  onClick={handleAddGeneral}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
+                  disabled={availableGeneralOptions.length === 0 || isAddingGeneral}
+                  title={availableGeneralOptions.length === 0 ? 'Tous les dons sont déjà ajoutés' : 'Ajouter un don'}
+                >
+                  <Plus size={16} />
+                  Ajouter
+                </button>
               </div>
-              <select
-                multiple
-                value={generalFeats}
-                onChange={(e) => {
-                  const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
-                  setGeneralFeats(selected);
-                  setDirty(true);
-                }}
-                className="input-dark w-full px-3 py-2 rounded-md"
-                size={Math.min(10, Math.max(6, generalFeats.length || 8))}
-              >
-                {GENERAL_FEATS.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </select>
+
+              {/* Sélections actuelles (badges) */}
+              <div className="mt-2 flex flex-wrap gap-2">
+                {generalFeats.length === 0 ? (
+                  <span className="text-sm text-gray-500">Aucun don général sélectionné</span>
+                ) : (
+                  generalFeats.map((f) => (
+                    <span
+                      key={f}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-800/60 text-gray-200 border border-white/10"
+                    >
+                      {f}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveGeneral(f)}
+                        className="p-0.5 text-gray-400 hover:text-red-400"
+                        title="Retirer"
+                      >
+                        <X size={14} />
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+
+              {/* Select d'ajout (affiché seulement après clic) */}
+              {isAddingGeneral && (
+                <div className="mt-3 flex items-center gap-2">
+                  <select
+                    value={generalToAdd}
+                    onChange={(e) => setGeneralToAdd(e.target.value)}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                  >
+                    <option value="">Sélectionnez un don</option>
+                    {availableGeneralOptions.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleConfirmAddGeneral}
+                    className="px-3 py-2 rounded-md bg-green-600 hover:bg-green-700 text-white"
+                    disabled={!generalToAdd}
+                  >
+                    Ajouter
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsAddingGeneral(false); setGeneralToAdd(''); }}
+                    className="px-3 py-2 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Styles de combat (multi) */}
+            {/* Styles de combat (badges + ajout via +) */}
             <div>
               <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-gray-300 mb-2">Styles de combat</label>
-                <span className="text-xs text-gray-500 mb-2">Astuce: Ctrl/Cmd + clic pour multi-sélection</span>
+                <label className="block text-sm font-medium text-gray-300">Styles de combat</label>
+                <button
+                  type="button"
+                  onClick={handleAddStyle}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
+                  disabled={availableStyleOptions.length === 0 || isAddingStyle}
+                  title={availableStyleOptions.length === 0 ? 'Tous les styles sont déjà ajoutés' : 'Ajouter un style'}
+                >
+                  <Plus size={16} />
+                  Ajouter
+                </button>
               </div>
-              <select
-                multiple
-                value={fightingStyles}
-                onChange={(e) => {
-                  const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
-                  setFightingStyles(selected);
-                  setDirty(true);
-                }}
-                className="input-dark w-full px-3 py-2 rounded-md"
-                size={Math.min(8, Math.max(5, fightingStyles.length || 6))}
-              >
-                {FIGHTING_STYLES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
+
+              {/* Sélections actuelles (badges) */}
+              <div className="mt-2 flex flex-wrap gap-2">
+                {fightingStyles.length === 0 ? (
+                  <span className="text-sm text-gray-500">Aucun style sélectionné</span>
+                ) : (
+                  fightingStyles.map((s) => (
+                    <span
+                      key={s}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-800/60 text-gray-200 border border-white/10"
+                    >
+                      {s}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveStyle(s)}
+                        className="p-0.5 text-gray-400 hover:text-red-400"
+                        title="Retirer"
+                      >
+                        <X size={14} />
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+
+              {/* Select d'ajout (affiché seulement après clic) */}
+              {isAddingStyle && (
+                <div className="mt-3 flex items-center gap-2">
+                  <select
+                    value={styleToAdd}
+                    onChange={(e) => setStyleToAdd(e.target.value)}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                  >
+                    <option value="">Sélectionnez un style</option>
+                    {availableStyleOptions.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleConfirmAddStyle}
+                    className="px-3 py-2 rounded-md bg-green-600 hover:bg-green-700 text-white"
+                    disabled={!styleToAdd}
+                  >
+                    Ajouter
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsAddingStyle(false); setStyleToAdd(''); }}
+                    className="px-3 py-2 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
