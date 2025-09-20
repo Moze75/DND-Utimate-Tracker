@@ -261,7 +261,7 @@ export function PlayerProfileSettingsModal({
     <div className="fixed inset-0 bg-gray-900/95 z-50 overflow-y-auto">
       <div className="max-w-4xl mx-auto p-4 py-8 space-y-6 pb-32">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-100">Modifier le profil</h2>
+          <h2 className="text-2xl font-bold text-gray-100">Profil et caractéristiques</h2>
           <button
             onClick={onClose}
             className="p-2 text-gray-400 hover:bg-gray-800/50 rounded-lg transition-colors"
@@ -521,7 +521,7 @@ export function PlayerProfileSettingsModal({
           <div className="stat-header">
             <h3 className="text-lg font-semibold text-gray-100">Historique</h3>
           </div>
-        <div className="p-4 space-y-6">
+          <div className="p-4 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Historique</label>
