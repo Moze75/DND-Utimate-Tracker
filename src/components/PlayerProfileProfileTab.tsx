@@ -4,8 +4,13 @@ import type { Player } from '../types/dnd';
 
 /**
  * Profil tab sans dépendances externes (pas de react-markdown/remark-gfm).
- * Affiche Race, Historique, Dons en parsant les fichiers Markdown distants par titres ###
- * et rend le contenu en “lite” (titres, listes à puces, paragraphes).
+ * Affiche Race, Historique, Dons en parsant les fichiers Markdown distants par titres ###,
+ * et rend le contenu en “lite” avec:
+ * - Titres (###/####)
+ * - Listes à puces (-, *) et listes numérotées (1. 2. ...)
+ * - Citations (> ...)
+ * - Gras inline avec **texte**
+ * - Mise en forme "Label: valeur" -> label en gras
  */
 
 const RAW_BASE = 'https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main';
@@ -107,80 +112,176 @@ function useMarkdownIndex(url: string) {
   return state;
 }
 
+// Rendu inline: support du gras **texte**
+function renderInline(text: string): React.ReactNode {
+  if (!text) return null;
+  const out: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let key = 0;
+  const boldRe = /\*\*(.+?)\*\*/g; // non-greedy
+
+  let m: RegExpExecArray | null;
+  while ((m = boldRe.exec(text)) !== null) {
+    const before = text.slice(lastIndex, m.index);
+    if (before) out.push(<span key={`t-${key++}`}>{before}</span>);
+    const strongText = m[1];
+    out.push(<strong key={`b-${key++}`} className="font-semibold">{strongText}</strong>);
+    lastIndex = boldRe.lastIndex;
+  }
+  const rest = text.slice(lastIndex);
+  if (rest) out.push(<span key={`t-${key++}`}>{rest}</span>);
+  return out.length ? out : null;
+}
+
 // Rendu lite du “markdown” (sans librairies)
 function MarkdownLite({ content }: { content: string }) {
-  // On convertit les lignes en paragraphes/listes/titres basiques
   const elements = useMemo(() => {
     const lines = content.split(/\r?\n/);
     const out: React.ReactNode[] = [];
-    let listBuffer: string[] = [];
 
-    const flushList = () => {
-      if (listBuffer.length > 0) {
+    let ulBuffer: string[] = [];
+    let olBuffer: string[] = [];
+    let quoteBuffer: string[] = [];
+
+    const flushUL = () => {
+      if (ulBuffer.length > 0) {
         out.push(
           <ul className="list-disc pl-5 space-y-1" key={`ul-${out.length}`}>
-            {listBuffer.map((item, i) => (
-              <li key={`li-${i}`}>{item}</li>
+            {ulBuffer.map((item, i) => (
+              <li key={`uli-${i}`}>{renderInline(item)}</li>
             ))}
           </ul>
         );
-        listBuffer = [];
+        ulBuffer = [];
       }
+    };
+    const flushOL = () => {
+      if (olBuffer.length > 0) {
+        out.push(
+          <ol className="list-decimal pl-5 space-y-1" key={`ol-${out.length}`}>
+            {olBuffer.map((item, i) => (
+              <li key={`oli-${i}`}>{renderInline(item)}</li>
+            ))}
+          </ol>
+        );
+        olBuffer = [];
+      }
+    };
+    const flushQuote = () => {
+      if (quoteBuffer.length > 0) {
+        const text = quoteBuffer.join(' ').trim();
+        out.push(
+          <blockquote
+            key={`q-${out.length}`}
+            className="border-l-2 border-white/20 pl-3 ml-1 italic text-gray-300"
+          >
+            {renderInline(text)}
+          </blockquote>
+        );
+        quoteBuffer = [];
+      }
+    };
+    const flushAllBlocks = () => {
+      flushQuote();
+      flushUL();
+      flushOL();
     };
 
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+      const raw = lines[i];
 
-      // Regrouper listes "- " ou "* "
-      const mList = line.match(/^\s*[-*]\s+(.*)$/);
-      if (mList) {
-        listBuffer.push(mList[1]);
+      // Listes à puces
+      const mUL = raw.match(/^\s*[-*]\s+(.*)$/);
+      if (mUL) {
+        // si on bascule de type, flush les autres buffers
+        flushQuote();
+        flushOL();
+        ulBuffer.push(mUL[1]);
         continue;
       }
 
-      // Si on quitte une liste, on flush
-      if (!mList && listBuffer.length > 0 && line.trim() !== '') {
-        flushList();
+      // Listes numérotées
+      const mOL = raw.match(/^\s*\d+[.)]\s+(.*)$/);
+      if (mOL) {
+        flushQuote();
+        flushUL();
+        olBuffer.push(mOL[1]);
+        continue;
       }
 
-      const h4 = line.match(/^\s*####\s+(.*)$/);
+      // Citations
+      const mQ = raw.match(/^\s*>\s+(.*)$/);
+      if (mQ) {
+        flushUL();
+        flushOL();
+        quoteBuffer.push(mQ[1]);
+        continue;
+      }
+
+      // Si on quitte un bloc, on le flush
+      if (ulBuffer.length > 0 || olBuffer.length > 0 || quoteBuffer.length > 0) {
+        if (raw.trim() !== '') {
+          flushAllBlocks();
+        } else {
+          // ligne vide: flush aussi
+          flushAllBlocks();
+          out.push(<div className="h-2" key={`sp-${out.length}`} />);
+          continue;
+        }
+      }
+
+      // Sous-titres ####
+      const h4 = raw.match(/^\s*####\s+(.*)$/);
       if (h4) {
-        flushList();
         out.push(
           <div className="font-semibold mt-3 mb-1" key={`h4-${out.length}`}>
-            {h4[1]}
+            {renderInline(h4[1])}
           </div>
         );
         continue;
       }
 
-      const h3 = line.match(/^\s*###\s+(.*)$/);
+      // Titres ### (internes au contenu)
+      const h3 = raw.match(/^\s*###\s+(.*)$/);
       if (h3) {
-        flushList();
         out.push(
           <div className="font-bold text-base mt-4 mb-2" key={`h3-${out.length}`}>
-            {h3[1]}
+            {renderInline(h3[1])}
           </div>
         );
         continue;
       }
 
       // Ligne vide -> espace vertical
-      if (line.trim() === '') {
-        flushList();
+      if (raw.trim() === '') {
         out.push(<div className="h-2" key={`sp-${out.length}`} />);
+        continue;
+      }
+
+      // Paragraphe "Label: valeur"
+      const labelMatch = raw.match(/^([\p{L}\p{N}'’ .\-\/+()]+?)\s*:\s+(.*)$/u);
+      if (labelMatch) {
+        out.push(
+          <p className="mb-2 leading-relaxed" key={`kv-${out.length}`}>
+            <span className="font-semibold">{labelMatch[1]}: </span>
+            {renderInline(labelMatch[2])}
+          </p>
+        );
         continue;
       }
 
       // Paragraphe simple
       out.push(
         <p className="mb-2 leading-relaxed" key={`p-${out.length}`}>
-          {line}
+          {renderInline(raw)}
         </p>
       );
     }
-    // Fin: si une liste est en cours
-    if (listBuffer.length > 0) flushList();
+
+    // Fin: flush des blocs restants
+    if (ulBuffer.length > 0 || olBuffer.length > 0 || quoteBuffer.length > 0) {
+      flushAllBlocks();
+    }
 
     return out;
   }, [content]);
@@ -287,7 +388,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
           <div className="text-sm text-red-400">Erreur de chargement des races: {racesIdx.error}</div>
         ) : raceSection ? (
           <>
-            <div className="text-base font-semibold mb-2">{raceSection.title}</div>
+            <div className="text-base font-semibold mb-2">{renderInline(raceSection.title)}</div>
             <MarkdownLite content={raceSection.content} />
           </>
         ) : (
@@ -303,7 +404,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
           <div className="text-sm text-red-400">Erreur de chargement des historiques: {histIdx.error}</div>
         ) : historiqueSection ? (
           <>
-            <div className="text-base font-semibold mb-2">{historiqueSection.title}</div>
+            <div className="text-base font-semibold mb-2">{renderInline(historiqueSection.title)}</div>
             <MarkdownLite content={historiqueSection.content} />
           </>
         ) : (
@@ -331,7 +432,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
                 <div className="text-sm uppercase tracking-wide text-gray-400">
                   {item.kind === 'origine' ? 'Don d’origine' : item.kind === 'general' ? 'Don général' : 'Style de combat'}
                 </div>
-                <div className="text-base font-semibold mt-1 mb-2">{item.name}</div>
+                <div className="text-base font-semibold mt-1 mb-2">{renderInline(item.name)}</div>
                 {item.hit ? (
                   <MarkdownLite content={item.hit.content} />
                 ) : (
