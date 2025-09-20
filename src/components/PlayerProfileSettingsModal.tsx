@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Save, TrendingUp } from 'lucide-react';
+import { X, Save, TrendingUp, Triangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { Avatar } from './Avatar';
@@ -621,27 +621,27 @@ export function PlayerProfileSettingsModal({
           </div>
         </div>
 
-        {/* Boutons d'action (affichés seulement si modification) */}
-        {isDirty && (
-          <div className="flex gap-3 fixed bottom-0 left-0 right-0 bg-gray-900/95 p-4 border-t border-gray-700/50 z-10">
-            <div className="max-w-4xl mx-auto w-full flex gap-3">
+        {/* Bandeau fixe bas: Retour toujours visible, Sauvegarder seulement si modifié */}
+        <div className="flex gap-3 fixed bottom-0 left-0 right-0 bg-gray-900/95 p-4 border-t border-gray-700/50 z-10">
+          <div className="max-w-4xl mx-auto w-full flex gap-3 justify-end">
+            {isDirty && (
               <button
                 onClick={handleSave}
-                className="btn-primary flex-1 px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
+                className="btn-primary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
               >
                 <Save size={20} />
                 Sauvegarder
               </button>
-              <button
-                onClick={onClose}
-                className="btn-secondary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
-              >
-                <X size={20} />
-                Annuler
-              </button>
-            </div>
+            )}
+            <button
+              onClick={onClose}
+              className="btn-secondary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
+            >
+              <Triangle size={18} className="transform -rotate-90" />
+              Retour
+            </button>
           </div>
-        )}
+        </div>
 
         {/* Modal passage de niveau */}
         <LevelUpModal
