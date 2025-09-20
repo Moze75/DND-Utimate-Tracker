@@ -1,5 +1,5 @@
 import React from 'react';
-import { Swords, Sparkles, Backpack, Dices, GraduationCap } from 'lucide-react';
+import { Swords, Sparkles, Backpack, Dices, GraduationCap, User } from 'lucide-react';
 
 interface TabNavigationProps {
   activeTab: string;
@@ -13,11 +13,12 @@ export function TabNavigation({ activeTab, onTabChange }: TabNavigationProps) {
     { id: 'abilities', icon: <Sparkles size={20} />, label: 'Sorts' },
     { id: 'stats', icon: <Dices size={20} />, label: 'Stats' },
     { id: 'equipment', icon: <Backpack size={20} />, label: 'Sac' },
+    { id: 'profile', icon: <User size={20} />, label: 'Profil' },
     // Onglet 'web' masqué/supprimé
   ];
 
   return (
-    <div className="grid grid-cols-5 gap-1 mb-6">
+    <div className="grid grid-cols-6 gap-1 mb-6">
       {tabs.map((tab) => (
         <button
           key={tab.id}
