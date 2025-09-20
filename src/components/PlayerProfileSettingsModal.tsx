@@ -109,6 +109,9 @@ export function PlayerProfileSettingsModal({
 }: PlayerProfileSettingsModalProps) {
   const [showLevelUp, setShowLevelUp] = useState(false);
 
+  // Dirty tracking
+  const [isDirty, setDirty] = useState(false);
+
   // Etats d'identité / profil (spécifiques à l'édition)
   const [adventurerName, setAdventurerName] = useState(player.adventurer_name || '');
   const [avatarUrl, setAvatarUrl] = useState(player.avatar_url || '');
@@ -139,6 +142,9 @@ export function PlayerProfileSettingsModal({
   // Sync local state quand la modale s'ouvre ou quand le player change
   useEffect(() => {
     if (!open) return;
+
+    // Reset dirty à l'ouverture
+    setDirty(false);
 
     setLevel(player.level);
     setMaxHp(player.max_hp);
@@ -246,6 +252,7 @@ export function PlayerProfileSettingsModal({
       });
 
       toast.success('Profil mis à jour');
+      setDirty(false);
       onClose();
     } catch (error) {
       console.error('Erreur lors de la mise à jour du profil:', error);
@@ -283,7 +290,7 @@ export function PlayerProfileSettingsModal({
                   <Avatar
                     url={avatarUrl}
                     playerId={player.id}
-                    onAvatarUpdate={(url) => setAvatarUrl(url)}
+                    onAvatarUpdate={(url) => { setAvatarUrl(url); setDirty(true); }}
                     size="lg"
                     editable
                   />
@@ -294,7 +301,7 @@ export function PlayerProfileSettingsModal({
                 <input
                   type="text"
                   value={adventurerName}
-                  onChange={(e) => setAdventurerName(e.target.value)}
+                  onChange={(e) => { setAdventurerName(e.target.value); setDirty(true); }}
                   className="input-dark w-full px-3 py-2 rounded-md"
                   placeholder="Nom d'aventurier"
                 />
@@ -318,7 +325,10 @@ export function PlayerProfileSettingsModal({
                 value={level}
                 onChange={(e) => {
                   const value = parseInt(e.target.value, 10);
-                  if (!isNaN(value)) setLevel(Math.max(1, Math.min(20, value)));
+                  if (!isNaN(value)) {
+                    setLevel(Math.max(1, Math.min(20, value)));
+                    setDirty(true);
+                  }
                 }}
                 className="input-dark w-full px-3 py-2 rounded-md"
                 inputMode="numeric"
@@ -347,7 +357,7 @@ export function PlayerProfileSettingsModal({
                 <label className="block text-sm font-medium text-gray-300 mb-2">Race</label>
                 <select
                   value={selectedRace}
-                  onChange={(e) => setSelectedRace(e.target.value)}
+                  onChange={(e) => { setSelectedRace(e.target.value); setDirty(true); }}
                   className="input-dark w-full px-3 py-2 rounded-md"
                 >
                   {DND_RACES.map((race) => (
@@ -362,7 +372,7 @@ export function PlayerProfileSettingsModal({
                 <label className="block text-sm font-medium text-gray-300 mb-2">Classe</label>
                 <select
                   value={selectedClass || ''}
-                  onChange={(e) => setSelectedClass(e.target.value as DndClass)}
+                  onChange={(e) => { setSelectedClass(e.target.value as DndClass); setDirty(true); }}
                   className="input-dark w-full px-3 py-2 rounded-md"
                 >
                   {DND_CLASSES.map((dndClass) => (
@@ -377,7 +387,7 @@ export function PlayerProfileSettingsModal({
                 <label className="block text-sm font-medium text-gray-300 mb-2">Sous-classe</label>
                 <select
                   value={selectedSubclass}
-                  onChange={(e) => setSelectedSubclass(e.target.value)}
+                  onChange={(e) => { setSelectedSubclass(e.target.value); setDirty(true); }}
                   className="input-dark w-full px-3 py-2 rounded-md"
                   disabled={!selectedClass || availableSubclasses.length === 0}
                 >
@@ -407,11 +417,15 @@ export function PlayerProfileSettingsModal({
                 <input
                   type="number"
                   value={acField}
-                  onChange={(e) => setAcField(e.target.value)}
+                  onChange={(e) => { setAcField(e.target.value); setDirty(true); }}
                   onBlur={() => {
                     if (acField === '' || parseInt(acField, 10) <= 0) {
                       const dm = getDexModFromPlayer(player);
-                      setAcField(String(10 + dm));
+                      const next = String(10 + dm);
+                      if (next !== acField) {
+                        setAcField(next);
+                        setDirty(true);
+                      }
                     }
                   }}
                   className="input-dark w-full px-3 py-2 rounded-md"
@@ -426,11 +440,15 @@ export function PlayerProfileSettingsModal({
                 <input
                   type="number"
                   value={initField}
-                  onChange={(e) => setInitField(e.target.value)}
+                  onChange={(e) => { setInitField(e.target.value); setDirty(true); }}
                   onBlur={() => {
                     if (initField === '') {
                       const dm = getDexModFromPlayer(player);
-                      setInitField(String(dm));
+                      const next = String(dm);
+                      if (next !== initField) {
+                        setInitField(next);
+                        setDirty(true);
+                      }
                     }
                   }}
                   className="input-dark w-full px-3 py-2 rounded-md"
@@ -445,10 +463,14 @@ export function PlayerProfileSettingsModal({
                 <input
                   type="number"
                   value={speedField}
-                  onChange={(e) => setSpeedField(e.target.value)}
+                  onChange={(e) => { setSpeedField(e.target.value); setDirty(true); }}
                   onBlur={() => {
                     if (speedField === '' || parseInt(speedField, 10) <= 0) {
-                      setSpeedField('9');
+                      const next = '9';
+                      if (next !== speedField) {
+                        setSpeedField(next);
+                        setDirty(true);
+                      }
                     }
                   }}
                   className="input-dark w-full px-3 py-2 rounded-md"
@@ -463,10 +485,14 @@ export function PlayerProfileSettingsModal({
                 <input
                   type="number"
                   value={profField}
-                  onChange={(e) => setProfField(e.target.value)}
+                  onChange={(e) => { setProfField(e.target.value); setDirty(true); }}
                   onBlur={() => {
                     if (profField === '' || parseInt(profField, 10) <= 0) {
-                      setProfField(String(getProficiencyBonusForLevel(level)));
+                      const next = String(getProficiencyBonusForLevel(level));
+                      if (next !== profField) {
+                        setProfField(next);
+                        setDirty(true);
+                      }
                     }
                   }}
                   className="input-dark w-full px-3 py-2 rounded-md"
@@ -490,7 +516,7 @@ export function PlayerProfileSettingsModal({
                   type="number"
                   min={1}
                   value={maxHp}
-                  onChange={(e) => setMaxHp(parseInt(e.target.value, 10) || 1)}
+                  onChange={(e) => { setMaxHp(parseInt(e.target.value, 10) || 1); setDirty(true); }}
                   className="input-dark w-full px-3 py-2 rounded-md"
                 />
               </div>
@@ -503,12 +529,13 @@ export function PlayerProfileSettingsModal({
                   min={0}
                   max={level}
                   value={level - (hitDice?.used || 0)}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setHitDice({
                       total: level,
                       used: Math.max(0, Math.min(level, level - (parseInt(e.target.value, 10) || 0))),
-                    })
-                  }
+                    });
+                    setDirty(true);
+                  }}
                   className="input-dark w-full px-3 py-2 rounded-md"
                 />
               </div>
@@ -527,7 +554,7 @@ export function PlayerProfileSettingsModal({
                 <label className="block text-sm font-medium text-gray-300 mb-2">Historique</label>
                 <select
                   value={selectedBackground || ''}
-                  onChange={(e) => setSelectedBackground(e.target.value as PlayerBackground)}
+                  onChange={(e) => { setSelectedBackground(e.target.value as PlayerBackground); setDirty(true); }}
                   className="input-dark w-full px-3 py-2 rounded-md"
                 >
                   {DND_BACKGROUNDS.map((b) => (
@@ -542,7 +569,7 @@ export function PlayerProfileSettingsModal({
                 <label className="block text-sm font-medium text-gray-300 mb-2">Alignement</label>
                 <select
                   value={selectedAlignment}
-                  onChange={(e) => setSelectedAlignment(e.target.value)}
+                  onChange={(e) => { setSelectedAlignment(e.target.value); setDirty(true); }}
                   className="input-dark w-full px-3 py-2 rounded-md"
                 >
                   {DND_ALIGNMENTS.map((a) => (
@@ -558,7 +585,7 @@ export function PlayerProfileSettingsModal({
                 <input
                   type="text"
                   value={age}
-                  onChange={(e) => setAge(e.target.value)}
+                  onChange={(e) => { setAge(e.target.value); setDirty(true); }}
                   className="input-dark w-full px-3 py-2 rounded-md"
                   placeholder="Âge du personnage"
                 />
@@ -569,7 +596,7 @@ export function PlayerProfileSettingsModal({
                 <input
                   type="text"
                   value={gender}
-                  onChange={(e) => setGender(e.target.value)}
+                  onChange={(e) => { setGender(e.target.value); setDirty(true); }}
                   className="input-dark w-full px-3 py-2 rounded-md"
                   placeholder="Genre du personnage"
                 />
@@ -586,7 +613,7 @@ export function PlayerProfileSettingsModal({
             </label>
             <textarea
               value={characterHistory}
-              onChange={(e) => setCharacterHistory(e.target.value)}
+              onChange={(e) => { setCharacterHistory(e.target.value); setDirty(true); }}
               className="input-dark w-full px-3 py-2 rounded-md"
               rows={6}
               placeholder="Décrivez l'histoire de votre personnage..."
@@ -594,25 +621,27 @@ export function PlayerProfileSettingsModal({
           </div>
         </div>
 
-        {/* Boutons d'action */}
-        <div className="flex gap-3 fixed bottom-0 left-0 right-0 bg-gray-900/95 p-4 border-t border-gray-700/50 z-10">
-          <div className="max-w-4xl mx-auto w-full flex gap-3">
-            <button
-              onClick={handleSave}
-              className="btn-primary flex-1 px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
-            >
-              <Save size={20} />
-              Sauvegarder
-            </button>
-            <button
-              onClick={onClose}
-              className="btn-secondary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
-            >
-              <X size={20} />
-              Annuler
-            </button>
+        {/* Boutons d'action (affichés seulement si modification) */}
+        {isDirty && (
+          <div className="flex gap-3 fixed bottom-0 left-0 right-0 bg-gray-900/95 p-4 border-t border-gray-700/50 z-10">
+            <div className="max-w-4xl mx-auto w-full flex gap-3">
+              <button
+                onClick={handleSave}
+                className="btn-primary flex-1 px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
+              >
+                <Save size={20} />
+                Sauvegarder
+              </button>
+              <button
+                onClick={onClose}
+                className="btn-secondary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
+              >
+                <X size={20} />
+                Annuler
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Modal passage de niveau */}
         <LevelUpModal
