@@ -1,16 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Shield, ScrollText, Sparkles, Loader2 } from 'lucide-react';
+import { Shield, ScrollText, Sparkles, Loader2, ChevronDown } from 'lucide-react';
 import type { Player } from '../types/dnd';
 
 /**
- * Profil tab sans dépendances externes (pas de react-markdown/remark-gfm).
- * Affiche Race, Historique, Dons en parsant les fichiers Markdown distants par titres ###,
- * et rend le contenu en “lite” avec:
- * - Titres (###/####)
- * - Listes à puces (-, *) et listes numérotées (1. 2. ...)
- * - Citations (> ...)
- * - Gras inline avec **texte**
- * - Mise en forme "Label: valeur" -> label en gras
+ * Profil tab sans dépendances externes.
+ * Améliorations:
+ * - Italique _texte_
+ * - Sous-titres = lignes entièrement en **gras** -> uppercase + spacing
+ * - Sections repliables (Race / Historique / Dons)
+ * - Encadrés inline pour [texte] (badges)
  */
 
 const RAW_BASE = 'https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main';
@@ -112,28 +110,108 @@ function useMarkdownIndex(url: string) {
   return state;
 }
 
-// Rendu inline: support du gras **texte**
+/* ---------- Inline rendering ---------- */
+
+// Rendu italique et gras (sans crochets)
+function renderInlineNoBracket(text: string): React.ReactNode {
+  if (!text) return null;
+
+  // 1) Gras **texte**
+  const boldRe = /\*\*(.+?)\*\*/g;
+  const parts: Array<{ type: 'text' | 'bold'; value: string }> = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+
+  while ((m = boldRe.exec(text)) !== null) {
+    if (m.index > last) {
+      parts.push({ type: 'text', value: text.slice(last, m.index) });
+    }
+    parts.push({ type: 'bold', value: m[1] });
+    last = boldRe.lastIndex;
+  }
+  if (last < text.length) parts.push({ type: 'text', value: text.slice(last) });
+
+  // 2) Dans chaque segment "text" ou "bold", appliquer l'italique _texte_
+  const toNodes = (str: string, keyPrefix: string) => {
+    const nodes: React.ReactNode[] = [];
+    const italicRe = /_(.+?)_/g;
+    let idx = 0;
+    let mm: RegExpExecArray | null;
+    let cursor = 0;
+
+    while ((mm = italicRe.exec(str)) !== null) {
+      if (mm.index > cursor) {
+        nodes.push(<span key={`${keyPrefix}-t${idx++}`}>{str.slice(cursor, mm.index)}</span>);
+      }
+      nodes.push(
+        <em key={`${keyPrefix}-i${idx++}`} className="italic">
+          {mm[1]}
+        </em>
+      );
+      cursor = italicRe.lastIndex;
+    }
+    if (cursor < str.length) nodes.push(<span key={`${keyPrefix}-t${idx++}`}>{str.slice(cursor)}</span>);
+    return nodes;
+  };
+
+  const out: React.ReactNode[] = [];
+  let k = 0;
+  for (const p of parts) {
+    if (p.type === 'bold') {
+      out.push(
+        <strong key={`b-${k++}`} className="font-semibold">
+          {toNodes(p.value, `b${k}`)}
+        </strong>
+      );
+    } else {
+      out.push(<span key={`t-${k++}`}>{toNodes(p.value, `t${k}`)}</span>);
+    }
+  }
+  return out;
+}
+
+// Rendu encadrés [texte] + gras/italique
 function renderInline(text: string): React.ReactNode {
   if (!text) return null;
   const out: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let key = 0;
-  const boldRe = /\*\*(.+?)\*\*/g; // non-greedy
+  let k = 0;
+  let i = 0;
 
-  let m: RegExpExecArray | null;
-  while ((m = boldRe.exec(text)) !== null) {
-    const before = text.slice(lastIndex, m.index);
-    if (before) out.push(<span key={`t-${key++}`}>{before}</span>);
-    const strongText = m[1];
-    out.push(<strong key={`b-${key++}`} className="font-semibold">{strongText}</strong>);
-    lastIndex = boldRe.lastIndex;
+  while (i < text.length) {
+    const start = text.indexOf('[', i);
+    if (start === -1) {
+      // pas de crochet restant
+      const tail = text.slice(i);
+      if (tail) out.push(<span key={`tail-${k++}`}>{renderInlineNoBracket(tail)}</span>);
+      break;
+    }
+    // push avant le crochet
+    if (start > i) {
+      out.push(<span key={`pre-${k++}`}>{renderInlineNoBracket(text.slice(i, start))}</span>);
+    }
+    const end = text.indexOf(']', start + 1);
+    if (end === -1) {
+      // pas de fermeture -> tout le reste
+      out.push(<span key={`rest-${k++}`}>{renderInlineNoBracket(text.slice(start))}</span>);
+      break;
+    }
+    const inner = text.slice(start + 1, end);
+    out.push(
+      <span
+        key={`badge-${k++}`}
+        className="inline-block align-baseline px-2 py-0.5 rounded border border-white/15 bg-white/5 text-[0.9em]"
+      >
+        {renderInlineNoBracket(inner)}
+      </span>
+    );
+    i = end + 1;
   }
-  const rest = text.slice(lastIndex);
-  if (rest) out.push(<span key={`t-${key++}`}>{rest}</span>);
+
   return out.length ? out : null;
 }
 
-// Rendu lite du “markdown” (sans librairies)
+/* ---------- Block-level rendering ---------- */
+
 function MarkdownLite({ content }: { content: string }) {
   const elements = useMemo(() => {
     const lines = content.split(/\r?\n/);
@@ -173,7 +251,7 @@ function MarkdownLite({ content }: { content: string }) {
         out.push(
           <blockquote
             key={`q-${out.length}`}
-            className="border-l-2 border-white/20 pl-3 ml-1 italic text-gray-300"
+            className="border-l-2 border-white/20 pl-3 ml-1 italic text-gray-300 bg-white/5 rounded-sm py-1"
           >
             {renderInline(text)}
           </blockquote>
@@ -193,7 +271,6 @@ function MarkdownLite({ content }: { content: string }) {
       // Listes à puces
       const mUL = raw.match(/^\s*[-*]\s+(.*)$/);
       if (mUL) {
-        // si on bascule de type, flush les autres buffers
         flushQuote();
         flushOL();
         ulBuffer.push(mUL[1]);
@@ -218,30 +295,23 @@ function MarkdownLite({ content }: { content: string }) {
         continue;
       }
 
-      // Si on quitte un bloc, on le flush
-      if (ulBuffer.length > 0 || olBuffer.length > 0 || quoteBuffer.length > 0) {
-        if (raw.trim() !== '') {
-          flushAllBlocks();
-        } else {
-          // ligne vide: flush aussi
-          flushAllBlocks();
-          out.push(<div className="h-2" key={`sp-${out.length}`} />);
-          continue;
-        }
+      // sortie de blocs
+      if ((ulBuffer.length || olBuffer.length || quoteBuffer.length) && raw.trim() !== '') {
+        flushAllBlocks();
       }
 
       // Sous-titres ####
       const h4 = raw.match(/^\s*####\s+(.*)$/);
       if (h4) {
         out.push(
-          <div className="font-semibold mt-3 mb-1" key={`h4-${out.length}`}>
+          <div className="font-semibold mt-3 mb-1 tracking-wide" key={`h4-${out.length}`}>
             {renderInline(h4[1])}
           </div>
         );
         continue;
       }
 
-      // Titres ### (internes au contenu)
+      // Titres ###
       const h3 = raw.match(/^\s*###\s+(.*)$/);
       if (h3) {
         out.push(
@@ -252,8 +322,23 @@ function MarkdownLite({ content }: { content: string }) {
         continue;
       }
 
+      // Ligne entièrement en **gras** => “sous-titre” stylé
+      const fullBold = raw.match(/^\s*\*\*(.+?)\*\*\s*$/);
+      if (fullBold) {
+        out.push(
+          <div
+            className="mt-3 mb-2 uppercase tracking-wide text-[0.95rem] text-gray-200"
+            key={`sub-${out.length}`}
+          >
+            {renderInline(fullBold[1])}
+          </div>
+        );
+        continue;
+      }
+
       // Ligne vide -> espace vertical
       if (raw.trim() === '') {
+        flushAllBlocks();
         out.push(<div className="h-2" key={`sp-${out.length}`} />);
         continue;
       }
@@ -279,9 +364,7 @@ function MarkdownLite({ content }: { content: string }) {
     }
 
     // Fin: flush des blocs restants
-    if (ulBuffer.length > 0 || olBuffer.length > 0 || quoteBuffer.length > 0) {
-      flushAllBlocks();
-    }
+    flushAllBlocks();
 
     return out;
   }, [content]);
@@ -290,14 +373,28 @@ function MarkdownLite({ content }: { content: string }) {
   return <div className="prose prose-invert max-w-none">{elements}</div>;
 }
 
+/* ---------- UI ---------- */
+
 function SectionContainer(props: { icon: React.ReactNode; title: string; children?: React.ReactNode }) {
+  const [open, setOpen] = useState(true);
   return (
     <div className="stat-card">
-      <div className="stat-header flex items-center gap-2">
-        {props.icon}
-        <h3 className="text-lg font-semibold text-gray-100">{props.title}</h3>
-      </div>
-      <div className="p-4">{props.children}</div>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="stat-header w-full flex items-center justify-between gap-3 cursor-pointer"
+        aria-expanded={open}
+      >
+        <div className="flex items-center gap-2">
+          {props.icon}
+          <h3 className="text-lg font-semibold text-gray-100">{props.title}</h3>
+        </div>
+        <ChevronDown
+          size={18}
+          className={`transition-transform duration-200 ${open ? 'rotate-0' : '-rotate-90'} text-gray-300`}
+        />
+      </button>
+      {open && <div className="p-4">{props.children}</div>}
     </div>
   );
 }
