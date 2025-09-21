@@ -5,13 +5,12 @@ import type { Player } from '../types/dnd';
 /**
  * Profil tab sans dépendances externes.
  * - Encadrés: ouverture avec "II" (peut être suivi de texte), fermeture avec "||" (peut être précédé de texte)
+ *   + Ajout: ouverture <!-- BOX -->, fermeture <!-- /BOX --> (tolérant: où qu'elles soient sur la ligne, supporte HTML encodé)
  * - Gras **texte** ; Italique _texte_
  * - Sous-titres: ligne entièrement en **gras** -> uppercase + tracking
  * - Listes (-, *, 1.) ; Citations (>)
- * - Sections repliables (Race / Historique / Dons) avec état initial paramétrable
+ * - Sections repliables (Race / Historique / Dons)
  * - Nettoyage des crochets: [texte] => texte
- * - Ajout d'une section "Histoire du personnage" (player.character_history) après Dons
- * - En-têtes Race et Historique affichent la valeur sélectionnée: "Race - …", "Historique - …"
  */
 
 const RAW_BASE = 'https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main';
@@ -184,14 +183,19 @@ function renderInline(text: string): React.ReactNode {
 
 function MarkdownLite({ content }: { content: string }) {
   const elements = useMemo(() => {
-    const lines = content.split(/\r?\n/);
+    // 0) Décode d'éventuelles balises BOX encodées HTML
+    const src = (content || '')
+      .replace(/&lt;!--\s*BOX\s*--&gt;/gi, '<!-- BOX -->')
+      .replace(/&lt;!--\s*\/\s*BOX\s*--&gt;/gi, '<!-- /BOX -->');
+
+    const lines = src.split(/\r?\n/);
     const out: React.ReactNode[] = [];
 
     let ulBuffer: string[] = [];
     let olBuffer: string[] = [];
     let quoteBuffer: string[] = [];
 
-    // Encadré par II ... ||
+    // Encadré par II ... || ou <!-- BOX --> ... <!-- /BOX -->
     let inBox = false;
     let boxBuffer: string[] = [];
 
@@ -250,31 +254,73 @@ function MarkdownLite({ content }: { content: string }) {
       boxBuffer = [];
     };
 
-    for (let i = 0; i < lines.length; i++) {
-      const raw = lines[i];
+    // Tokens BOX (n'importe où sur la ligne)
+    const openRE = /<!--\s*BOX\s*-->/i;
+    const closeRE = /<!--\s*\/\s*BOX\s*-->/i;
 
-      // Si on est dans un encadré, chercher une éventuelle fermeture "||" (peut être sur la même ligne que du contenu)
+    for (let i = 0; i < lines.length; i++) {
+      let raw = lines[i];
+
       if (inBox) {
-        const closeMatch = raw.match(/^(.*)\s*\|\|\s*$/);
-        if (closeMatch) {
-          const before = closeMatch[1];
+        // Cherche fermeture par commentaire sur la même ligne
+        const mClose = closeRE.exec(raw);
+        if (mClose && typeof mClose.index === 'number') {
+          const before = raw.slice(0, mClose.index).trimRight();
+          if (before) boxBuffer.push(before);
+          inBox = false;
+          flushBox();
+          const after = raw.slice(mClose.index + mClose[0].length).trimLeft();
+          if (after) {
+            // Rendre le suffixe après la fermeture comme paragraphe simple
+            out.push(
+              <p className="mb-2 leading-relaxed" key={`p-${out.length}`}>
+                {renderInline(after)}
+              </p>
+            );
+          }
+          continue;
+        }
+        // Fermeture via || (fin de ligne)
+        const closePipe = raw.match(/^(.*)\s*\|\|\s*$/);
+        if (closePipe) {
+          const before = closePipe[1];
           if (before.trim() !== '') boxBuffer.push(before);
           inBox = false;
           flushBox();
           continue;
         }
+        // Toujours à l'intérieur du box
         boxBuffer.push(raw);
         continue;
       }
 
-      // Ouverture d'encadré: "II" au début de ligne, éventuellement suivi de contenu
-      const openMatch = raw.match(/^\s*II\s*(.*)$/);
-      if (openMatch) {
-        // sortir proprement des autres blocs
+      // Ouverture encadré via commentaire (n'importe où sur la ligne)
+      const mOpen = openRE.exec(raw);
+      if (mOpen && typeof mOpen.index === 'number') {
+        const before = raw.slice(0, mOpen.index).trimRight();
+        if (before) {
+          flushAllBlocks();
+          out.push(
+            <p className="mb-2 leading-relaxed" key={`p-${out.length}`}>
+              {renderInline(before)}
+            </p>
+          );
+        }
         flushAllBlocks();
         inBox = true;
         boxBuffer = [];
-        const after = openMatch[1];
+        const after = raw.slice(mOpen.index + mOpen[0].length).trimLeft();
+        if (after) boxBuffer.push(after);
+        continue;
+      }
+
+      // Ouverture d'encadré: "II" au début de ligne, éventuellement suivi de contenu
+      const openLegacy = raw.match(/^\s*II\s*(.*)$/);
+      if (openLegacy) {
+        flushAllBlocks();
+        inBox = true;
+        boxBuffer = [];
+        const after = openLegacy[1];
         if (after.trim() !== '') boxBuffer.push(after);
         continue;
       }
@@ -374,7 +420,6 @@ function MarkdownLite({ content }: { content: string }) {
     // Fin: flush des blocs restants
     flushAllBlocks();
     if (inBox) {
-      // Si "||" manquant, on ferme quand même
       inBox = false;
       flushBox();
     }
@@ -388,16 +433,8 @@ function MarkdownLite({ content }: { content: string }) {
 
 /* ---------- UI ---------- */
 
-type SectionContainerProps = {
-  icon: React.ReactNode;
-  title: string;
-  children?: React.ReactNode;
-  subtitle?: string | React.ReactNode;
-  defaultOpen?: boolean; // nouvel état initial
-};
-
-function SectionContainer({ icon, title, children, subtitle, defaultOpen = true }: SectionContainerProps) {
-  const [open, setOpen] = useState(defaultOpen);
+function SectionContainer(props: { icon: React.ReactNode; title: string; children?: React.ReactNode }) {
+  const [open, setOpen] = useState(true);
   return (
     <div className="stat-card">
       <button
@@ -407,18 +444,15 @@ function SectionContainer({ icon, title, children, subtitle, defaultOpen = true 
         aria-expanded={open}
       >
         <div className="flex items-center gap-2">
-          {icon}
-          <h3 className="text-lg font-semibold text-gray-100">
-            {title}
-            {!!subtitle && <span className="ml-2 font-normal text-gray-300">- {subtitle}</span>}
-          </h3>
+          {props.icon}
+          <h3 className="text-lg font-semibold text-gray-100">{props.title}</h3>
         </div>
         <ChevronDown
           size={18}
           className={`transition-transform duration-200 ${open ? 'rotate-0' : '-rotate-90'} text-gray-300`}
         />
       </button>
-      {open && <div className="p-4">{children}</div>}
+      {open && <div className="p-4">{props.children}</div>}
     </div>
   );
 }
@@ -453,7 +487,6 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
   // Sélections
   const race = player.race || '';
   const historique = (player.background as string) || '';
-  const characterHistory = (player as any)?.character_history || '';
 
   // Dons (adapter si nécessaire selon ton type Player)
   const feats: any = (player.stats as any)?.feats || {};
@@ -502,13 +535,8 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
 
   return (
     <div className="space-y-6">
-      {/* Race (repliée par défaut + valeur dans l'en-tête) */}
-      <SectionContainer
-        icon={<Shield size={18} className="text-emerald-400" />}
-        title="Race"
-        subtitle={race || undefined}
-        defaultOpen={false}
-      >
+      {/* Race */}
+      <SectionContainer icon={<Shield size={18} className="text-emerald-400" />} title="Race">
         {racesIdx.loading ? (
           <LoadingInline />
         ) : racesIdx.error ? (
@@ -523,13 +551,8 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
         )}
       </SectionContainer>
 
-      {/* Historique (replié par défaut + valeur dans l'en-tête) */}
-      <SectionContainer
-        icon={<ScrollText size={18} className="text-sky-400" />}
-        title="Historique"
-        subtitle={historique || undefined}
-        defaultOpen={false}
-      >
+      {/* Historique */}
+      <SectionContainer icon={<ScrollText size={18} className="text-sky-400" />} title="Historique">
         {histIdx.loading ? (
           <LoadingInline />
         ) : histIdx.error ? (
@@ -544,7 +567,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
         )}
       </SectionContainer>
 
-      {/* Dons (ouvert par défaut) */}
+      {/* Dons */}
       <SectionContainer icon={<Sparkles size={18} className="text-amber-400" />} title="Dons">
         {(donsOrigIdx.loading || donsGenIdx.loading || stylesIdx.loading) && <LoadingInline />}
         {(donsOrigIdx.error || donsGenIdx.error || stylesIdx.error) && (
@@ -573,18 +596,6 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
               </div>
             ))}
           </div>
-        )}
-      </SectionContainer>
-
-      {/* Histoire du personnage (nouvelle section) */}
-      <SectionContainer
-        icon={<ScrollText size={18} className="text-purple-400" />}
-        title="Histoire du personnage"
-      >
-        {characterHistory && characterHistory.trim() ? (
-          <MarkdownLite content={characterHistory} />
-        ) : (
-          <NotFound label="Histoire du personnage" value={null} />
         )}
       </SectionContainer>
     </div>
