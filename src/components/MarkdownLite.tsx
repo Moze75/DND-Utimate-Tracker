@@ -8,9 +8,10 @@ function stripBrackets(s: string): string {
 // Rendu inline: **gras** et _italique_
 function renderInline(text: string): React.ReactNode {
   if (!text) return null;
+
   const cleaned = stripBrackets(text);
 
-  // Découpe par **...** (gras)
+  // 1) Découpe par **...** (gras)
   const boldRe = /\*\*(.+?)\*\*/g;
   const parts: Array<{ type: 'text' | 'bold'; value: string }> = [];
   let last = 0;
@@ -25,7 +26,7 @@ function renderInline(text: string): React.ReactNode {
   }
   if (last < cleaned.length) parts.push({ type: 'text', value: cleaned.slice(last) });
 
-  // Appliquer l'italique _..._ dans chaque segment
+  // 2) Dans chaque segment, appliquer l'italique _..._
   const toItalicNodes = (str: string, keyPrefix: string) => {
     const nodes: React.ReactNode[] = [];
     const italicRe = /_(.+?)_/g;
@@ -132,28 +133,25 @@ export default function MarkdownLite({ content }: { content: string }) {
       boxBuffer = [];
     };
 
-    // Tokens commentaires pour BOX (insensibles à la casse, n'importe où sur la ligne)
-    const openBoxCommentRe = /<!--\s*BOX\s*-->\s*(.*)$/i;
-    const closeBoxCommentRe = /(.*)<!--\s*\/\s*BOX\s*-->\s*$/i;
+    // Regex commentaires pour BOX (ancrés au début/fin de ligne — version "fonctionnelle" d'origine)
+    const openBoxCommentRe = /^\s*<!--\s*BOX\s*-->\s*(.*)$/;
+    const closeBoxCommentRe = /^(.*)<!--\s*\/\s*BOX\s*-->\s*$/;
 
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
 
-      // Si on est dans un encadré, détecter la fermeture (commentaire ou ||), même si pas en fin de ligne
+      // Si on est dans un encadré, détecter la fermeture (commentaire ou ||)
       if (inBox) {
-        // Fermeture via commentaire (accepte contenu avant)
+        // Fermeture via commentaire avec contenu avant
         const closeC = raw.match(closeBoxCommentRe);
         if (closeC) {
           const before = closeC[1];
           if (before.trim() !== '') boxBuffer.push(before);
           inBox = false;
           flushBox();
-
-          // S'il reste du contenu après la balise fermante sur la même ligne (rare), on l'ignore
-          // pour éviter une logique trop complexe en une passe. Mettre cette suite sur une nouvelle ligne si besoin.
           continue;
         }
-        // Fermeture via || (accepte fin de ligne)
+        // Fermeture via ||
         const closePipe = raw.match(/^(.*)\s*\|\|\s*$/);
         if (closePipe) {
           const before = closePipe[1];
@@ -166,23 +164,9 @@ export default function MarkdownLite({ content }: { content: string }) {
         continue;
       }
 
-      // Ouverture via commentaire (accepte la balise positionnée n'importe où sur la ligne)
+      // Ouverture d'encadré via commentaire (peut contenir du contenu après)
       const openC = raw.match(openBoxCommentRe);
       if (openC) {
-        // contenu avant la balise ouvrante (si la balise n'est pas au début)
-        const idx = raw.toLowerCase().indexOf('<!-- box -->');
-        if (idx > 0) {
-          const before = raw.slice(0, idx).trimEnd();
-          if (before) {
-            // Rend le préfixe comme paragraphe simple
-            out.push(
-              <p className="mb-2 leading-relaxed" key={`p-${out.length}`}>
-                {renderInline(before)}
-              </p>
-            );
-          }
-        }
-
         flushAllBlocks();
         inBox = true;
         boxBuffer = [];
@@ -191,7 +175,7 @@ export default function MarkdownLite({ content }: { content: string }) {
         continue;
       }
 
-      // Ouverture legacy: "II" (on garde à début de ligne pour éviter des faux positifs en plein texte)
+      // Ouverture d'encadré: "II" au début de ligne, éventuellement suivi de contenu
       const openLegacy = raw.match(/^\s*II\s*(.*)$/);
       if (openLegacy) {
         flushAllBlocks();
