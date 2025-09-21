@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Shield, ScrollText, Sparkles, Loader2, ChevronDown } from 'lucide-react';
+import { Shield, ScrollText, Sparkles, Loader2, ChevronDown, Save, Check } from 'lucide-react';
 import type { Player } from '../types/dnd';
+import { playerService } from '../services/playerService';
 
 /**
  * Profil tab sans dépendances externes.
  * - Encadrés: ouverture avec "II" (peut être suivi de texte), fermeture avec "||" (peut être précédé de texte)
- *   + Ajout: ouverture <!-- BOX -->, fermeture <!-- /BOX --> (tolérant: où qu'elles soient sur la ligne, supporte HTML encodé)
+ *   + Ajout: ouverture <!-- BOX -->, fermeture <!-- /BOX --> (peuvent avoir du contenu sur la même ligne)
  * - Gras **texte** ; Italique _texte_
  * - Sous-titres: ligne entièrement en **gras** -> uppercase + tracking
  * - Listes (-, *, 1.) ; Citations (>)
@@ -183,12 +184,7 @@ function renderInline(text: string): React.ReactNode {
 
 function MarkdownLite({ content }: { content: string }) {
   const elements = useMemo(() => {
-    // 0) Décode d'éventuelles balises BOX encodées HTML
-    const src = (content || '')
-      .replace(/&lt;!--\s*BOX\s*--&gt;/gi, '<!-- BOX -->')
-      .replace(/&lt;!--\s*\/\s*BOX\s*--&gt;/gi, '<!-- /BOX -->');
-
-    const lines = src.split(/\r?\n/);
+    const lines = content.split(/\r?\n/);
     const out: React.ReactNode[] = [];
 
     let ulBuffer: string[] = [];
@@ -254,33 +250,25 @@ function MarkdownLite({ content }: { content: string }) {
       boxBuffer = [];
     };
 
-    // Tokens BOX (n'importe où sur la ligne)
-    const openRE = /<!--\s*BOX\s*-->/i;
-    const closeRE = /<!--\s*\/\s*BOX\s*-->/i;
+    // Regex commentaires pour BOX
+    const openBoxCommentRe = /^\s*<!--\s*BOX\s*-->\s*(.*)$/;
+    const closeBoxCommentRe = /^(.*)<!--\s*\/\s*BOX\s*-->\s*$/;
 
     for (let i = 0; i < lines.length; i++) {
-      let raw = lines[i];
+      const raw = lines[i];
 
+      // Si on est dans un encadré, détecter la fermeture (commentaire ou ||)
       if (inBox) {
-        // Cherche fermeture par commentaire sur la même ligne
-        const mClose = closeRE.exec(raw);
-        if (mClose && typeof mClose.index === 'number') {
-          const before = raw.slice(0, mClose.index).trimRight();
-          if (before) boxBuffer.push(before);
+        // Fermeture via commentaire avec contenu avant
+        const closeC = raw.match(closeBoxCommentRe);
+        if (closeC) {
+          const before = closeC[1];
+          if (before.trim() !== '') boxBuffer.push(before);
           inBox = false;
           flushBox();
-          const after = raw.slice(mClose.index + mClose[0].length).trimLeft();
-          if (after) {
-            // Rendre le suffixe après la fermeture comme paragraphe simple
-            out.push(
-              <p className="mb-2 leading-relaxed" key={`p-${out.length}`}>
-                {renderInline(after)}
-              </p>
-            );
-          }
           continue;
         }
-        // Fermeture via || (fin de ligne)
+        // Fermeture via ||
         const closePipe = raw.match(/^(.*)\s*\|\|\s*$/);
         if (closePipe) {
           const before = closePipe[1];
@@ -289,38 +277,28 @@ function MarkdownLite({ content }: { content: string }) {
           flushBox();
           continue;
         }
-        // Toujours à l'intérieur du box
         boxBuffer.push(raw);
         continue;
       }
 
-      // Ouverture encadré via commentaire (n'importe où sur la ligne)
-      const mOpen = openRE.exec(raw);
-      if (mOpen && typeof mOpen.index === 'number') {
-        const before = raw.slice(0, mOpen.index).trimRight();
-        if (before) {
-          flushAllBlocks();
-          out.push(
-            <p className="mb-2 leading-relaxed" key={`p-${out.length}`}>
-              {renderInline(before)}
-            </p>
-          );
-        }
+      // Ouverture d'encadré via commentaire (peut contenir du contenu après)
+      const openC = raw.match(openBoxCommentRe);
+      if (openC) {
         flushAllBlocks();
         inBox = true;
         boxBuffer = [];
-        const after = raw.slice(mOpen.index + mOpen[0].length).trimLeft();
-        if (after) boxBuffer.push(after);
+        const after = openC[1];
+        if (after.trim() !== '') boxBuffer.push(after);
         continue;
       }
 
       // Ouverture d'encadré: "II" au début de ligne, éventuellement suivi de contenu
-      const openLegacy = raw.match(/^\s*II\s*(.*)$/);
-      if (openLegacy) {
+      const openMatch = raw.match(/^\s*II\s*(.*)$/);
+      if (openMatch) {
         flushAllBlocks();
         inBox = true;
         boxBuffer = [];
-        const after = openLegacy[1];
+        const after = openMatch[1];
         if (after.trim() !== '') boxBuffer.push(after);
         continue;
       }
@@ -487,6 +465,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
   // Sélections
   const race = player.race || '';
   const historique = (player.background as string) || '';
+  const characterHistory = (player as any)?.character_history || '';
 
   // Dons (adapter si nécessaire selon ton type Player)
   const feats: any = (player.stats as any)?.feats || {};
@@ -532,6 +511,34 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
     for (const n of styleFeats) out.push({ name: n, hit: findSection(stylesIdx, n), kind: 'style' });
     return out;
   }, [originFeats, generalFeats, styleFeats, donsOrigIdx, donsGenIdx, stylesIdx]);
+
+  // Etat local pour l'édition de l'histoire
+  const [historyDraft, setHistoryDraft] = useState<string>(characterHistory || '');
+  const [savingHistory, setSavingHistory] = useState(false);
+  const [saveOk, setSaveOk] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setHistoryDraft(characterHistory || '');
+  }, [player.id, characterHistory]);
+
+  const saveHistory = async () => {
+    if (savingHistory) return;
+    setSavingHistory(true);
+    setSaveErr(null);
+    setSaveOk(false);
+    try {
+      const updated = await playerService.updatePlayer({ ...(player as any), character_history: historyDraft });
+      if (!updated) throw new Error('Échec de la sauvegarde');
+      setSaveOk(true);
+      // Masque l’indicateur “Enregistré” après 2s
+      setTimeout(() => setSaveOk(false), 2000);
+    } catch (e: any) {
+      setSaveErr(e?.message || 'Erreur inconnue');
+    } finally {
+      setSavingHistory(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -597,6 +604,45 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
             ))}
           </div>
         )}
+      </SectionContainer>
+
+      {/* Histoire du personnage (éditable) */}
+      <SectionContainer icon={<ScrollText size={18} className="text-purple-400" />} title="Histoire du personnage">
+        <div className="space-y-2">
+          <textarea
+            value={historyDraft}
+            onChange={(e) => setHistoryDraft(e.target.value)}
+            onBlur={saveHistory}
+            className="input-dark w-full px-3 py-2 rounded-md"
+            rows={8}
+            placeholder="Décrivez l'histoire de votre personnage..."
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={saveHistory}
+              disabled={savingHistory}
+              className="btn-primary px-3 py-2 rounded-md flex items-center gap-2"
+            >
+              {savingHistory ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              {savingHistory ? 'Sauvegarde…' : 'Sauvegarder'}
+            </button>
+            {saveOk && (
+              <span className="text-emerald-400 flex items-center gap-1 text-sm">
+                <Check size={14} /> Enregistré
+              </span>
+            )}
+            {saveErr && <span className="text-red-400 text-sm">{saveErr}</span>}
+          </div>
+          {/* Optionnel: aperçu Markdown
+          {historyDraft?.trim() ? (
+            <div className="mt-3">
+              <div className="text-sm text-gray-400 mb-1">Aperçu</div>
+              <MarkdownLite content={historyDraft} />
+            </div>
+          ) : null}
+          */}
+        </div>
       </SectionContainer>
     </div>
   );
