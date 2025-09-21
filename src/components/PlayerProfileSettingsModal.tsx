@@ -931,21 +931,6 @@ export function PlayerProfileSettingsModal({
           </div>
         </div>
 
-        {/* Histoire */}
-        <div className="stat-card">
-          <div className="p-4">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Histoire du personnage
-            </label>
-            <textarea
-              value={characterHistory}
-              onChange={(e) => { setCharacterHistory(e.target.value); setDirty(true); }}
-              className="input-dark w-full px-3 py-2 rounded-md"
-              rows={6}
-              placeholder="Décrivez l'histoire de votre personnage..."
-            />
-          </div>
-        </div>
 
         {/* Bandeau fixe bas: Retour toujours visible, Sauvegarder seulement si modifié */}
         <div className="flex gap-3 fixed bottom-0 left-0 right-0 bg-gray-900/95 p-4 border-t border-gray-700/50 z-10">
