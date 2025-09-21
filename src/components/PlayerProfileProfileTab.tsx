@@ -20,7 +20,7 @@ const URLS = {
   races: `${RAW_BASE}/RACES/DESCRIPTION_DES_RACES.md`,
   historiques: `${RAW_BASE}/HISTORIQUES/HISTORIQUES.md`,
   donsOrigine: `${RAW_BASE}/DONS/DONS_D_ORIGINE.md`,
-  donsGeneraux: `${RAW_BASE}/DONS/DONS_DONS_D_GENERAUX.md`.replace('DONS_DONS_', 'DONS_'), // garde robustesse si renommé
+  donsGeneraux: `${RAW_BASE}/DONS/DONS_GENERAUX.md`.replace('DONS_DONS_', 'DONS_'), // garde robustesse si renommé
   stylesCombat: `${RAW_BASE}/DONS/STYLES_DE_COMBAT.md`,
 };
 
