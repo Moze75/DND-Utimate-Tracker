@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Shield, ScrollText, Sparkles, Loader2, ChevronDown, Save, Check } from 'lucide-react';
+import { Shield, ScrollText, Sparkles, Loader2, ChevronDown } from 'lucide-react';
 import type { Player } from '../types/dnd';
-import { playerService } from '../services/playerService';
 
 /**
  * Profil tab sans dépendances externes.
@@ -9,9 +8,9 @@ import { playerService } from '../services/playerService';
  * - Gras **texte** ; Italique _texte_
  * - Sous-titres: ligne entièrement en **gras** -> uppercase + tracking
  * - Listes (-, *, 1.) ; Citations (>)
- * - Sections repliables (Race / Historique repliés, Dons ouvert)
+ * - Sections repliables (Race / Historique / Dons) avec état initial paramétrable
  * - Nettoyage des crochets: [texte] => texte
- * - Ajout d'une section éditable "Histoire du personnage" (player.character_history) après Dons
+ * - Ajout d'une section "Histoire du personnage" (player.character_history) après Dons
  * - En-têtes Race et Historique affichent la valeur sélectionnée: "Race - …", "Historique - …"
  */
 
@@ -394,7 +393,7 @@ type SectionContainerProps = {
   title: string;
   children?: React.ReactNode;
   subtitle?: string | React.ReactNode;
-  defaultOpen?: boolean;
+  defaultOpen?: boolean; // nouvel état initial
 };
 
 function SectionContainer({ icon, title, children, subtitle, defaultOpen = true }: SectionContainerProps) {
@@ -501,34 +500,6 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
     return out;
   }, [originFeats, generalFeats, styleFeats, donsOrigIdx, donsGenIdx, stylesIdx]);
 
-  // Etat local pour l'édition de l'histoire
-  const [historyDraft, setHistoryDraft] = useState<string>(characterHistory || '');
-  const [savingHistory, setSavingHistory] = useState(false);
-  const [saveOk, setSaveOk] = useState(false);
-  const [saveErr, setSaveErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    setHistoryDraft(characterHistory || '');
-  }, [player.id, characterHistory]);
-
-  const saveHistory = async () => {
-    if (savingHistory) return;
-    setSavingHistory(true);
-    setSaveErr(null);
-    setSaveOk(false);
-    try {
-      const updated = await playerService.updatePlayer({ ...(player as any), character_history: historyDraft });
-      if (!updated) throw new Error('Échec de la sauvegarde');
-      setSaveOk(true);
-      // Masque l’indicateur “Enregistré” après 2s
-      setTimeout(() => setSaveOk(false), 2000);
-    } catch (e: any) {
-      setSaveErr(e?.message || 'Erreur inconnue');
-    } finally {
-      setSavingHistory(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Race (repliée par défaut + valeur dans l'en-tête) */}
@@ -574,7 +545,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
       </SectionContainer>
 
       {/* Dons (ouvert par défaut) */}
-      <SectionContainer icon={<Sparkles size={18} className="text-amber-400" />} title="Dons" defaultOpen>
+      <SectionContainer icon={<Sparkles size={18} className="text-amber-400" />} title="Dons">
         {(donsOrigIdx.loading || donsGenIdx.loading || stylesIdx.loading) && <LoadingInline />}
         {(donsOrigIdx.error || donsGenIdx.error || stylesIdx.error) && (
           <div className="text-sm text-red-400 space-y-1">
@@ -605,47 +576,16 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
         )}
       </SectionContainer>
 
-      {/* Histoire du personnage (éditable) */}
+      {/* Histoire du personnage (nouvelle section) */}
       <SectionContainer
         icon={<ScrollText size={18} className="text-purple-400" />}
         title="Histoire du personnage"
-        defaultOpen
       >
-        <div className="space-y-2">
-          <textarea
-            value={historyDraft}
-            onChange={(e) => setHistoryDraft(e.target.value)}
-            onBlur={saveHistory}
-            className="input-dark w-full px-3 py-2 rounded-md"
-            rows={8}
-            placeholder="Décrivez l'histoire de votre personnage..."
-          />
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={saveHistory}
-              disabled={savingHistory}
-              className="btn-primary px-3 py-2 rounded-md flex items-center gap-2"
-            >
-              {savingHistory ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              {savingHistory ? 'Sauvegarde…' : 'Sauvegarder'}
-            </button>
-            {saveOk && (
-              <span className="text-emerald-400 flex items-center gap-1 text-sm">
-                <Check size={14} /> Enregistré
-              </span>
-            )}
-            {saveErr && <span className="text-red-400 text-sm">{saveErr}</span>}
-          </div>
-          {/* Optionnel: aperçu Markdown
-          {historyDraft?.trim() ? (
-            <div className="mt-3">
-              <div className="text-sm text-gray-400 mb-1">Aperçu</div>
-              <MarkdownLite content={historyDraft} />
-            </div>
-          ) : null}
-          */}
-        </div>
+        {characterHistory && characterHistory.trim() ? (
+          <MarkdownLite content={characterHistory} />
+        ) : (
+          <NotFound label="Histoire du personnage" value={null} />
+        )}
       </SectionContainer>
     </div>
   );
