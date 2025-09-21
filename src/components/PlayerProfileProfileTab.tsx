@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import MarkdownLite from './MarkdownLite';
 import { Shield, ScrollText, Sparkles, Loader2, ChevronDown, Check } from 'lucide-react';
 import type { Player } from '../types/dnd';
 import { playerService } from '../services/playerService';
