@@ -322,7 +322,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
       .eq('id', id)
       .maybeSingle();
 
-    if (readErr) {
+  if (readErr) {
       console.error('[ProfileTab] Supabase read-back error', readErr);
       throw new Error(readErr.message || 'Erreur de relecture post-update');
     }
