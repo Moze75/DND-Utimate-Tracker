@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Shield, ScrollText, Sparkles, Loader2, ChevronDown } from 'lucide-react';
+import { Shield, ScrollText, Sparkles, Loader2, ChevronDown, Save, Check } from 'lucide-react';
 import type { Player } from '../types/dnd';
+import { playerService } from '../services/playerService';
 
 /**
  * Profil tab sans dépendances externes.
  * - Encadrés: ouverture avec "II" (peut être suivi de texte), fermeture avec "||" (peut être précédé de texte)
- *   + Ajout: ouverture <!-- BOX -->, fermeture <!-- /BOX --> (peuvent avoir du contenu sur la même ligne)
  * - Gras **texte** ; Italique _texte_
  * - Sous-titres: ligne entièrement en **gras** -> uppercase + tracking
  * - Listes (-, *, 1.) ; Citations (>)
- * - Sections repliables (Race / Historique / Dons)
+ * - Sections repliables (Race / Historique repliés, Dons ouvert)
  * - Nettoyage des crochets: [texte] => texte
+ * - Ajout d'une section éditable "Histoire du personnage" (player.character_history) après Dons
+ * - En-têtes Race et Historique affichent la valeur sélectionnée: "Race - …", "Historique - …"
  */
 
 const RAW_BASE = 'https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main';
@@ -190,7 +192,7 @@ function MarkdownLite({ content }: { content: string }) {
     let olBuffer: string[] = [];
     let quoteBuffer: string[] = [];
 
-    // Encadré par II ... || ou <!-- BOX --> ... <!-- /BOX -->
+    // Encadré par II ... ||
     let inBox = false;
     let boxBuffer: string[] = [];
 
@@ -249,28 +251,14 @@ function MarkdownLite({ content }: { content: string }) {
       boxBuffer = [];
     };
 
-    // Regex commentaires pour BOX
-    const openBoxCommentRe = /^\s*<!--\s*BOX\s*-->\s*(.*)$/;
-    const closeBoxCommentRe = /^(.*)<!--\s*\/\s*BOX\s*-->\s*$/;
-
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
 
-      // Si on est dans un encadré, détecter la fermeture (commentaire ou ||)
+      // Si on est dans un encadré, chercher une éventuelle fermeture "||" (peut être sur la même ligne que du contenu)
       if (inBox) {
-        // Fermeture via commentaire avec contenu avant
-        const closeC = raw.match(closeBoxCommentRe);
-        if (closeC) {
-          const before = closeC[1];
-          if (before.trim() !== '') boxBuffer.push(before);
-          inBox = false;
-          flushBox();
-          continue;
-        }
-        // Fermeture via ||
-        const closePipe = raw.match(/^(.*)\s*\|\|\s*$/);
-        if (closePipe) {
-          const before = closePipe[1];
+        const closeMatch = raw.match(/^(.*)\s*\|\|\s*$/);
+        if (closeMatch) {
+          const before = closeMatch[1];
           if (before.trim() !== '') boxBuffer.push(before);
           inBox = false;
           flushBox();
@@ -280,20 +268,10 @@ function MarkdownLite({ content }: { content: string }) {
         continue;
       }
 
-      // Ouverture d'encadré via commentaire (peut contenir du contenu après)
-      const openC = raw.match(openBoxCommentRe);
-      if (openC) {
-        flushAllBlocks();
-        inBox = true;
-        boxBuffer = [];
-        const after = openC[1];
-        if (after.trim() !== '') boxBuffer.push(after);
-        continue;
-      }
-
       // Ouverture d'encadré: "II" au début de ligne, éventuellement suivi de contenu
       const openMatch = raw.match(/^\s*II\s*(.*)$/);
       if (openMatch) {
+        // sortir proprement des autres blocs
         flushAllBlocks();
         inBox = true;
         boxBuffer = [];
@@ -397,6 +375,7 @@ function MarkdownLite({ content }: { content: string }) {
     // Fin: flush des blocs restants
     flushAllBlocks();
     if (inBox) {
+      // Si "||" manquant, on ferme quand même
       inBox = false;
       flushBox();
     }
@@ -410,8 +389,16 @@ function MarkdownLite({ content }: { content: string }) {
 
 /* ---------- UI ---------- */
 
-function SectionContainer(props: { icon: React.ReactNode; title: string; children?: React.ReactNode }) {
-  const [open, setOpen] = useState(true);
+type SectionContainerProps = {
+  icon: React.ReactNode;
+  title: string;
+  children?: React.ReactNode;
+  subtitle?: string | React.ReactNode;
+  defaultOpen?: boolean;
+};
+
+function SectionContainer({ icon, title, children, subtitle, defaultOpen = true }: SectionContainerProps) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="stat-card">
       <button
@@ -421,15 +408,18 @@ function SectionContainer(props: { icon: React.ReactNode; title: string; childre
         aria-expanded={open}
       >
         <div className="flex items-center gap-2">
-          {props.icon}
-          <h3 className="text-lg font-semibold text-gray-100">{props.title}</h3>
+          {icon}
+          <h3 className="text-lg font-semibold text-gray-100">
+            {title}
+            {!!subtitle && <span className="ml-2 font-normal text-gray-300">- {subtitle}</span>}
+          </h3>
         </div>
         <ChevronDown
           size={18}
           className={`transition-transform duration-200 ${open ? 'rotate-0' : '-rotate-90'} text-gray-300`}
         />
       </button>
-      {open && <div className="p-4">{props.children}</div>}
+      {open && <div className="p-4">{children}</div>}
     </div>
   );
 }
@@ -464,6 +454,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
   // Sélections
   const race = player.race || '';
   const historique = (player.background as string) || '';
+  const characterHistory = (player as any)?.character_history || '';
 
   // Dons (adapter si nécessaire selon ton type Player)
   const feats: any = (player.stats as any)?.feats || {};
@@ -510,10 +501,43 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
     return out;
   }, [originFeats, generalFeats, styleFeats, donsOrigIdx, donsGenIdx, stylesIdx]);
 
+  // Etat local pour l'édition de l'histoire
+  const [historyDraft, setHistoryDraft] = useState<string>(characterHistory || '');
+  const [savingHistory, setSavingHistory] = useState(false);
+  const [saveOk, setSaveOk] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setHistoryDraft(characterHistory || '');
+  }, [player.id, characterHistory]);
+
+  const saveHistory = async () => {
+    if (savingHistory) return;
+    setSavingHistory(true);
+    setSaveErr(null);
+    setSaveOk(false);
+    try {
+      const updated = await playerService.updatePlayer({ ...(player as any), character_history: historyDraft });
+      if (!updated) throw new Error('Échec de la sauvegarde');
+      setSaveOk(true);
+      // Masque l’indicateur “Enregistré” après 2s
+      setTimeout(() => setSaveOk(false), 2000);
+    } catch (e: any) {
+      setSaveErr(e?.message || 'Erreur inconnue');
+    } finally {
+      setSavingHistory(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Race */}
-      <SectionContainer icon={<Shield size={18} className="text-emerald-400" />} title="Race">
+      {/* Race (repliée par défaut + valeur dans l'en-tête) */}
+      <SectionContainer
+        icon={<Shield size={18} className="text-emerald-400" />}
+        title="Race"
+        subtitle={race || undefined}
+        defaultOpen={false}
+      >
         {racesIdx.loading ? (
           <LoadingInline />
         ) : racesIdx.error ? (
@@ -528,8 +552,13 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
         )}
       </SectionContainer>
 
-      {/* Historique */}
-      <SectionContainer icon={<ScrollText size={18} className="text-sky-400" />} title="Historique">
+      {/* Historique (replié par défaut + valeur dans l'en-tête) */}
+      <SectionContainer
+        icon={<ScrollText size={18} className="text-sky-400" />}
+        title="Historique"
+        subtitle={historique || undefined}
+        defaultOpen={false}
+      >
         {histIdx.loading ? (
           <LoadingInline />
         ) : histIdx.error ? (
@@ -544,8 +573,8 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
         )}
       </SectionContainer>
 
-      {/* Dons */}
-      <SectionContainer icon={<Sparkles size={18} className="text-amber-400" />} title="Dons">
+      {/* Dons (ouvert par défaut) */}
+      <SectionContainer icon={<Sparkles size={18} className="text-amber-400" />} title="Dons" defaultOpen>
         {(donsOrigIdx.loading || donsGenIdx.loading || stylesIdx.loading) && <LoadingInline />}
         {(donsOrigIdx.error || donsGenIdx.error || stylesIdx.error) && (
           <div className="text-sm text-red-400 space-y-1">
@@ -574,6 +603,49 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
             ))}
           </div>
         )}
+      </SectionContainer>
+
+      {/* Histoire du personnage (éditable) */}
+      <SectionContainer
+        icon={<ScrollText size={18} className="text-purple-400" />}
+        title="Histoire du personnage"
+        defaultOpen
+      >
+        <div className="space-y-2">
+          <textarea
+            value={historyDraft}
+            onChange={(e) => setHistoryDraft(e.target.value)}
+            onBlur={saveHistory}
+            className="input-dark w-full px-3 py-2 rounded-md"
+            rows={8}
+            placeholder="Décrivez l'histoire de votre personnage..."
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={saveHistory}
+              disabled={savingHistory}
+              className="btn-primary px-3 py-2 rounded-md flex items-center gap-2"
+            >
+              {savingHistory ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              {savingHistory ? 'Sauvegarde…' : 'Sauvegarder'}
+            </button>
+            {saveOk && (
+              <span className="text-emerald-400 flex items-center gap-1 text-sm">
+                <Check size={14} /> Enregistré
+              </span>
+            )}
+            {saveErr && <span className="text-red-400 text-sm">{saveErr}</span>}
+          </div>
+          {/* Optionnel: aperçu Markdown
+          {historyDraft?.trim() ? (
+            <div className="mt-3">
+              <div className="text-sm text-gray-400 mb-1">Aperçu</div>
+              <MarkdownLite content={historyDraft} />
+            </div>
+          ) : null}
+          */}
+        </div>
       </SectionContainer>
     </div>
   );
