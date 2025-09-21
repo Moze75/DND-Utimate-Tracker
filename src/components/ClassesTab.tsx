@@ -943,10 +943,7 @@ function AbilityCard({
     >
       <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-controls={contentId} className="w-full text-left">
         <div className="flex items-start gap-3 p-4">
-          <div className="pt-0.5 shrink-0">
-            <LevelBadge level={Number(section.level) || 0} />
-          </div>
-
+          {/* Étiquette de niveau supprimée pour éviter le doublon */}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h3 className="text-white font-semibold text-base sm:text-lg truncate">{sentenceCase(section.title)}</h3>
@@ -983,20 +980,6 @@ function AbilityCard({
         </div>
       </div>
     </article>
-  );
-}
-
-function LevelBadge({ level }: { level: number }) {
-  return (
-    <span
-      className={[
-        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold',
-        'bg-gradient-to-br from-violet-600/90 to-fuchsia-500/90 text-white',
-        'ring-1 ring-inset ring-violet-300/30 shadow-sm shadow-black/20',
-      ].join(' ')}
-    >
-      Niv. {level || '—'}
-    </span>
   );
 }
 
