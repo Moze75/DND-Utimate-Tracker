@@ -290,7 +290,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
     lastSavedHistoryRef.current = characterHistoryProp || '';
   }, [player.id, characterHistoryProp]);
 
-  // Sauvegarde directe via Supabase (même logique que PlayerProfileSettingsModal)
+  // Sauvegarde "comme dans la modale": update direct sans .single(), puis relecture pour confirmer
   async function updateHistoryOnServer(nextValue: string): Promise<boolean> {
     const id = (player as any)?.id;
     if (!id) {
@@ -303,28 +303,43 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
     try {
       const { data: userData } = await supabase.auth.getUser();
       // eslint-disable-next-line no-console
-      console.debug('[ProfileTab] updateCharacterHistory: userId/session', { userId: userData?.user?.id, playerId: id });
+      console.debug('[ProfileTab] updateCharacterHistory: user/session', { userId: userData?.user?.id, playerId: id });
     } catch {
       // ignore
     }
 
-    const { data, error } = await supabase
-      .from('players')
-      .update({ character_history: nextValue })
-      .eq('id', id)
-      .select('*')
-      .single();
+    // 1) Update direct (comme handleSave de la modale)
+    const { error: upErr } = await supabase.from('players').update({ character_history: nextValue }).eq('id', id);
+    if (upErr) {
+      console.error('[ProfileTab] Supabase update error', upErr);
+      throw new Error(upErr.message || 'Erreur update');
+    }
 
-    if (error) {
-      console.error('[ProfileTab] Supabase update error', error);
-      // remonter une erreur explicite à l’UI
-      const msg = (error as any)?.message || JSON.stringify(error);
-      throw new Error(msg);
+    // 2) Relecture pour confirmer la persistance et diagnostiquer RLS
+    const { data: row, error: readErr } = await supabase
+      .from('players')
+      .select('id, user_id, character_history')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (readErr) {
+      console.error('[ProfileTab] Supabase read-back error', readErr);
+      throw new Error(readErr.message || 'Erreur de relecture post-update');
     }
-    if (!data) {
-      // Ça ne devrait pas arriver avec .single() si 0 ligne => Supabase renvoie une erreur
-      throw new Error('Aucune ligne mise à jour (0 row)');
+
+    // eslint-disable-next-line no-console
+    console.debug('[ProfileTab] Read-back row after update', row);
+
+    if (!row) {
+      throw new Error("Ligne introuvable après update (RLS ?). Vérifiez que user_id de la ligne correspond à auth.uid().");
     }
+
+    if (row.character_history !== nextValue) {
+      throw new Error(
+        "La valeur lue après update ne correspond pas à la valeur envoyée. RLS, trigger ou hook peut bloquer la modification."
+      );
+    }
+
     return true;
   }
 
@@ -440,7 +455,11 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
       </SectionContainer>
 
       {/* Histoire du personnage */}
-      <SectionContainer icon={<ScrollText size={18} className="text-purple-400" />} title="Histoire du personnage" defaultOpen>
+      <SectionContainer
+        icon={<ScrollText size={18} className="text-purple-400" />}
+        title="Histoire du personnage"
+        defaultOpen
+      >
         <div className="space-y-2">
           <textarea
             value={historyDraft}
@@ -466,6 +485,13 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
                 {saveErr}
               </span>
             )}
+            <button
+              type="button"
+              onClick={saveHistory}
+              className="ml-auto px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/15 text-sm text-gray-100"
+            >
+              Forcer la sauvegarde
+            </button>
           </div>
         </div>
       </SectionContainer>
