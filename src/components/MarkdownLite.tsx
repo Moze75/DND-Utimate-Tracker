@@ -71,9 +71,12 @@ function renderInline(text: string): React.ReactNode {
 function isTableSeparator(line: string): boolean {
   const l = line.trim();
   if (!l.includes('-')) return false;
-  // On tolère les pipes en début/fin
+  // Tolère les pipes en début/fin
   const core = l.replace(/^\|/, '').replace(/\|$/, '');
-  const cells = core.split('|').map((c) => c.trim()).filter((c) => c.length > 0);
+  const cells = core
+    .split('|')
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0);
   if (cells.length === 0) return false;
   // Chaque cellule doit matcher :? -{3,} :?
   return cells.every((c) => /^:?-{3,}:?$/.test(c));
@@ -82,17 +85,13 @@ function isTableSeparator(line: string): boolean {
 // Découpe une ligne de tableau en cellules, en gérant \| (pipe échappé)
 function splitTableRow(line: string): string[] {
   let work = line.trim();
-  // Retire un pipe de tête/de fin si présent (GFM les tolère)
   if (work.startsWith('|')) work = work.slice(1);
   if (work.endsWith('|')) work = work.slice(0, -1);
-  // Protège les pipes échappés
   work = work.replace(/\\\|/g, '§PIPE§');
   const rawCells = work.split('|').map((c) => c.replace(/§PIPE§/g, '|').trim());
-  // On ne filtre pas les cellules vides au milieu; on garde la structure
   return rawCells;
 }
 
-// Aligne selon la cellule de séparation
 type Align = 'left' | 'center' | 'right';
 function parseAlignments(sepLine: string, colCount: number): Align[] {
   const core = sepLine.trim().replace(/^\|/, '').replace(/\|$/, '');
@@ -104,7 +103,6 @@ function parseAlignments(sepLine: string, colCount: number): Align[] {
     if (right) return 'right';
     return 'left';
   });
-  // Ajuste la longueur au nombre de colonnes
   if (aligns.length < colCount) {
     while (aligns.length < colCount) aligns.push('left');
   } else if (aligns.length > colCount) {
@@ -258,17 +256,10 @@ export default function MarkdownLite({ content }: { content: string }) {
         continue;
       }
 
-      // Tentative de détection de tableau (GFM):
-      // header + separator obligatoires
+      // Détection tableau GFM: header + ligne séparatrice
       const headerLine = raw;
       const sepLine = lines[i + 1];
-      if (
-        headerLine &&
-        sepLine &&
-        headerLine.includes('|') &&
-        isTableSeparator(sepLine)
-      ) {
-        // On a un tableau
+      if (headerLine && sepLine && headerLine.includes('|') && isTableSeparator(sepLine)) {
         flushAllBlocks();
 
         const headerCells = splitTableRow(headerLine);
@@ -279,12 +270,10 @@ export default function MarkdownLite({ content }: { content: string }) {
         for (; j < lines.length; j++) {
           const rowLine = lines[j];
           if (!rowLine || rowLine.trim() === '') break;
-          // Fin du tableau si la ligne ne semble pas tabulaire
           if (!rowLine.includes('|')) break;
           body.push(splitTableRow(rowLine));
         }
 
-        // Rendu du tableau
         out.push(
           <div key={`tblwrap-${out.length}`} className="overflow-x-auto my-3">
             <table className="w-full text-sm border-separate border-spacing-0">
@@ -325,7 +314,6 @@ export default function MarkdownLite({ content }: { content: string }) {
           </div>
         );
 
-        // Avance l'index
         i = j - 1;
         continue;
       }
