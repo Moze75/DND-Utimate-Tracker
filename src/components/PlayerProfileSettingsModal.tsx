@@ -5,6 +5,8 @@ import toast from 'react-hot-toast';
 import { Avatar } from './Avatar';
 import { LevelUpModal } from './LevelUpModal';
 import type { DndClass, Player, PlayerBackground, PlayerStats } from '../types/dnd';
+// Ajout: parseur Markdown (gère <!-- BOX --> ... <!-- /BOX --> et II ... ||)
+import MarkdownLite from './MarkdownLite';
 
 /* ============================ Helpers ============================ */
 
@@ -127,10 +129,10 @@ const GENERAL_FEATS: string[] = [
   'Figure de proue',
   'Formation aux armes de guerre',
   'Gaillard',
-  'Incantateur d\'élite',
+  "Incantateur d'élite",
   'Mage de guerre',
   'Magie rituelle',
-  'Maître d\'armes',
+  "Maître d'armes",
   'Maître du hast',
   'Maître-arbalétrier',
   'Maître des armures intermédiaires',
@@ -146,7 +148,7 @@ const GENERAL_FEATS: string[] = [
   'Sentinelle',
   'Télékinésiste',
   'Télépathe',
-  'Tireur d\'élite',
+  "Tireur d'élite",
   'Trancheur',
   'Tueur de mages',
 ];
@@ -487,6 +489,11 @@ export function PlayerProfileSettingsModal({
           >
             <X size={24} />
           </button>
+        </div>
+
+        {/* Discret: active le parseur (remplacer ce placeholder par tout contenu Markdown à rendre dans la modale) */}
+        <div className="hidden">
+          <MarkdownLite content="" />
         </div>
 
         {/* Identité */}
@@ -928,22 +935,6 @@ export function PlayerProfileSettingsModal({
                 />
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Histoire */}
-        <div className="stat-card">
-          <div className="p-4">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Histoire du personnage
-            </label>
-            <textarea
-              value={characterHistory}
-              onChange={(e) => { setCharacterHistory(e.target.value); setDirty(true); }}
-              className="input-dark w-full px-3 py-2 rounded-md"
-              rows={6}
-              placeholder="Décrivez l'histoire de votre personnage..."
-            />
           </div>
         </div>
 
