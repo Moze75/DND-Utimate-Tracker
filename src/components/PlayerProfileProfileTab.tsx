@@ -20,7 +20,7 @@ const URLS = {
   races: `${RAW_BASE}/RACES/DESCRIPTION_DES_RACES.md`,
   historiques: `${RAW_BASE}/HISTORIQUES/HISTORIQUES.md`,
   donsOrigine: `${RAW_BASE}/DONS/DONS_D_ORIGINE.md`,
-  donsGeneraux: `${RAW_BASE}/DONS/DONS_GENERAUX.md`.replace('DONS_DONS_', 'DONS_'), // garde robustesse si renommé
+  donsGeneraux: `${RAW_BASE}/DONS/DONS_GENERAUX.md`, // correction 404
   stylesCombat: `${RAW_BASE}/DONS/STYLES_DE_COMBAT.md`,
 };
 
@@ -241,7 +241,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
   // Sélections
   const race = player.race || '';
   const historique = (player.background as string) || '';
-  const characterHistory = (player as any)?.character_history || '';
+  const characterHistoryProp = (player as any)?.character_history || '';
 
   // Dons (adapter si nécessaire selon ton type Player)
   const feats: any = (player.stats as any)?.feats || {};
@@ -289,28 +289,71 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
   }, [originFeats, generalFeats, styleFeats, donsOrigIdx, donsGenIdx, stylesIdx]);
 
   // Etat local pour l'édition de l'histoire (autosave silencieux)
-  const [historyDraft, setHistoryDraft] = useState<string>(characterHistory || '');
+  const [historyDraft, setHistoryDraft] = useState<string>(characterHistoryProp || '');
   const [savingHistory, setSavingHistory] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
+  // Souviens-toi de la dernière valeur réellement enregistrée (pas la prop, qui peut être stale)
+  const lastSavedHistoryRef = useRef<string>(characterHistoryProp || '');
+
   useEffect(() => {
-    setHistoryDraft(characterHistory || '');
-  }, [player.id, characterHistory]);
+    setHistoryDraft(characterHistoryProp || '');
+    lastSavedHistoryRef.current = characterHistoryProp || '';
+  }, [player.id, characterHistoryProp]);
+
+  async function updateHistoryOnServer(nextValue: string): Promise<boolean> {
+    const payload = { character_history: nextValue, characterHistory: nextValue };
+
+    // 1) Essai: payload partiel avec id inclus
+    try {
+      const res1 = await (playerService as any).updatePlayer({ id: (player as any).id, ...payload });
+      if (res1) return true;
+    } catch (e) {
+      // continue
+      // console.error('[updatePlayer - shape 1] erreur', e);
+    }
+
+    // 2) Essai: signature (id, payload)
+    try {
+      const res2 = await (playerService as any).updatePlayer((player as any).id, payload);
+      if (res2) return true;
+    } catch (e) {
+      // console.error('[updatePlayer - shape 2] erreur', e);
+    }
+
+    // 3) Essai: payload complet (merge du player)
+    try {
+      const res3 = await (playerService as any).updatePlayer({ ...(player as any), ...payload });
+      if (res3) return true;
+    } catch (e) {
+      // console.error('[updatePlayer - shape 3] erreur', e);
+    }
+
+    return false;
+  }
 
   const saveHistory = async () => {
     if (savingHistory) return;
-    if ((characterHistory || '') === historyDraft) return; // pas de changement
+
+    // Si pas de changement par rapport à la dernière valeur "réellement" sauvée, ne rien faire
+    if ((lastSavedHistoryRef.current || '') === (historyDraft || '')) return;
 
     setSavingHistory(true);
     setSaveErr(null);
     setSaveOk(false);
     try {
-      const updated = await playerService.updatePlayer({ ...(player as any), character_history: historyDraft });
-      if (!updated) throw new Error('Échec de la sauvegarde');
+      const ok = await updateHistoryOnServer(historyDraft);
+      if (!ok) {
+        throw new Error('Échec de la sauvegarde (updatePlayer a renvoyé une réponse négative)');
+      }
+      // Mémoriser la valeur comme sauvée
+      lastSavedHistoryRef.current = historyDraft;
       setSaveOk(true);
+      // masque l’indicateur après 2s
       setTimeout(() => setSaveOk(false), 2000);
     } catch (e: any) {
+      // Expose l’erreur à l’UI
       setSaveErr(e?.message || 'Erreur inconnue');
     } finally {
       setSavingHistory(false);
