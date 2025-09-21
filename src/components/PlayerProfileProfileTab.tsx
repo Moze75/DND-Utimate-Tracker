@@ -4,16 +4,6 @@ import type { Player } from '../types/dnd';
 import { playerService } from '../services/playerService';
 import MarkdownLite from './MarkdownLite';
 
-/**
- * PlayerProfileProfileTab
- *
- * - Charge des contenus Markdown distants (races, historiques, dons) et affiche la section sélectionnée
- * - Rendu Markdown custom via <MarkdownLite /> (supporte: **gras**, _italique_, listes, citations,
- *   titres, encadrés <!-- BOX --> ... <!-- /BOX --> et II ... ||, tableaux GFM)
- * - En-têtes repliables (Race / Historique repliés par défaut avec valeur dans l'en‑tête, Dons & Histoire ouverts)
- * - Section "Histoire du personnage" éditable avec autosave silencieux (statut Sauvegarde… / Enregistré / Erreur)
- */
-
 const RAW_BASE = 'https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main';
 
 const URLS = {
@@ -27,9 +17,9 @@ const URLS = {
 // Normalisation pour clé de lookup
 function normalizeKey(input: string): string {
   let s = (input || '').normalize('NFC').trim();
-  s = s.replace(/[\u2019\u2018\u2032]/g, "'"); // apostrophes typographiques -> '
-  s = s.replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, '-'); // tirets variés -> -
-  s = s.replace(/\u00A0/g, ' ').replace(/\s+/g, ' '); // espaces
+  s = s.replace(/[\u2019\u2018\u2032]/g, "'");
+  s = s.replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, '-');
+  s = s.replace(/\u00A0/g, ' ').replace(/\s+/g, ' ');
   s = s.toLowerCase();
   return s;
 }
@@ -294,7 +284,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
   const [saveOk, setSaveOk] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
-  // Souviens-toi de la dernière valeur réellement enregistrée (pas la prop, qui peut être stale)
+  // Souviens-toi de la dernière valeur réellement enregistrée
   const lastSavedHistoryRef = useRef<string>(characterHistoryProp || '');
 
   useEffect(() => {
@@ -302,24 +292,19 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
     lastSavedHistoryRef.current = characterHistoryProp || '';
   }, [player.id, characterHistoryProp]);
 
-  // Sauvegarde côté serveur: envoie uniquement des colonnes valides (snake_case) et toujours un id
+  // Option A: méthode dédiée du service
   async function updateHistoryOnServer(nextValue: string): Promise<boolean> {
     const id = (player as any)?.id;
     if (!id) {
       console.error('[PlayerProfileProfileTab] Impossible de sauvegarder: player.id manquant');
       throw new Error('Identifiant du joueur manquant');
     }
-    // IMPORTANT: n'envoyer que character_history (pas characterHistory)
-    const payload = { id, character_history: nextValue };
-    // On s’en tient à UNE seule signature attendue par le service: updatePlayer(payload)
-    const res = await (playerService as any).updatePlayer(payload);
+    const res = await playerService.updateCharacterHistory(id, nextValue);
     return !!res;
   }
 
   const saveHistory = async () => {
     if (savingHistory) return;
-
-    // Si pas de changement par rapport à la dernière valeur "réellement" sauvée, ne rien faire
     if ((lastSavedHistoryRef.current || '') === (historyDraft || '')) return;
 
     setSavingHistory(true);
@@ -327,13 +312,9 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
     setSaveOk(false);
     try {
       const ok = await updateHistoryOnServer(historyDraft);
-      if (!ok) {
-        throw new Error('Échec de la sauvegarde (updatePlayer a renvoyé une réponse négative)');
-      }
-      // Mémoriser la valeur comme sauvée
+      if (!ok) throw new Error('Échec de la sauvegarde');
       lastSavedHistoryRef.current = historyDraft;
       setSaveOk(true);
-      // masque l’indicateur après 2s
       setTimeout(() => setSaveOk(false), 2000);
     } catch (e: any) {
       setSaveErr(e?.message || 'Erreur inconnue');
