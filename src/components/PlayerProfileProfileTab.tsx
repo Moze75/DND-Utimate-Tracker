@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Shield, ScrollText, Sparkles, Loader2, ChevronDown, Check } from 'lucide-react';
 import type { Player } from '../types/dnd';
-import { playerService } from '../services/playerService';
+import { supabase } from '../lib/supabase';
 import MarkdownLite from './MarkdownLite';
 
 const RAW_BASE = 'https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main';
@@ -14,26 +14,32 @@ const URLS = {
   stylesCombat: `${RAW_BASE}/DONS/STYLES_DE_COMBAT.md`,
 };
 
+// Normalisation pour clé de lookup
 function normalizeKey(input: string): string {
   let s = (input || '').normalize('NFC').trim();
-  s = s.replace(/[\u2019\u2018\u2032]/g, "'");
-  s = s.replace(/[\u2010-\u2014\u2212]/g, '-');
-  s = s.replace(/\u00A0/g, ' ').replace(/\s+/g, ' ');
+  s = s.replace(/[\u2019\u2018\u2032]/g, "'"); // apostrophes typographiques -> '
+  s = s.replace(/[\u2010-\u2014\u2212]/g, '-'); // tirets variés -> -
+  s = s.replace(/\u00A0/g, ' ').replace(/\s+/g, ' '); // espaces
   s = s.toLowerCase();
   return s;
 }
 
+// Indexe le Markdown en sections par titres ### ...
 function parseMarkdownByH3(md: string): Record<string, { title: string; content: string }> {
   const lines = (md || '').split(/\r?\n/);
   const result: Record<string, { title: string; content: string }> = {};
   let currentTitle: string | null = null;
   let buf: string[] = [];
+
   const flush = () => {
     if (currentTitle !== null) {
       const key = normalizeKey(currentTitle);
-      if (!result[key]) result[key] = { title: currentTitle, content: buf.join('\n').trim() };
+      if (!result[key]) {
+        result[key] = { title: currentTitle, content: buf.join('\n').trim() };
+      }
     }
   };
+
   for (const rawLine of lines) {
     const line = rawLine.trimEnd();
     const m = line.match(/^###\s+(.+?)\s*$/);
@@ -62,6 +68,7 @@ function useMarkdownIndex(url: string) {
 
   useEffect(() => {
     let cancelled = false;
+
     async function run() {
       const cached = cacheRef.current[url];
       if (cached?.index && !cached.error) {
@@ -83,6 +90,7 @@ function useMarkdownIndex(url: string) {
         if (!cancelled) setState(next);
       }
     }
+
     run();
     return () => {
       cancelled = true;
@@ -92,46 +100,68 @@ function useMarkdownIndex(url: string) {
   return state;
 }
 
-// Inline minimal pour titres/labels
+/* ---------- Inline rendering (pour titres/labels courts) ---------- */
+
+// Nettoyage simple: retirer les crochets autour d'un segment [texte] -> texte
 function stripBrackets(s: string): string {
   return (s || '').replace(/\[([^\]]+)\]/g, '$1');
 }
+
+// Rendu gras+italique minimal pour titres
 function renderInline(text: string): React.ReactNode {
   if (!text) return null;
   const cleaned = stripBrackets(text);
+
+  // 1) Découpe par **...** (gras)
   const boldRe = /\*\*(.+?)\*\*/g;
   const parts: Array<{ type: 'text' | 'bold'; value: string }> = [];
   let last = 0;
   let m: RegExpExecArray | null;
+
   while ((m = boldRe.exec(cleaned)) !== null) {
     if (m.index > last) parts.push({ type: 'text', value: cleaned.slice(last, m.index) });
     parts.push({ type: 'bold', value: m[1] });
     last = boldRe.lastIndex;
   }
   if (last < cleaned.length) parts.push({ type: 'text', value: cleaned.slice(last) });
-  const toItalic = (str: string, keyPrefix: string) => {
-    const italicRe = /_(.+?)_/g;
+
+  // 2) Italique _..._ dans chaque segment
+  const toItalicNodes = (str: string, keyPrefix: string) => {
     const nodes: React.ReactNode[] = [];
-    let idx = 0, mm: RegExpExecArray | null, cursor = 0;
+    const italicRe = /_(.+?)_/g;
+    let idx = 0;
+    let mm: RegExpExecArray | null;
+    let cursor = 0;
     while ((mm = italicRe.exec(str)) !== null) {
       if (mm.index > cursor) nodes.push(<span key={`${keyPrefix}-t${idx++}`}>{str.slice(cursor, mm.index)}</span>);
-      nodes.push(<em key={`${keyPrefix}-i${idx++}`} className="italic">{mm[1]}</em>);
+      nodes.push(
+        <em key={`${keyPrefix}-i${idx++}`} className="italic">
+          {mm[1]}
+        </em>
+      );
       cursor = italicRe.lastIndex;
     }
     if (cursor < str.length) nodes.push(<span key={`${keyPrefix}-t${idx++}`}>{str.slice(cursor)}</span>);
     return nodes;
   };
+
   const out: React.ReactNode[] = [];
   let k = 0;
   for (const p of parts) {
     out.push(
-      p.type === 'bold'
-        ? <strong key={`b-${k++}`} className="font-semibold">{toItalic(p.value, `b${k}`)}</strong>
-        : <span key={`t-${k++}`}>{toItalic(p.value, `t${k}`)}</span>
+      p.type === 'bold' ? (
+        <strong key={`b-${k++}`} className="font-semibold">
+          {toItalicNodes(p.value, `b${k}`)}
+        </strong>
+      ) : (
+        <span key={`t-${k++}`}>{toItalicNodes(p.value, `t${k}`)}</span>
+      )
     );
   }
   return out;
 }
+
+/* ---------- UI ---------- */
 
 type SectionContainerProps = {
   icon: React.ReactNode;
@@ -145,7 +175,12 @@ function SectionContainer({ icon, title, children, subtitle, defaultOpen = true 
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="stat-card">
-      <button type="button" onClick={() => setOpen(o => !o)} className="stat-header w-full flex items-center justify-between gap-3 cursor-pointer" aria-expanded={open}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="stat-header w-full flex items-center justify-between gap-3 cursor-pointer"
+        aria-expanded={open}
+      >
         <div className="flex items-center gap-2">
           {icon}
           <h3 className="text-lg font-semibold text-gray-100">
@@ -153,7 +188,10 @@ function SectionContainer({ icon, title, children, subtitle, defaultOpen = true 
             {!!subtitle && <span className="ml-2 font-normal text-gray-300">- {subtitle}</span>}
           </h3>
         </div>
-        <ChevronDown size={18} className={`transition-transform duration-200 ${open ? 'rotate-0' : '-rotate-90'} text-gray-300`} />
+        <ChevronDown
+          size={18}
+          className={`transition-transform duration-200 ${open ? 'rotate-0' : '-rotate-90'} text-gray-300`}
+        />
       </button>
       {open && <div className="p-4">{children}</div>}
     </div>
@@ -167,8 +205,19 @@ function LoadingInline() {
     </div>
   );
 }
+
 function NotFound({ label, value }: { label: string; value?: string | null }) {
-  return <div className="text-sm text-gray-400">{value ? <>{label} “{value}” introuvable dans la source.</> : <>Aucune sélection.</>}</div>;
+  return (
+    <div className="text-sm text-gray-400">
+      {value ? (
+        <>
+          {label} “{value}” introuvable dans la source.
+        </>
+      ) : (
+        <>Aucune sélection.</>
+      )}
+    </div>
+  );
 }
 
 export interface PlayerProfileProfileTabProps {
@@ -176,31 +225,48 @@ export interface PlayerProfileProfileTabProps {
 }
 
 export default function PlayerProfileProfileTab({ player }: PlayerProfileProfileTabProps) {
+  // Sélections
   const race = player.race || '';
   const historique = (player.background as string) || '';
   const characterHistoryProp = (player as any)?.character_history || '';
 
+  // Dons (adapter si nécessaire selon ton type Player)
   const feats: any = (player.stats as any)?.feats || {};
-  const originFeats: string[] = Array.isArray(feats.origins) ? feats.origins : (typeof feats.origin === 'string' && feats.origin ? [feats.origin] : []);
+  const originFeats: string[] = Array.isArray(feats.origins)
+    ? feats.origins
+    : typeof feats.origin === 'string' && feats.origin
+    ? [feats.origin]
+    : [];
   const generalFeats: string[] = Array.isArray(feats.generals) ? feats.generals : [];
   const styleFeats: string[] = Array.isArray(feats.styles) ? feats.styles : [];
 
+  // Index des sources distantes
   const racesIdx = useMarkdownIndex(URLS.races);
   const histIdx = useMarkdownIndex(URLS.historiques);
   const donsOrigIdx = useMarkdownIndex(URLS.donsOrigine);
   const donsGenIdx = useMarkdownIndex(URLS.donsGeneraux);
   const stylesIdx = useMarkdownIndex(URLS.stylesCombat);
 
-  const findSection = (idx: IndexCache, name: string | undefined | null) => {
+  // Recherche d’une section par nom choisi
+  const findSection = (
+    idx: IndexCache,
+    name: string | undefined | null
+  ): { title: string; content: string } | null => {
     if (!name || !idx.index) return null;
     const key = normalizeKey(name);
-    return idx.index[key] || null;
+    const hit = idx.index[key];
+    return hit || null;
   };
 
   const raceSection = useMemo(() => findSection(racesIdx, race), [racesIdx, race]);
   const historiqueSection = useMemo(() => findSection(histIdx, historique), [histIdx, historique]);
 
-  type DonItem = { name: string; hit: { title: string; content: string } | null; kind: 'origine' | 'general' | 'style'; };
+  type DonItem = {
+    name: string;
+    hit: { title: string; content: string } | null;
+    kind: 'origine' | 'general' | 'style';
+  };
+
   const donsList: DonItem[] = useMemo(() => {
     const out: DonItem[] = [];
     for (const n of originFeats) out.push({ name: n, hit: findSection(donsOrigIdx, n), kind: 'origine' });
@@ -209,12 +275,13 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
     return out;
   }, [originFeats, generalFeats, styleFeats, donsOrigIdx, donsGenIdx, stylesIdx]);
 
-  // Histoire du personnage
+  // Etat local pour l'édition de l'histoire (autosave silencieux)
   const [historyDraft, setHistoryDraft] = useState<string>(characterHistoryProp || '');
   const [savingHistory, setSavingHistory] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
+  // Souviens-toi de la dernière valeur réellement enregistrée
   const lastSavedHistoryRef = useRef<string>(characterHistoryProp || '');
   const debounceRef = useRef<number | null>(null);
 
@@ -223,16 +290,48 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
     lastSavedHistoryRef.current = characterHistoryProp || '';
   }, [player.id, characterHistoryProp]);
 
+  // Sauvegarde directe via Supabase (même logique que PlayerProfileSettingsModal)
   async function updateHistoryOnServer(nextValue: string): Promise<boolean> {
     const id = (player as any)?.id;
-    if (!id) throw new Error('Identifiant du joueur manquant');
-    const res = await playerService.updateCharacterHistory(id, nextValue);
-    return !!res;
+    if (!id) {
+      const msg = '[ProfileTab] player.id manquant, impossible de sauvegarder';
+      console.error(msg, { player });
+      throw new Error('Identifiant du joueur manquant');
+    }
+
+    // Log session et user pour diagnostiquer RLS si besoin
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      // eslint-disable-next-line no-console
+      console.debug('[ProfileTab] updateCharacterHistory: userId/session', { userId: userData?.user?.id, playerId: id });
+    } catch {
+      // ignore
+    }
+
+    const { data, error } = await supabase
+      .from('players')
+      .update({ character_history: nextValue })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('[ProfileTab] Supabase update error', error);
+      // remonter une erreur explicite à l’UI
+      const msg = (error as any)?.message || JSON.stringify(error);
+      throw new Error(msg);
+    }
+    if (!data) {
+      // Ça ne devrait pas arriver avec .single() si 0 ligne => Supabase renvoie une erreur
+      throw new Error('Aucune ligne mise à jour (0 row)');
+    }
+    return true;
   }
 
   const saveHistory = async () => {
     if (savingHistory) return;
     if ((lastSavedHistoryRef.current || '') === (historyDraft || '')) return;
+
     setSavingHistory(true);
     setSaveErr(null);
     setSaveOk(false);
@@ -261,32 +360,54 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
-  }, [historyDraft]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyDraft]);
 
   return (
     <div className="space-y-6">
-      <SectionContainer icon={<Shield size={18} className="text-emerald-400" />} title="Race" subtitle={race || undefined} defaultOpen={false}>
-        {racesIdx.loading ? <LoadingInline /> : racesIdx.error ? (
+      {/* Race */}
+      <SectionContainer
+        icon={<Shield size={18} className="text-emerald-400" />}
+        title="Race"
+        subtitle={race || undefined}
+        defaultOpen={false}
+      >
+        {racesIdx.loading ? (
+          <LoadingInline />
+        ) : racesIdx.error ? (
           <div className="text-sm text-red-400">Erreur de chargement des races: {racesIdx.error}</div>
         ) : raceSection ? (
           <>
             <div className="text-base font-semibold mb-2">{renderInline(raceSection.title)}</div>
             <MarkdownLite content={raceSection.content} />
           </>
-        ) : <NotFound label="Race" value={race} />}
+        ) : (
+          <NotFound label="Race" value={race} />
+        )}
       </SectionContainer>
 
-      <SectionContainer icon={<ScrollText size={18} className="text-sky-400" />} title="Historique" subtitle={historique || undefined} defaultOpen={false}>
-        {histIdx.loading ? <LoadingInline /> : histIdx.error ? (
+      {/* Historique */}
+      <SectionContainer
+        icon={<ScrollText size={18} className="text-sky-400" />}
+        title="Historique"
+        subtitle={historique || undefined}
+        defaultOpen={false}
+      >
+        {histIdx.loading ? (
+          <LoadingInline />
+        ) : histIdx.error ? (
           <div className="text-sm text-red-400">Erreur de chargement des historiques: {histIdx.error}</div>
         ) : historiqueSection ? (
           <>
             <div className="text-base font-semibold mb-2">{renderInline(historiqueSection.title)}</div>
             <MarkdownLite content={historiqueSection.content} />
           </>
-        ) : <NotFound label="Historique" value={historique} />}
+        ) : (
+          <NotFound label="Historique" value={historique} />
+        )}
       </SectionContainer>
 
+      {/* Dons */}
       <SectionContainer icon={<Sparkles size={18} className="text-amber-400" />} title="Dons" defaultOpen>
         {(donsOrigIdx.loading || donsGenIdx.loading || stylesIdx.loading) && <LoadingInline />}
         {(donsOrigIdx.error || donsGenIdx.error || stylesIdx.error) && (
@@ -296,6 +417,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
             {stylesIdx.error && <div>Erreur Styles de combat: {stylesIdx.error}</div>}
           </div>
         )}
+
         {donsList.length === 0 ? (
           <NotFound label="Don" value={undefined} />
         ) : (
@@ -306,13 +428,18 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
                   {item.kind === 'origine' ? 'Don d’origine' : item.kind === 'general' ? 'Don général' : 'Style de combat'}
                 </div>
                 <div className="text-base font-semibold mt-1 mb-2">{renderInline(item.name)}</div>
-                {item.hit ? <MarkdownLite content={item.hit.content} /> : <div className="text-sm text-gray-400">Non trouvé dans la source distante.</div>}
+                {item.hit ? (
+                  <MarkdownLite content={item.hit.content} />
+                ) : (
+                  <div className="text-sm text-gray-400">Non trouvé dans la source distante.</div>
+                )}
               </div>
             ))}
           </div>
         )}
       </SectionContainer>
 
+      {/* Histoire du personnage */}
       <SectionContainer icon={<ScrollText size={18} className="text-purple-400" />} title="Histoire du personnage" defaultOpen>
         <div className="space-y-2">
           <textarea
@@ -335,7 +462,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
               </span>
             )}
             {saveErr && (
-              <span className="text-red-400 text-sm">
+              <span className="text-red-400 text-sm" title={saveErr}>
                 {saveErr}
               </span>
             )}
