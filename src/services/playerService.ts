@@ -50,20 +50,68 @@ export const playerService = {
     }
   },
 
-  // Mettre à jour un joueur
-  async updatePlayer(player: Player): Promise<Player | null> {
+  /**
+   * Mettre à jour un joueur (PATCH partiel)
+   * - Accepte un objet partiel + id obligatoire
+   * - Normalise characterHistory -> character_history
+   * - Ne push pas l'id dans les colonnes updatées
+   */
+  async updatePlayer(playerPatch: Partial<Player> & { id: string }): Promise<Player | null> {
     try {
+      const { id, ...rest } = playerPatch;
+      if (!id) throw new Error('updatePlayer: id manquant');
+
+      // Copie "propre" des champs à mettre à jour
+      const toUpdate: Record<string, any> = {};
+      for (const [k, v] of Object.entries(rest)) {
+        if (typeof v !== 'undefined') toUpdate[k] = v;
+      }
+
+      // Normalisation: camelCase -> snake_case pour l'histoire
+      if (typeof (toUpdate as any).characterHistory === 'string') {
+        toUpdate.character_history = (toUpdate as any).characterHistory;
+        delete (toUpdate as any).characterHistory;
+      }
+
+      // Sécurité: éviter d'envoyer par erreur des clés interdites
+      // (si tu connais la liste exacte des colonnes, tu peux whitelister ici)
+      // Exemple léger: ne jamais envoyer 'inventory' ni 'attacks' via players
+      delete toUpdate.inventory;
+      delete toUpdate.attacks;
+
       const { data, error } = await supabase
         .from('players')
-        .update(player)
-        .eq('id', player.id)
-        .select()
+        .update(toUpdate)
+        .eq('id', id)
+        .select('*')
         .single();
 
       if (error) throw error;
       return data;
     } catch (error) {
       console.error('Erreur lors de la mise à jour du joueur:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Mettre à jour uniquement l'histoire du personnage
+   */
+  async updateCharacterHistory(playerId: string, character_history: string): Promise<Player | null> {
+    try {
+      if (!playerId) throw new Error('updateCharacterHistory: playerId manquant');
+
+      const { data, error } = await supabase
+        .from('players')
+        .update({ character_history })
+        .eq('id', playerId)
+        .select('*')
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour de character_history:', error);
       return null;
     }
   },
