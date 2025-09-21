@@ -380,24 +380,24 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
 
   return (
     <div className="space-y-6">
-      {/* Race */}
+      {/* Espèce */}
       <SectionContainer
         icon={<Shield size={18} className="text-emerald-400" />}
-        title="Race"
+        title="Espèce"
         subtitle={race || undefined}
         defaultOpen={false}
       >
         {racesIdx.loading ? (
           <LoadingInline />
         ) : racesIdx.error ? (
-          <div className="text-sm text-red-400">Erreur de chargement des races: {racesIdx.error}</div>
+          <div className="text-sm text-red-400">Erreur de chargement des espèces: {racesIdx.error}</div>
         ) : raceSection ? (
           <>
             <div className="text-base font-semibold mb-2">{renderInline(raceSection.title)}</div>
             <MarkdownLite content={raceSection.content} />
           </>
         ) : (
-          <NotFound label="Race" value={race} />
+          <NotFound label="Espèce" value={race} />
         )}
       </SectionContainer>
 
