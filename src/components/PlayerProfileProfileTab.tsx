@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Shield, ScrollText, Sparkles, Loader2, ChevronDown, Save, Check } from 'lucide-react';
+import { Shield, ScrollText, Sparkles, Loader2, ChevronDown, Check } from 'lucide-react';
 import type { Player } from '../types/dnd';
 import { playerService } from '../services/playerService';
 
 /**
  * Profil tab sans dépendances externes.
  * - Encadrés: ouverture avec "II" (peut être suivi de texte), fermeture avec "||" (peut être précédé de texte)
- *   + Ajout: ouverture <!-- BOX -->, fermeture <!-- /BOX --> (peuvent avoir du contenu sur la même ligne)
+ *   + Ajout: ouverture <!-- BOX -->, fermeture <!-- /BOX --> (tolérant et supporte HTML encodé)
  * - Gras **texte** ; Italique _texte_
  * - Sous-titres: ligne entièrement en **gras** -> uppercase + tracking
  * - Listes (-, *, 1.) ; Citations (>)
@@ -184,7 +184,12 @@ function renderInline(text: string): React.ReactNode {
 
 function MarkdownLite({ content }: { content: string }) {
   const elements = useMemo(() => {
-    const lines = content.split(/\r?\n/);
+    // 0) Décode d'éventuelles balises BOX encodées HTML
+    const src = (content || '')
+      .replace(/&lt;!--\s*BOX\s*--&gt;/gi, '<!-- BOX -->')
+      .replace(/&lt;!--\s*\/\s*BOX\s*--&gt;/gi, '<!-- /BOX -->');
+
+    const lines = src.split(/\r?\n/);
     const out: React.ReactNode[] = [];
 
     let ulBuffer: string[] = [];
@@ -250,25 +255,32 @@ function MarkdownLite({ content }: { content: string }) {
       boxBuffer = [];
     };
 
-    // Regex commentaires pour BOX
-    const openBoxCommentRe = /^\s*<!--\s*BOX\s*-->\s*(.*)$/;
-    const closeBoxCommentRe = /^(.*)<!--\s*\/\s*BOX\s*-->\s*$/;
+    // Tokens BOX (n'importe où sur la ligne)
+    const openRE = /<!--\s*BOX\s*-->/i;
+    const closeRE = /<!--\s*\/\s*BOX\s*-->/i;
 
     for (let i = 0; i < lines.length; i++) {
-      const raw = lines[i];
+      let raw = lines[i];
 
-      // Si on est dans un encadré, détecter la fermeture (commentaire ou ||)
       if (inBox) {
-        // Fermeture via commentaire avec contenu avant
-        const closeC = raw.match(closeBoxCommentRe);
-        if (closeC) {
-          const before = closeC[1];
-          if (before.trim() !== '') boxBuffer.push(before);
+        // Fermeture via <!-- /BOX --> (peut être sur la même ligne que du contenu)
+        const mClose = closeRE.exec(raw);
+        if (mClose && typeof mClose.index === 'number') {
+          const before = raw.slice(0, mClose.index).trimRight();
+          if (before) boxBuffer.push(before);
           inBox = false;
           flushBox();
+          const after = raw.slice(mClose.index + mClose[0].length).trimLeft();
+          if (after) {
+            out.push(
+              <p className="mb-2 leading-relaxed" key={`p-${out.length}`}>
+                {renderInline(after)}
+              </p>
+            );
+          }
           continue;
         }
-        // Fermeture via ||
+        // Fermeture via || (fin de ligne)
         const closePipe = raw.match(/^(.*)\s*\|\|\s*$/);
         if (closePipe) {
           const before = closePipe[1];
@@ -277,28 +289,38 @@ function MarkdownLite({ content }: { content: string }) {
           flushBox();
           continue;
         }
+        // Toujours à l'intérieur du box
         boxBuffer.push(raw);
         continue;
       }
 
-      // Ouverture d'encadré via commentaire (peut contenir du contenu après)
-      const openC = raw.match(openBoxCommentRe);
-      if (openC) {
+      // Ouverture via <!-- BOX --> (n'importe où sur la ligne)
+      const mOpen = openRE.exec(raw);
+      if (mOpen && typeof mOpen.index === 'number') {
+        const before = raw.slice(0, mOpen.index).trimRight();
+        if (before) {
+          flushAllBlocks();
+          out.push(
+            <p className="mb-2 leading-relaxed" key={`p-${out.length}`}>
+              {renderInline(before)}
+            </p>
+          );
+        }
         flushAllBlocks();
         inBox = true;
         boxBuffer = [];
-        const after = openC[1];
-        if (after.trim() !== '') boxBuffer.push(after);
+        const after = raw.slice(mOpen.index + mOpen[0].length).trimLeft();
+        if (after) boxBuffer.push(after);
         continue;
       }
 
-      // Ouverture d'encadré: "II" au début de ligne, éventuellement suivi de contenu
-      const openMatch = raw.match(/^\s*II\s*(.*)$/);
-      if (openMatch) {
+      // Ouverture legacy: "II" au début de ligne
+      const openLegacy = raw.match(/^\s*II\s*(.*)$/);
+      if (openLegacy) {
         flushAllBlocks();
         inBox = true;
         boxBuffer = [];
-        const after = openMatch[1];
+        const after = openLegacy[1];
         if (after.trim() !== '') boxBuffer.push(after);
         continue;
       }
@@ -512,7 +534,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
     return out;
   }, [originFeats, generalFeats, styleFeats, donsOrigIdx, donsGenIdx, stylesIdx]);
 
-  // Etat local pour l'édition de l'histoire
+  // Etat local pour l'édition de l'histoire (autosave silencieux)
   const [historyDraft, setHistoryDraft] = useState<string>(characterHistory || '');
   const [savingHistory, setSavingHistory] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
@@ -524,6 +546,9 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
 
   const saveHistory = async () => {
     if (savingHistory) return;
+    // Si pas de changement, ne rien faire
+    if ((characterHistory || '') === historyDraft) return;
+
     setSavingHistory(true);
     setSaveErr(null);
     setSaveOk(false);
@@ -531,7 +556,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
       const updated = await playerService.updatePlayer({ ...(player as any), character_history: historyDraft });
       if (!updated) throw new Error('Échec de la sauvegarde');
       setSaveOk(true);
-      // Masque l’indicateur “Enregistré” après 2s
+      // masque l’indicateur après 2s
       setTimeout(() => setSaveOk(false), 2000);
     } catch (e: any) {
       setSaveErr(e?.message || 'Erreur inconnue');
@@ -606,7 +631,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
         )}
       </SectionContainer>
 
-      {/* Histoire du personnage (éditable) */}
+      {/* Histoire du personnage (autosave silencieux) */}
       <SectionContainer icon={<ScrollText size={18} className="text-purple-400" />} title="Histoire du personnage">
         <div className="space-y-2">
           <textarea
@@ -617,16 +642,12 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
             rows={8}
             placeholder="Décrivez l'histoire de votre personnage..."
           />
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={saveHistory}
-              disabled={savingHistory}
-              className="btn-primary px-3 py-2 rounded-md flex items-center gap-2"
-            >
-              {savingHistory ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              {savingHistory ? 'Sauvegarde…' : 'Sauvegarder'}
-            </button>
+          <div className="flex items-center gap-2 h-6">
+            {savingHistory && (
+              <span className="text-gray-400 flex items-center gap-1 text-sm">
+                <Loader2 size={14} className="animate-spin" /> Sauvegarde…
+              </span>
+            )}
             {saveOk && (
               <span className="text-emerald-400 flex items-center gap-1 text-sm">
                 <Check size={14} /> Enregistré
