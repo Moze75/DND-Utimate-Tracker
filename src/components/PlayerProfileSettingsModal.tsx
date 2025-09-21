@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { Avatar } from './Avatar';
 import { LevelUpModal } from './LevelUpModal';
 import type { DndClass, Player, PlayerBackground, PlayerStats } from '../types/dnd';
-// Ajout: parseur Markdown (gère <!-- BOX --> ... <!-- /BOX --> et II ... ||)
+// Ajout: parseur Markdown (gère <!-- BOX --> ... <!-- /BOX --> et || ... ||)
 import MarkdownLite from './MarkdownLite';
 
 /* ============================ Helpers ============================ */
@@ -565,15 +565,15 @@ export function PlayerProfileSettingsModal({
           </div>
         </div>
 
-        {/* Classe et Race */}
+        {/* Classe et Espèce */}
         <div className="stat-card">
           <div className="stat-header">
-            <h3 className="text-lg font-semibold text-gray-100">Classe et Race</h3>
+            <h3 className="text-lg font-semibold text-gray-100">Classe et Espèce</h3>
           </div>
           <div className="p-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Race</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Espèce</label>
                 <select
                   value={selectedRace}
                   onChange={(e) => { setSelectedRace(e.target.value); setDirty(true); }}
@@ -581,7 +581,7 @@ export function PlayerProfileSettingsModal({
                 >
                   {DND_RACES.map((race) => (
                     <option key={race} value={race}>
-                      {race || 'Sélectionnez une race'}
+                      {race || 'Sélectionnez une espèce'}
                     </option>
                   ))}
                 </select>
