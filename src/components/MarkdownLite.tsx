@@ -132,25 +132,28 @@ export default function MarkdownLite({ content }: { content: string }) {
       boxBuffer = [];
     };
 
-    // Regex commentaires pour BOX
-    const openBoxCommentRe = /^\s*<!--\s*BOX\s*-->\s*(.*)$/;
-    const closeBoxCommentRe = /^(.*)<!--\s*\/\s*BOX\s*-->\s*$/;
+    // Tokens commentaires pour BOX (insensibles à la casse, n'importe où sur la ligne)
+    const openBoxCommentRe = /<!--\s*BOX\s*-->\s*(.*)$/i;
+    const closeBoxCommentRe = /(.*)<!--\s*\/\s*BOX\s*-->\s*$/i;
 
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
 
-      // Gestion encadré: fermetures
+      // Si on est dans un encadré, détecter la fermeture (commentaire ou ||), même si pas en fin de ligne
       if (inBox) {
-        // Fermeture via <!-- /BOX -->
+        // Fermeture via commentaire (accepte contenu avant)
         const closeC = raw.match(closeBoxCommentRe);
         if (closeC) {
           const before = closeC[1];
           if (before.trim() !== '') boxBuffer.push(before);
           inBox = false;
           flushBox();
+
+          // S'il reste du contenu après la balise fermante sur la même ligne (rare), on l'ignore
+          // pour éviter une logique trop complexe en une passe. Mettre cette suite sur une nouvelle ligne si besoin.
           continue;
         }
-        // Fermeture via || (ancienne syntaxe)
+        // Fermeture via || (accepte fin de ligne)
         const closePipe = raw.match(/^(.*)\s*\|\|\s*$/);
         if (closePipe) {
           const before = closePipe[1];
@@ -163,9 +166,23 @@ export default function MarkdownLite({ content }: { content: string }) {
         continue;
       }
 
-      // Ouverture encadré via <!-- BOX -->
+      // Ouverture via commentaire (accepte la balise positionnée n'importe où sur la ligne)
       const openC = raw.match(openBoxCommentRe);
       if (openC) {
+        // contenu avant la balise ouvrante (si la balise n'est pas au début)
+        const idx = raw.toLowerCase().indexOf('<!-- box -->');
+        if (idx > 0) {
+          const before = raw.slice(0, idx).trimEnd();
+          if (before) {
+            // Rend le préfixe comme paragraphe simple
+            out.push(
+              <p className="mb-2 leading-relaxed" key={`p-${out.length}`}>
+                {renderInline(before)}
+              </p>
+            );
+          }
+        }
+
         flushAllBlocks();
         inBox = true;
         boxBuffer = [];
@@ -174,13 +191,13 @@ export default function MarkdownLite({ content }: { content: string }) {
         continue;
       }
 
-      // Ouverture encadré via II (legacy)
-      const openMatch = raw.match(/^\s*II\s*(.*)$/);
-      if (openMatch) {
+      // Ouverture legacy: "II" (on garde à début de ligne pour éviter des faux positifs en plein texte)
+      const openLegacy = raw.match(/^\s*II\s*(.*)$/);
+      if (openLegacy) {
         flushAllBlocks();
         inBox = true;
         boxBuffer = [];
-        const after = openMatch[1];
+        const after = openLegacy[1];
         if (after.trim() !== '') boxBuffer.push(after);
         continue;
       }
