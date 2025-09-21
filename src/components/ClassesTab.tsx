@@ -910,6 +910,29 @@ function AbilityCard({
   const [open, setOpen] = useState(!!defaultOpen);
   const contentId = `ability-${section.origin}-${section.level ?? 'x'}-${slug(section.title)}`;
 
+  // Mesure dynamique pour supprimer toute limite de hauteur lorsqu'ouvert
+  const innerRef = useRef<HTMLDivElement | null>(null);
+  const [maxHeight, setMaxHeight] = useState<number>(0);
+
+  // Met à jour la hauteur max quand on ouvre/ferme ou quand le contenu change
+  useEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    if (open) {
+      // Mesure immédiate
+      setMaxHeight(el.scrollHeight);
+
+      // Observe les changements de taille du contenu (Markdown long, images, etc.)
+      const ro = new ResizeObserver(() => {
+        setMaxHeight(el.scrollHeight);
+      });
+      ro.observe(el);
+      return () => ro.disconnect();
+    } else {
+      setMaxHeight(0);
+    }
+  }, [open, section.content]);
+
   return (
     <article
       className={[
@@ -937,8 +960,13 @@ function AbilityCard({
         </div>
       </button>
 
-      <div id={contentId} className={`overflow-hidden transition-[max-height,opacity] duration-300 ${open ? 'max-h-[200vh] opacity-100' : 'max-h-0 opacity-0'}`}>
-        <div className="px-4 pt-1 pb-4">
+      {/* Transition sans limite: on anime max-height (en px mesurés) au lieu d'une classe tailwind fixe */}
+      <div
+        id={contentId}
+        className="overflow-hidden transition-[max-height,opacity] duration-300"
+        style={{ maxHeight: open ? maxHeight : 0, opacity: open ? 1 : 0 }}
+      >
+        <div ref={innerRef} className="px-4 pt-1 pb-4">
           {disableContentWhileLoading ? (
             <div className="h-6 w-24 bg-white/10 rounded animate-pulse" />
           ) : (
