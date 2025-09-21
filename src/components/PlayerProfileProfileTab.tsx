@@ -20,7 +20,7 @@ const URLS = {
   races: `${RAW_BASE}/RACES/DESCRIPTION_DES_RACES.md`,
   historiques: `${RAW_BASE}/HISTORIQUES/HISTORIQUES.md`,
   donsOrigine: `${RAW_BASE}/DONS/DONS_D_ORIGINE.md`,
-  donsGeneraux: `${RAW_BASE}/DONS/DONS_GENERAUX.md`, // correction 404
+  donsGeneraux: `${RAW_BASE}/DONS/DONS_GENERAUX.md`,
   stylesCombat: `${RAW_BASE}/DONS/STYLES_DE_COMBAT.md`,
 };
 
@@ -302,35 +302,18 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
     lastSavedHistoryRef.current = characterHistoryProp || '';
   }, [player.id, characterHistoryProp]);
 
+  // Sauvegarde côté serveur: envoie uniquement des colonnes valides (snake_case) et toujours un id
   async function updateHistoryOnServer(nextValue: string): Promise<boolean> {
-    const payload = { character_history: nextValue, characterHistory: nextValue };
-
-    // 1) Essai: payload partiel avec id inclus
-    try {
-      const res1 = await (playerService as any).updatePlayer({ id: (player as any).id, ...payload });
-      if (res1) return true;
-    } catch (e) {
-      // continue
-      // console.error('[updatePlayer - shape 1] erreur', e);
+    const id = (player as any)?.id;
+    if (!id) {
+      console.error('[PlayerProfileProfileTab] Impossible de sauvegarder: player.id manquant');
+      throw new Error('Identifiant du joueur manquant');
     }
-
-    // 2) Essai: signature (id, payload)
-    try {
-      const res2 = await (playerService as any).updatePlayer((player as any).id, payload);
-      if (res2) return true;
-    } catch (e) {
-      // console.error('[updatePlayer - shape 2] erreur', e);
-    }
-
-    // 3) Essai: payload complet (merge du player)
-    try {
-      const res3 = await (playerService as any).updatePlayer({ ...(player as any), ...payload });
-      if (res3) return true;
-    } catch (e) {
-      // console.error('[updatePlayer - shape 3] erreur', e);
-    }
-
-    return false;
+    // IMPORTANT: n'envoyer que character_history (pas characterHistory)
+    const payload = { id, character_history: nextValue };
+    // On s’en tient à UNE seule signature attendue par le service: updatePlayer(payload)
+    const res = await (playerService as any).updatePlayer(payload);
+    return !!res;
   }
 
   const saveHistory = async () => {
@@ -353,7 +336,6 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
       // masque l’indicateur après 2s
       setTimeout(() => setSaveOk(false), 2000);
     } catch (e: any) {
-      // Expose l’erreur à l’UI
       setSaveErr(e?.message || 'Erreur inconnue');
     } finally {
       setSavingHistory(false);
@@ -460,14 +442,6 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
             )}
             {saveErr && <span className="text-red-400 text-sm">{saveErr}</span>}
           </div>
-          {/* Optionnel: aperçu Markdown de l'histoire
-          {historyDraft?.trim() ? (
-            <div className="mt-3">
-              <div className="text-sm text-gray-400 mb-1">Aperçu</div>
-              <MarkdownLite content={historyDraft} />
-            </div>
-          ) : null}
-          */}
         </div>
       </SectionContainer>
     </div>
