@@ -790,6 +790,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
           favored_foe: 'Ennemi juré',
           sneak_attack: 'Attaque sournoise',
           pact_magic: 'Magie de pacte',
+          supernatural_metabolism: 'Métabolisme surnaturel',
         };
 
         const key = String(resource);
@@ -1373,28 +1374,62 @@ function ClassResourcesCard({
       }
       break;
 
-          case 'Moine': {
-      const total = (resources as any).credo_points ?? (resources as any).ki_points;
-      const used = (resources as any).used_credo_points ?? (resources as any).used_ki_points ?? 0;
-
-      if (typeof total === 'number') {
-        items.push(
-          <ResourceBlock
-            key="credo_points"
-            icon={<Sparkles size={20} />}  // ← remplace Footprints par Sparkles
-            label="Points de crédo"
-            total={total}
-            used={used}
-            onUse={() => onUpdateResource('used_credo_points', used + 1)}
-            onUpdateTotal={(n) => onUpdateResource('credo_points', n)}
-            onRestore={() => onUpdateResource('used_credo_points', Math.max(0, used - 1))}
-            color="purple"                // ← optionnel (magique). Garde "blue" si tu préfères.
-            onGlobalPulse={onPulseScreen}
-          />
-        );
+      case 'Moine': {
+        const total = (resources as any).credo_points ?? (resources as any).ki_points;
+        const used = (resources as any).used_credo_points ?? (resources as any).used_ki_points ?? 0;
+      
+        if (typeof total === 'number') {
+          items.push(
+            <ResourceBlock
+              key="credo_points"
+              icon={<Sparkles size={20} />}
+              label="Points de crédo"
+              total={total}
+              used={used}
+              onUse={() => onUpdateResource('used_credo_points', used + 1)}
+              onUpdateTotal={(n) => onUpdateResource('credo_points', n)}
+              onRestore={() => onUpdateResource('used_credo_points', Math.max(0, used - 1))}
+              color="purple"
+              onGlobalPulse={onPulseScreen}
+            />
+          );
+        }
+      
+        // Métabolisme surnaturel (N2+): 1 charge, reset repos long (manuellement avec +)
+        if ((level || 0) >= 2) {
+          const metaTotal = (resources as any).supernatural_metabolism ?? 1;
+          const usedMeta = Math.min((resources as any).used_supernatural_metabolism || 0, metaTotal);
+      
+          items.push(
+            <ResourceBlock
+              key="supernatural_metabolism"
+              icon={<Sparkles size={20} />}
+              label="Métabolisme surnaturel"
+              total={metaTotal}
+              used={usedMeta}
+              onUse={() =>
+                onUpdateResource(
+                  'used_supernatural_metabolism',
+                  Math.min(usedMeta + 1, metaTotal)
+                )
+              }
+              // total fixe → pas d’édition (no-op)
+              onUpdateTotal={() => { /* no-op */ }}
+              onRestore={() =>
+                onUpdateResource(
+                  'used_supernatural_metabolism',
+                  Math.max(0, usedMeta - 1)
+                )
+              }
+              color="purple"
+              hideEdit
+              onGlobalPulse={onPulseScreen}
+            />
+          );
+        }
+      
+        break;
       }
-      break;
-    }
 
     case 'Occultiste': {
       // Placeholder simple: la “Magie de pacte” est signalée par un drapeau
@@ -1542,8 +1577,22 @@ function buildDefaultsForClass(cls: string, level: number, player?: PlayerLike |
       return { action_surge: level >= 17 ? 2 : 1, used_action_surge: 0 };
     case 'Magicien':
       return { arcane_recovery: true, used_arcane_recovery: false };
-    case 'Moine':
-      return { credo_points: level, used_credo_points: 0, ki_points: level, used_ki_points: 0 } as any;
+
+    case 'Moine': {
+      const base: any = {
+        credo_points: level,
+        used_credo_points: 0,
+        ki_points: level,
+        used_ki_points: 0,
+      };
+      // Métabolisme surnaturel: disponible à partir du niveau 2, 1 charge
+      if (level >= 2) {
+        base.supernatural_metabolism = 1;
+        base.used_supernatural_metabolism = 0;
+      }
+      return base;
+    }
+
     case 'Occultiste':
       // Drapeau simple pour signaler Pact Magic (UI minimale)
       return { pact_magic: true };
