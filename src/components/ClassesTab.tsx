@@ -9,7 +9,6 @@ import {
   Leaf,
   Wand2,
   Swords,
-  Footprints,
   HandHeart,
   Target,
   Skull,
@@ -1374,7 +1373,7 @@ function ClassResourcesCard({
       }
       break;
 
-    case 'Moine': {
+          case 'Moine': {
       const total = (resources as any).credo_points ?? (resources as any).ki_points;
       const used = (resources as any).used_credo_points ?? (resources as any).used_ki_points ?? 0;
 
@@ -1382,14 +1381,14 @@ function ClassResourcesCard({
         items.push(
           <ResourceBlock
             key="credo_points"
-            icon={<Footprints size={20} />}
+            icon={<Sparkles size={20} />}  // ← remplace Footprints par Sparkles
             label="Points de crédo"
             total={total}
             used={used}
             onUse={() => onUpdateResource('used_credo_points', used + 1)}
             onUpdateTotal={(n) => onUpdateResource('credo_points', n)}
             onRestore={() => onUpdateResource('used_credo_points', Math.max(0, used - 1))}
-            color="blue"
+            color="purple"                // ← optionnel (magique). Garde "blue" si tu préfères.
             onGlobalPulse={onPulseScreen}
           />
         );
