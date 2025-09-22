@@ -12,11 +12,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-    <!-- On ne lie PAS de manifest ici si on veut désactiver la PWA -->
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-
+    <!-- Si tu désactives la PWA, ne lie pas de manifest en dev -->
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#111827" />
     <meta name="navbutton-color" content="#111827" />
@@ -25,15 +21,16 @@
   <body>
     <div id="root"></div>
 
-    <script type="module" src="/src/main.tsx?v=disable-pwa"></script>
+    <!-- En dev: ne pas ajouter ?v=... -->
+    <script type="module" src="/src/main.tsx"></script>
 
+    <!-- Si tu gardes un script de “désactivation PWA”, ne l’exécute pas en standalone -->
     <script>
       (async function disablePWA() {
         try {
-          // NE nettoie pas si l'app est ouverte en mode installé (standalone)
-          if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) {
-            return;
-          }
+          // Évite de casser l’app installée
+          if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return;
+
           window.addEventListener(
             'beforeinstallprompt',
             (e) => {
@@ -42,19 +39,19 @@
             },
             { once: true }
           );
+
           if ('serviceWorker' in navigator) {
             const regs = await navigator.serviceWorker.getRegistrations();
             for (const reg of regs) {
               try { await reg.unregister(); } catch (_) {}
             }
           }
+
           if (window.caches && caches.keys) {
             const keys = await caches.keys();
             await Promise.all(keys.map((k) => caches.delete(k)));
           }
-        } catch (_) {
-          // silencieux
-        }
+        } catch (_) {}
       })();
     </script>
   </body>
