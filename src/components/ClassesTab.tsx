@@ -791,7 +791,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
           sneak_attack: 'Attaque sournoise',
           pact_magic: 'Magie de pacte',
           supernatural_metabolism: 'Métabolisme surnaturel',
-          innate_sorcery: 'Sorcellerie innée',
+           
         };
 
         const key = String(resource);
@@ -1329,7 +1329,7 @@ function ClassResourcesCard({
         );
       }
       break;
- 
+
     case 'Guerrier':
       if (typeof resources.action_surge === 'number') {
         items.push(
