@@ -1352,10 +1352,12 @@ function ClassResourcesCard({
             color="purple"
             hideEdit
             onGlobalPulse={onPulseScreen}
-          />
-        );
-       }
-      break;
+            />
+          );
+        }
+      
+        break;
+      }
 
     case 'Guerrier':
       if (typeof resources.action_surge === 'number') {
