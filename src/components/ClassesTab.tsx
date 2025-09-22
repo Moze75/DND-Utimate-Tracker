@@ -1620,13 +1620,14 @@ function buildDefaultsForClass(cls: string, level: number, player?: PlayerLike |
       return { channel_divinity: level >= 6 ? 2 : 1, used_channel_divinity: 0 };
     case 'Druide':
       return { wild_shape: 2, used_wild_shape: 0 };
-    case 'Ensorceleur':
-      return { sorcery_points: level, used_sorcery_points: 0 };
-        // Sorcellerie innée: 2 charges, reset au repos long (manuellement via +)
-        base.innate_sorcery = 2;
-        base.used_innate_sorcery = 0;
-        return base;
-      }
+    case 'Ensorceleur': {
+      return {
+        sorcery_points: level,
+        used_sorcery_points: 0,
+        innate_sorcery: 2,
+        used_innate_sorcery: 0,
+      } as any;
+    }
     case 'Guerrier':
       return { action_surge: level >= 17 ? 2 : 1, used_action_surge: 0 };
     case 'Magicien':
