@@ -88,6 +88,10 @@ export interface ClassResources {
   credo_points?: number;
   used_credo_points?: number;
 
+  // Métabolisme surnaturel (Moine N2+)
+  supernatural_metabolism?: number;
+  used_supernatural_metabolism?: number;
+  
   // Paladin
   lay_on_hands?: number;
   used_lay_on_hands?: number;
