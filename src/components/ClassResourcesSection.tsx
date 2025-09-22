@@ -11,7 +11,6 @@ import {
   Wand2,
   Swords,
   BookOpen,
-  Footprints,
   HandHeart,
   Target,
   Skull,
@@ -541,7 +540,7 @@ export function ClassResourcesSection({ player, onUpdate }: Props) {
         items.push(
           <ResourceBlock
             key="ki_points"
-            icon={<Footprints size={20} />}
+            icon={<Sparkles size={20} />}  // ← remplace Footprints par Sparkles
             label="Points de crédo"
             total={cr.ki_points}
             used={cr.used_ki_points || 0}
