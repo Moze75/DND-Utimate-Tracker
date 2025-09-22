@@ -791,6 +791,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
           sneak_attack: 'Attaque sournoise',
           pact_magic: 'Magie de pacte',
           supernatural_metabolism: 'Métabolisme surnaturel',
+          innate_sorcery: 'Sorcellerie innée',
         };
 
         const key = String(resource);
@@ -1329,6 +1330,33 @@ function ClassResourcesCard({
       }
       break;
 
+      // Sorcellerie innée: 2 charges, reset repos long (manuellement avec +)
+  const capInnate = (resources as any).innate_sorcery ?? 2;
+  const usedInnate = Math.min((resources as any).used_innate_sorcery || 0, capInnate);
+
+  items.push(
+    <ResourceBlock
+      key="innate_sorcery"
+      icon={<Sparkles size={20} />}
+      label="Sorcellerie innée"
+      total={capInnate}
+      used={usedInnate}
+      onUse={() =>
+        onUpdateResource('used_innate_sorcery', Math.min(usedInnate + 1, capInnate))
+      }
+      // total fixe → pas d’édition
+      onUpdateTotal={() => { /* no-op */ }}
+      onRestore={() =>
+        onUpdateResource('used_innate_sorcery', Math.max(0, usedInnate - 1))
+      }
+      color="purple"
+      hideEdit
+      onGlobalPulse={onPulseScreen}
+    />
+  );
+
+  break;
+}
     case 'Guerrier':
       if (typeof resources.action_surge === 'number') {
         items.push(
@@ -1573,6 +1601,11 @@ function buildDefaultsForClass(cls: string, level: number, player?: PlayerLike |
       return { wild_shape: 2, used_wild_shape: 0 };
     case 'Ensorceleur':
       return { sorcery_points: level, used_sorcery_points: 0 };
+        // Sorcellerie innée: 2 charges, reset au repos long (manuellement via +)
+        base.innate_sorcery = 2;
+        base.used_innate_sorcery = 0;
+        return base;
+      }
     case 'Guerrier':
       return { action_surge: level >= 17 ? 2 : 1, used_action_surge: 0 };
     case 'Magicien':
