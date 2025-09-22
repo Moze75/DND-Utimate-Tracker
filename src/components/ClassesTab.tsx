@@ -791,7 +791,7 @@ function ClassesTab({ player, playerClass, className, subclassName, characterLev
           sneak_attack: 'Attaque sournoise',
           pact_magic: 'Magie de pacte',
           supernatural_metabolism: 'Métabolisme surnaturel',
-           
+          innate_sorcery: 'Sorcellerie innée', 
         };
 
         const key = String(resource);
@@ -1311,24 +1311,72 @@ function ClassResourcesCard({
       }
       break;
 
-    case 'Ensorceleur':
-      if (typeof resources.sorcery_points === 'number') {
-        items.push(
-          <ResourceBlock
-            key="sorcery_points"
-            icon={<Wand2 size={20} />}
-            label="Points de sorcellerie"
-            total={resources.sorcery_points}
-            used={resources.used_sorcery_points || 0}
-            onUse={() => onUpdateResource('used_sorcery_points', (resources.used_sorcery_points || 0) + 1)}
-            onUpdateTotal={(n) => onUpdateResource('sorcery_points', n)}
-            onRestore={() => onUpdateResource('used_sorcery_points', Math.max(0, (resources.used_sorcery_points || 0) - 1))}
-            color="purple"
-            onGlobalPulse={onPulseScreen}
-          />
-        );
-      }
-      break;
+      case 'Ensorceleur':
+        // Points de sorcellerie (existant)
+        if (typeof resources.sorcery_points === 'number') {
+          items.push(
+            <ResourceBlock
+              key="sorcery_points"
+              icon={<Wand2 size={20} />}
+              label="Points de sorcellerie"
+              total={resources.sorcery_points}
+              used={resources.used_sorcery_points || 0}
+              onUse={() =>
+                onUpdateResource(
+                  'used_sorcery_points',
+                  (resources.used_sorcery_points || 0) + 1
+                )
+              }
+              onUpdateTotal={(n) => onUpdateResource('sorcery_points', n)}
+              onRestore={() =>
+                onUpdateResource(
+                  'used_sorcery_points',
+                  Math.max(0, (resources.used_sorcery_points || 0) - 1)
+                )
+              }
+              color="purple"
+              onGlobalPulse={onPulseScreen}
+            />
+          );
+        }
+      
+        // Sorcellerie innée (2 charges, reset au repos long)
+        {
+          const innateTotal =
+            typeof resources.innate_sorcery === 'number' ? resources.innate_sorcery : 2;
+          const innateUsed = Math.min(
+            resources.used_innate_sorcery || 0,
+            innateTotal
+          );
+      
+          items.push(
+            <ResourceBlock
+              key="innate_sorcery"
+              icon={<Wand2 size={20} />}
+              label="Sorcellerie innée"
+              total={innateTotal}
+              used={innateUsed}
+              onUse={() =>
+                onUpdateResource(
+                  'used_innate_sorcery',
+                  Math.min((resources.used_innate_sorcery || 0) + 1, innateTotal)
+                )
+              }
+              // tu peux laisser éditable le total si tu veux l’ajuster un jour
+              onUpdateTotal={(n) => onUpdateResource('innate_sorcery', n)}
+              onRestore={() =>
+                onUpdateResource(
+                  'used_innate_sorcery',
+                  Math.max(0, (resources.used_innate_sorcery || 0) - 1)
+                )
+              }
+              color="purple"
+              onGlobalPulse={onPulseScreen}
+            />
+          );
+        }
+      
+        break;
 
     case 'Guerrier':
       if (typeof resources.action_surge === 'number') {
