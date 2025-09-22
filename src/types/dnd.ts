@@ -76,6 +76,10 @@ export interface ClassResources {
   sorcery_points?: number;
   used_sorcery_points?: number;
 
+    // Ensorceleur — Sorcellerie innée (2 charges)
+  innate_sorcery?: number;
+  used_innate_sorcery?: number;
+
   // Guerrier
   action_surge?: number;
   used_action_surge?: number;
