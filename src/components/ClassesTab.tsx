@@ -1355,7 +1355,7 @@ function ClassResourcesCard({
           />
         );
   break;
-}
+
     case 'Guerrier':
       if (typeof resources.action_surge === 'number') {
         items.push(
