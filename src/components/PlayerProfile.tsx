@@ -123,6 +123,8 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
       nextCR.used_ki_points = 0;
       nextCR.used_lay_on_hands = 0;
       nextCR.used_favored_foe = 0;
+      nextCR.used_innate_sorcery = 0;              // Ensorceleur — Sorcellerie innée
+      nextCR.used_supernatural_metabolism = 0;     // Moine — Métabolisme surnaturel
 
       const { error } = await supabase
         .from('players')
