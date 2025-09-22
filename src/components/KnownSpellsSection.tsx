@@ -675,32 +675,41 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
 
               return (
                 <div key={levelName} className="space-y-2" data-spell-level={level} id={`spell-level-${level}`}>
-                  <button
-                    onClick={() => toggleLevelCollapse(levelName)}
-                    className="w-full flex items-center justify-between text-left hover:bg-gray-800/30 rounded-lg p-2 transition-all duration-200 group"
-                  >
-                    <div className="flex items-center gap-3 flex-1 pr-2">
-                      <h4 className="text-sm font-semibold text-purple-300 group-hover:text-purple-200">
-                        {levelName} ({spells.length})
-                      </h4>
-                      {levelName !== 'Tours de magie' && (
-                        <SpellLevelStats
-                          levelName={levelName}
-                          player={player}
-                          onUpdate={onUpdate}
-                          usedSlots={usedSlots}
-                          maxSlots={maxSlots}
-                        />
-                      )}
-                    </div>
-                    <div className="flex items-center pl-1">
-                      {collapsedLevels.has(levelName) ? (
-                        <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-300" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-gray-300" />
-                      )}
-                    </div>
-                  </button>
+                     <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={!collapsedLevels.has(levelName)}
+        onClick={() => toggleLevelCollapse(levelName)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggleLevelCollapse(levelName);
+          }
+        }}
+        className="w-full flex items-center justify-between text-left hover:bg-gray-800/30 rounded-lg p-2 transition-all duration-200 group"
+      >
+        <div className="flex items-center gap-3 flex-1 pr-2">
+          <h4 className="text-sm font-semibold text-purple-300 group-hover:text-purple-200">
+            {levelName} ({spells.length})
+          </h4>
+          {levelName !== 'Tours de magie' && (
+            <SpellLevelStats
+              levelName={levelName}
+              player={player}
+              onUpdate={onUpdate}
+              usedSlots={usedSlots}
+              maxSlots={maxSlots}
+            />
+          )}
+        </div>
+        <div className="flex items-center pl-1">
+          {collapsedLevels.has(levelName) ? (
+            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-300" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-gray-300" />
+          )}
+        </div>
+      </div>   
 
                   {!collapsedLevels.has(levelName) && (
                     <div className="space-y-2 ml-2">
