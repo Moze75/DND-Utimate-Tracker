@@ -1329,36 +1329,7 @@ function ClassResourcesCard({
         );
       }
       break;
-
-            // Sorcellerie innée: 2 charges, reset repos long (manuellement avec +)
-        const capInnate = (resources as any).innate_sorcery ?? 2;
-        const usedInnate = Math.min((resources as any).used_innate_sorcery || 0, capInnate);
-      
-        items.push(
-          <ResourceBlock
-            key="innate_sorcery"
-            icon={<Sparkles size={20} />}
-            label="Sorcellerie innée"
-            total={capInnate}
-            used={usedInnate}
-            onUse={() =>
-              onUpdateResource('used_innate_sorcery', Math.min(usedInnate + 1, capInnate))
-            }
-            // total fixe → pas d’édition
-            onUpdateTotal={() => { /* no-op */ }}
-            onRestore={() =>
-              onUpdateResource('used_innate_sorcery', Math.max(0, usedInnate - 1))
-            }
-            color="purple"
-            hideEdit
-            onGlobalPulse={onPulseScreen}
-            />
-          );
-        }
-      
-        break;
-      }
-
+ 
     case 'Guerrier':
       if (typeof resources.action_surge === 'number') {
         items.push(
