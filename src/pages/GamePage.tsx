@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { LogOut } from 'lucide-react'; 
+import { SwipePager } from '../components/SwipePager';
 
 import { testConnection } from '../lib/supabase';
 import { Player } from '../types/dnd';
