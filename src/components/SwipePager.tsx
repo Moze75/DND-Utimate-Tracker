@@ -40,11 +40,16 @@ export function SwipePager({
   const [dragging, setDragging] = React.useState(false);
   const [animating, setAnimating] = React.useState(false);
   const [animTargetX, setAnimTargetX] = React.useState<number | null>(null);
+
   const pointerIdRef = React.useRef<number | null>(null);
+  const touchIdRef = React.useRef<number | null>(null);
   const startXRef = React.useRef<number | null>(null);
   const startYRef = React.useRef<number | null>(null);
   const decidedRef = React.useRef(false);
 
+  const SUPPORTS_POINTER = typeof window !== 'undefined' && 'PointerEvent' in window;
+
+  // Init width at mount to avoid 0px first paint
   React.useLayoutEffect(() => {
     const el = containerRef.current;
     if (el) {
@@ -52,13 +57,16 @@ export function SwipePager({
     }
   }, []);
 
+  // Keep width in sync on resize
   React.useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => {
       const w = el.clientWidth;
       setWidth(w);
-      if (!dragging && !animating) setDragX(0);
+      if (!dragging && !animating) {
+        setDragX(0);
+      }
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -67,7 +75,9 @@ export function SwipePager({
   const neighborIndex = React.useMemo(() => {
     if (dir === 0) return null;
     const step = dir;
-    if (wrap) return (displayIndex + step + count) % count;
+    if (wrap) {
+      return (displayIndex + step + count) % count;
+    }
     const raw = displayIndex + step;
     if (raw < 0 || raw > count - 1) return null;
     return raw;
@@ -76,78 +86,84 @@ export function SwipePager({
   const lockHeightToContent = React.useCallback(() => {
     const h1 = currentRef.current?.offsetHeight ?? 0;
     const h2 = nextRef.current?.offsetHeight ?? 0;
-    setHeight(Math.max(h1, h2));
+    const h = Math.max(h1, h2);
+    setHeight(h);
   }, []);
+
   const unlockHeight = React.useCallback(() => setHeight('auto'), []);
 
-  const animateTo = React.useCallback((targetX: number, onDone?: () => void) => {
-    if (!trackRef.current) return;
-    setAnimating(true);
-    setAnimTargetX(targetX);
-    lockHeightToContent();
+  const animateTo = React.useCallback(
+    (targetX: number, onDone?: () => void) => {
+      if (!trackRef.current) return;
+      setAnimating(true);
+      setAnimTargetX(targetX);
+      lockHeightToContent();
 
-    const handle = () => {
-      setAnimating(false);
-      setAnimTargetX(null);
-      setDragX(0);
-      setDir(0);
-      unlockHeight();
-      onDone?.();
-    };
-    const timer = window.setTimeout(handle, durationMs + 40);
-    const onEnd = (e: TransitionEvent) => {
-      if (e.propertyName !== 'transform') return;
-      clearTimeout(timer);
-      handle();
-    };
-    trackRef.current.addEventListener('transitionend', onEnd, { once: true });
-  }, [durationMs, lockHeightToContent, unlockHeight]);
+      const handle = () => {
+        setAnimating(false);
+        setAnimTargetX(null);
+        setDragX(0);
+        setDir(0);
+        unlockHeight();
+        onDone?.();
+      };
 
-  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+      const timer = window.setTimeout(handle, durationMs + 40);
+      const onEnd = (e: TransitionEvent) => {
+        if (e.propertyName !== 'transform') return;
+        clearTimeout(timer);
+        handle();
+      };
+      trackRef.current.addEventListener('transitionend', onEnd, { once: true });
+    },
+    [durationMs, lockHeightToContent, unlockHeight]
+  );
+
+  // Unified drag helpers
+  const startDrag = React.useCallback((x: number, y: number) => {
     if (count <= 1) return;
-    if (!(e.isPrimary ?? true)) return;
-    pointerIdRef.current = e.pointerId;
-    startXRef.current = e.clientX;
-    startYRef.current = e.clientY;
+    startXRef.current = x;
+    startYRef.current = y;
     decidedRef.current = false;
     setDragging(true);
     setAnimTargetX(null);
     setAnimating(false);
-    try { (e.currentTarget as any).setPointerCapture?.(e.pointerId); } catch {}
-  };
+  }, [count]);
 
-  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+  const moveDrag = React.useCallback((x: number, y: number) => {
     if (!dragging) return;
-    if (pointerIdRef.current !== null && e.pointerId !== pointerIdRef.current) return;
 
     const sx = startXRef.current;
     const sy = startYRef.current;
     if (sx == null || sy == null) return;
 
-    const dx = e.clientX - sx;
-    const dy = e.clientY - sy;
+    const dx = x - sx;
+    const dy = y - sy;
 
     if (!decidedRef.current) {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       decidedRef.current = true;
       if (Math.abs(dy) > Math.abs(dx)) {
+        // Vertical scroll: abort drag
         setDragging(false);
         startXRef.current = null;
         startYRef.current = null;
         pointerIdRef.current = null;
+        touchIdRef.current = null;
         return;
       }
       setDir(dx < 0 ? 1 : -1);
     }
 
     const hasNeighbor = neighborIndex != null;
-    setDragX(hasNeighbor ? dx : dx * 0.2);
-  };
+    const effDx = hasNeighbor ? dx : dx * 0.2;
+    setDragX(effDx);
+  }, [dragging, neighborIndex]);
 
-  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+  const endDrag = React.useCallback((x: number) => {
     if (!dragging) return;
     const sx = startXRef.current ?? 0;
-    const dx = e.clientX - sx;
+    const dx = x - sx;
 
     const commit = Math.abs(dx) >= thresholdPx && neighborIndex != null;
     const baseX = dir === -1 ? -width : 0;
@@ -169,15 +185,103 @@ export function SwipePager({
     startXRef.current = null;
     startYRef.current = null;
     pointerIdRef.current = null;
+    touchIdRef.current = null;
+  }, [dragging, thresholdPx, neighborIndex, dir, width, animateTo, wrap, displayIndex, count, onIndexChange]);
+
+  // Pointer events
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!SUPPORTS_POINTER) return;
+    if (count <= 1) return;
+    if (!(e.isPrimary ?? true)) return;
+    pointerIdRef.current = e.pointerId;
+    startDrag(e.clientX, e.clientY);
+    try {
+      (e.currentTarget as any).setPointerCapture?.(e.pointerId);
+    } catch {}
   };
 
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!SUPPORTS_POINTER) return;
+    if (pointerIdRef.current !== null && e.pointerId !== pointerIdRef.current) return;
+    moveDrag(e.clientX, e.clientY);
+  };
+
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!SUPPORTS_POINTER) return;
+    if (pointerIdRef.current !== null && e.pointerId !== pointerIdRef.current) return;
+    endDrag(e.clientX);
+  };
+
+  // Mouse fallback
+  React.useEffect(() => {
+    if (SUPPORTS_POINTER) return;
+    const onMouseMove = (e: MouseEvent) => moveDrag(e.clientX, e.clientY);
+    const onMouseUp = (e: MouseEvent) => endDrag(e.clientX);
+    if (dragging) {
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp, { once: true });
+      return () => {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+      };
+    }
+  }, [dragging, moveDrag, endDrag, SUPPORTS_POINTER]);
+
+  const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (SUPPORTS_POINTER) return;
+    if (count <= 1) return;
+    startDrag(e.clientX, e.clientY);
+  };
+
+  // Touch fallback
+  React.useEffect(() => {
+    if (SUPPORTS_POINTER) return;
+    const onTouchMove = (e: TouchEvent) => {
+      if (touchIdRef.current == null) return;
+      const t = Array.from(e.changedTouches).find(t => t.identifier === touchIdRef.current);
+      const anyT = t ?? e.changedTouches[0];
+      if (!anyT) return;
+      moveDrag(anyT.clientX, anyT.clientY);
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (touchIdRef.current == null) return;
+      const t = Array.from(e.changedTouches).find(t => t.identifier === touchIdRef.current);
+      const anyT = t ?? e.changedTouches[0];
+      endDrag(anyT?.clientX ?? 0);
+    };
+    if (dragging) {
+      window.addEventListener('touchmove', onTouchMove, { passive: true });
+      window.addEventListener('touchend', onTouchEnd, { once: true });
+      window.addEventListener('touchcancel', onTouchEnd, { once: true });
+      return () => {
+        window.removeEventListener('touchmove', onTouchMove);
+        window.removeEventListener('touchend', onTouchEnd);
+        window.removeEventListener('touchcancel', onTouchEnd);
+      };
+    }
+  }, [dragging, moveDrag, endDrag, SUPPORTS_POINTER]);
+
+  const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (SUPPORTS_POINTER) return;
+    if (count <= 1) return;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    touchIdRef.current = t.identifier;
+    startDrag(t.clientX, t.clientY);
+  };
+
+  // React to external index changes (clicks on tabs)
   React.useEffect(() => {
     const prev = prevIndexRef.current;
-    if (index === prev || dragging || animating) return;
+    if (index === prev) return;
+    if (dragging || animating) return;
 
     const forward = (index - prev + count) % count;
     const backward = (prev - index + count) % count;
-    let sign: 1 | -1 = forward === 0 ? 1 : (forward <= backward ? 1 : -1);
+    let sign: 1 | -1 = 1;
+    if (forward === 0) return;
+    if (forward <= backward) sign = 1;
+    else sign = -1;
 
     setDir(sign);
     setDisplayIndex(prev);
@@ -208,17 +312,23 @@ export function SwipePager({
     prevIndexRef.current = index;
   }, [index, count, width, dragging, animating, durationMs, lockHeightToContent, unlockHeight]);
 
-  // Styles anti-débordement
+  // Update prevIndexRef when index changes
+  React.useEffect(() => {
+    prevIndexRef.current = index;
+  }, [index]);
+
+  // Styles de sécurité pour éviter tout débordement
   const slideStyle: React.CSSProperties = {
     width: '100%',
-    minWidth: 0,
-    overflow: 'hidden',
-    boxSizing: 'border-box',
+    minWidth: 0,            // autorise le contenu à rétrécir dans un flex
+    overflow: 'hidden',     // coupe tout débordement horizontal
+    boxSizing: 'border-box' // inclut padding/border dans la largeur
   };
+
   const pageWrapperStyle: React.CSSProperties = {
     width: '100%',
     maxWidth: '100%',
-    overflowX: 'hidden',
+    overflowX: 'hidden'
   };
 
   const baseX = dir === -1 ? -width : 0;
@@ -232,27 +342,29 @@ export function SwipePager({
       </div>
     </div>
   );
-  const neighborSlide = neighborIndex != null ? (
-    <div ref={nextRef} style={slideStyle} className="w-full shrink-0 min-w-0 overflow-hidden">
-      <div style={pageWrapperStyle} className="min-w-0 max-w-full overflow-x-hidden">
-        {renderPage(neighborIndex)}
+  const neighborSlide =
+    neighborIndex != null ? (
+      <div ref={nextRef} style={slideStyle} className="w-full shrink-0 min-w-0 overflow-hidden">
+        <div style={pageWrapperStyle} className="min-w-0 max-w-full overflow-x-hidden">
+          {renderPage(neighborIndex)}
+        </div>
       </div>
-    </div>
-  ) : (
-    <div ref={nextRef} style={slideStyle} className="w-full shrink-0 min-w-0 overflow-hidden" />
-  );
+    ) : (
+      <div ref={nextRef} style={slideStyle} className="w-full shrink-0 min-w-0 overflow-hidden" />
+    );
 
-  const slides = dir === -1 ? (
-    <>
-      {neighborSlide}
-      {currentSlide}
-    </>
-  ) : (
-    <>
-      {currentSlide}
-      {neighborSlide}
-    </>
-  );
+  const slides =
+    dir === -1 ? (
+      <>
+        {neighborSlide}
+        {currentSlide}
+      </>
+    ) : (
+      <>
+        {currentSlide}
+        {neighborSlide}
+      </>
+    );
 
   return (
     <div
@@ -266,20 +378,22 @@ export function SwipePager({
         transition: `height ${durationMs}ms ${EASING}`,
         touchAction: 'pan-y',
         boxSizing: 'border-box',
-        // isole la mise en page du pager du reste
         contain: 'layout paint',
+        cursor: dragging ? 'grabbing' : undefined,
         ...style,
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onMouseDown={onMouseDown}
+      onTouchStart={onTouchStart}
     >
       <div
         ref={trackRef}
         className="flex"
         style={{
-          width: '200%',
+          width: '200%',                   // 2 slides côte à côte
           transform: `translate3d(${trackX}px, 0, 0)`,
           transition: trackTransition,
           userSelect: dragging ? 'none' : undefined,
