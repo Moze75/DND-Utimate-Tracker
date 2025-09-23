@@ -303,6 +303,7 @@ const setIndex = (i: number) => setActiveTab(tabIds[i]);
             )}
 
 <SwipePager
+  className="w-full"
   index={activeIndex}
   onIndexChange={setIndex}
   count={tabIds.length}
@@ -325,6 +326,14 @@ const setIndex = (i: number) => setActiveTab(tabIds[i]);
             onPlayerUpdate={applyPlayerUpdate}
             onInventoryUpdate={setInventory}
           />
+        );
+      case 'profile':
+        return <PlayerProfileProfileTab player={currentPlayer} />;
+      default:
+        return null;
+    }
+  }}
+/>
         );
       case 'profile':
         return <PlayerProfileProfileTab player={currentPlayer} />;
