@@ -1,343 +1,606 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { LogOut } from 'lucide-react';
-
-import { testConnection } from '../lib/supabase';
 import { Player } from '../types/dnd';
+import {
+  LogOut,
+  Plus,
+  User,
+  Sword,
+  Shield,
+  Sparkles,
+  AlertCircle,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
+import { Avatar } from '../components/Avatar';
+import { authService } from '../services/authService';
 
-import { PlayerProfile } from '../components/PlayerProfile';
-import { TabNavigation } from '../components/TabNavigation';
-import CombatTab from '../components/CombatTab';
-import { EquipmentTab } from '../components/EquipmentTab';
-import { AbilitiesTab } from '../components/AbilitiesTab';
-import { StatsTab } from '../components/StatsTab';
-import { ClassesTab } from '../components/ClassesTab';
-import { PlayerContext } from '../contexts/PlayerContext';
-
-import { inventoryService } from '../services/inventoryService';
-import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab';
-
-import SwipePager from '../components/SwipePager';
-import TabGuard from '../components/TabGuard'; // <- ajout
-
-type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile';
-
-const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter';
-const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
-const lastTabKeyFor = (playerId: string) => `ut:lastActiveTab:${playerId}`;
-const isValidTab = (t: string | null): t is TabKey =>
-  t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class' || t === 'profile';
-
-type GamePageProps = {
+interface CharacterSelectionPageProps {
   session: any;
-  selectedCharacter: Player;
-  onBackToSelection: () => void;
-  onUpdateCharacter?: (p: Player) => void;
-};
-
-function freezeScroll(): number {
-  const y = window.scrollY || window.pageYOffset || 0;
-  const body = document.body;
-  (body as any).__scrollY = y;
-  body.style.position = 'fixed';
-  body.style.top = `-${y}px`;
-  body.style.left = '0';
-  body.style.right = '0';
-  body.style.width = '100%';
-  return y;
-}
-function unfreezeScroll() {
-  const body = document.body;
-  const y = (body as any).__scrollY || 0;
-  body.style.position = '';
-  body.style.top = '';
-  body.style.left = '';
-  body.style.right = '';
-  body.style.width = '';
-  window.scrollTo(0, y);
-  delete (body as any).__scrollY;
-}
-function stabilizeScroll(y: number, durationMs = 350) {
-  const start = performance.now();
-  const tick = (now: number) => {
-    window.scrollTo(0, y);
-    if (now - start < durationMs) requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
+  onCharacterSelect: (player: Player) => void;
 }
 
-export function GamePage({
-  session,
-  selectedCharacter,
-  onBackToSelection,
-  onUpdateCharacter,
-}: GamePageProps) {
+export function CharacterSelectionPage({ session, onCharacterSelect }: CharacterSelectionPageProps) {
   const [loading, setLoading] = useState(true);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(selectedCharacter);
-  const [inventory, setInventory] = useState<any[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newCharacterName, setNewCharacterName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>('');
+  const [showDebug, setShowDebug] = useState(false);
+  const [deletingCharacter, setDeletingCharacter] = useState<Player | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
 
-  const initialTab: TabKey = (() => {
+  useEffect(() => {
+    fetchPlayers();
+    runDiagnostic();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
+
+  const runDiagnostic = async () => {
     try {
-      const saved = localStorage.getItem(lastTabKeyFor(selectedCharacter.id));
-      return isValidTab(saved) ? saved : 'combat';
-    } catch {
-      return 'combat';
-    }
-  })();
-  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+      setDebugInfo((prev) => prev + '=== DIAGNOSTIC DE LA BASE DE DONNÉES ===\n');
 
-  const tabIds: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
-  const activeIndex = tabIds.indexOf(activeTab);
-  const setIndex = (i: number) => setActiveTab(tabIds[i]);
-
-  const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
-
-  const applyPlayerUpdate = useCallback(
-    (updated: Player) => {
-      setCurrentPlayer(updated);
-      try {
-        onUpdateCharacter?.(updated);
-      } catch {}
-      try {
-        localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(updated));
-      } catch {}
-    },
-    [onUpdateCharacter]
-  );
-
-  useEffect(() => {
-    if (currentPlayer) {
-      try {
-        localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(currentPlayer));
-      } catch {}
-    }
-  }, [currentPlayer]);
-
-  useEffect(() => {
-    const persist = () => {
-      if (!currentPlayer) return;
-      try {
-        localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(currentPlayer));
-      } catch {}
-      try {
-        localStorage.setItem(lastTabKeyFor(selectedCharacter.id), activeTab);
-      } catch {}
-    };
-    window.addEventListener('visibilitychange', persist);
-    window.addEventListener('pagehide', persist);
-    return () => {
-      window.removeEventListener('visibilitychange', persist);
-      window.removeEventListener('pagehide', persist);
-    };
-  }, [currentPlayer, activeTab, selectedCharacter.id]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(lastTabKeyFor(selectedCharacter.id), activeTab);
-    } catch {}
-  }, [activeTab, selectedCharacter.id]);
-
-  useEffect(() => {
-    const saved = (() => {
-      try {
-        const v = localStorage.getItem(lastTabKeyFor(selectedCharacter.id));
-        return isValidTab(v) ? v : 'combat';
-      } catch {
-        return 'combat';
+      // Test 1: Vérifier la connexion (simple select)
+      const { error: connectionError } = await supabase.from('players').select('id').limit(1);
+      if (connectionError) {
+        setDebugInfo((prev) => prev + `❌ Erreur de connexion: ${connectionError.message}\n`);
+        return;
       }
-    })();
-    setActiveTab(saved);
-  }, [selectedCharacter.id]);
+      setDebugInfo((prev) => prev + '✅ Connexion à Supabase OK\n');
 
-  useEffect(() => {
-    const initialize = async () => {
+      // Test 2: Compter les personnages existants de l’utilisateur
+      const { data: existingPlayers, error: countError } = await supabase
+        .from('players')
+        .select('id, user_id, name')
+        .eq('user_id', session.user.id);
+
+      if (countError) {
+        setDebugInfo((prev) => prev + `❌ Erreur lors du comptage: ${countError.message}\n`);
+      } else {
+        setDebugInfo(
+          (prev) =>
+            prev +
+            `📊 Personnages existants: ${existingPlayers?.length || 0}\n` +
+            (existingPlayers && existingPlayers.length > 0
+              ? `📝 Noms: ${existingPlayers.map((p) => p.name).join(', ')}\n`
+              : '')
+        );
+      }
+    } catch (error: any) {
+      setDebugInfo((prev) => prev + `💥 Erreur de diagnostic: ${error.message}\n`);
+    }
+  };
+
+  const fetchPlayers = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('players')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setPlayers(data || []);
+      setDebugInfo((prev) => prev + `✅ Récupération réussie: ${data?.length || 0} personnages\n`);
+    } catch (error: any) {
+      console.error('Erreur lors de la récupération des personnages:', error);
+      setDebugInfo((prev) => prev + `❌ Erreur de récupération: ${error.message}\n`);
+      toast.error('Erreur lors de la récupération des personnages');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createNewCharacter = async () => {
+    if (!newCharacterName.trim()) {
+      toast.error('Veuillez entrer un nom pour votre personnage');
+      return;
+    }
+    if (creating) return;
+
+    setCreating(true);
+    setDebugInfo((prev) => prev + `\n🚀 TENTATIVE DE CRÉATION: "${newCharacterName}"\n`);
+
+    try {
+      // Vérifier la session
+      if (!session || !session.user?.id) {
+        throw new Error('Session invalide - veuillez vous reconnecter');
+      }
+
+      // Vérifier l’auth utilisateur
+      const { data: authData, error: userError } = await supabase.auth.getUser();
+      if (userError || !authData?.user) {
+        throw new Error('Utilisateur non authentifié - veuillez vous reconnecter');
+      }
+
+      // 1) Tentative via RPC standard
       try {
-        setLoading(true);
-        setConnectionError(null);
-
-        const isConnected = await testConnection();
-        if (!isConnected.success) {
-          throw new Error('Impossible de se connecter à la base de données');
+        const { data: playerId, error: rpcError } = await supabase.rpc('create_player_with_defaults', {
+          p_user_id: authData.user.id,
+          p_name: newCharacterName.trim(),
+          p_adventurer_name: newCharacterName.trim(),
+        });
+        if (rpcError) {
+          setDebugInfo((prev) => prev + `❌ Erreur RPC: ${rpcError.message}\n`);
+          throw rpcError;
         }
 
-        setCurrentPlayer((prev) =>
-          prev && prev.id === selectedCharacter.id ? prev : selectedCharacter
-        );
+        // Récupérer le personnage créé
+        const { data: newPlayer, error: fetchError } = await supabase
+          .from('players')
+          .select('*')
+          .eq('id', playerId)
+          .single();
+        if (fetchError) {
+          setDebugInfo((prev) => prev + `❌ Erreur récupération: ${fetchError.message}\n`);
+          throw fetchError;
+        }
 
-        const inventoryData = await inventoryService.getPlayerInventory(selectedCharacter.id);
-        setInventory(inventoryData);
-
-        setLoading(false);
-      } catch (error: any) {
-        console.error("Erreur d'initialisation:", error);
-        setConnectionError(error?.message ?? 'Erreur inconnue');
-        setLoading(false);
+        setPlayers((prev) => [...prev, newPlayer]);
+        setNewCharacterName('');
+        setShowCreateForm(false);
+        setDebugInfo((prev) => prev + `🎉 SUCCÈS: Personnage créé avec RPC!\n`);
+        toast.success('Nouveau personnage créé !');
+        return;
+      } catch (rpcError: any) {
+        // 2) Fallback: retenter la même RPC (ex: latence d’activation) avant abandon
+        setDebugInfo((prev) => prev + `🔄 Tentative alternative RPC...\n`);
+        const { data: playerId2, error: rpcError2 } = await supabase.rpc('create_player_with_defaults', {
+          p_user_id: authData.user.id,
+          p_name: newCharacterName.trim(),
+          p_adventurer_name: newCharacterName.trim(),
+        });
+        if (rpcError2) {
+          setDebugInfo(
+            (prev) =>
+              prev +
+              `❌ Erreur alternative RPC: ${rpcError2.message} (Code: ${rpcError2.code || 'NA'})\n`
+          );
+          throw rpcError2;
+        }
+        const { data: newPlayer2, error: fetchError2 } = await supabase
+          .from('players')
+          .select('*')
+          .eq('id', playerId2)
+          .single();
+        if (fetchError2) {
+          setDebugInfo((prev) => prev + `❌ Erreur récupération: ${fetchError2.message}\n`);
+          throw fetchError2;
+        }
+        setPlayers((prev) => [...prev, newPlayer2]);
+        setNewCharacterName('');
+        setShowCreateForm(false);
+        setDebugInfo((prev) => prev + `🎉 SUCCÈS: Personnage créé (RPC alt)!\n`);
+        toast.success('Nouveau personnage créé !');
       }
-    };
+    } catch (error: any) {
+      setDebugInfo((prev) => prev + `💥 ÉCHEC TOTAL: ${error.message}\n`);
+      console.error('Erreur lors de la création du personnage:', error);
 
-    if (prevPlayerId.current !== selectedCharacter.id) {
-      prevPlayerId.current = selectedCharacter.id;
-      initialize();
-    } else {
-      if (loading) {
-        initialize();
+      // Messages d'erreur détaillés
+      if (error.message?.includes('Session invalide') || error.message?.includes('non authentifié')) {
+        toast.error('Session expirée. Veuillez vous reconnecter.');
+        await supabase.auth.signOut();
+      } else if (error.code === 'PGRST202') {
+        toast.error('Fonction de création non disponible. Réessayez plus tard.');
+      } else if (error.code === '23505' || error.message?.includes('duplicate key')) {
+        toast.error('Un personnage existe déjà avec ces paramètres.');
+      } else if (error.code === '42501' || error.message?.includes('policy')) {
+        toast.error('Problème de permissions. Reconnectez-vous et réessayez.');
+      } else {
+        toast.error('Impossible de créer le personnage. Veuillez contacter le support.');
       }
+
+      setShowDebug(true);
+    } finally {
+      setCreating(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCharacter.id]);
-
-  const handleTabChange = useCallback((tab: string) => {
-    const y = freezeScroll();
-    const root = document.documentElement;
-    const prevBehavior = root.style.scrollBehavior;
-    root.style.scrollBehavior = 'auto';
-    setActiveTab(tab as TabKey);
-    requestAnimationFrame(() => {
-      unfreezeScroll();
-      stabilizeScroll(y, 400);
-      setTimeout(() => {
-        root.style.scrollBehavior = prevBehavior;
-      }, 420);
-    });
-  }, []);
-
-  const handleBackToSelection = () => {
-    try {
-      sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1');
-    } catch {}
-    onBackToSelection?.();
-    toast.success('Retour à la sélection des personnages');
   };
+
+  const handleSignOut = async () => {
+    try {
+      // Utiliser le service d'authentification
+      const { error } = await authService.signOut();
+      if (error) throw error;
+
+      toast.success('Déconnexion réussie');
+
+      // Forcer le rechargement sur Chrome mobile
+      if (
+        navigator.userAgent.includes('Chrome') &&
+        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+      ) {
+        // Nettoyer tout le stockage local
+        localStorage.clear();
+        sessionStorage.clear();
+
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
+      }
+    } catch (error: any) {
+      console.error('Erreur de déconnexion:', error);
+      toast.error('Erreur lors de la déconnexion');
+    }
+  };
+
+  const handleDeleteCharacter = async (character: Player) => {
+    if (deleteConfirmation !== 'Supprime') {
+      toast.error('Veuillez taper exactement "Supprime" pour confirmer');
+      return;
+    }
+
+    try {
+      // Utiliser la fonction de suppression sécurisée si elle existe (essai/erreur)
+      let deleted = false;
+      try {
+        await supabase.rpc('delete_character_safely', { character_id: character.id });
+        deleted = true;
+      } catch {
+        deleted = false;
+      }
+
+      if (!deleted) {
+        // Suppression directe si la fonction n'existe pas
+        const { error } = await supabase.from('players').delete().eq('id', character.id);
+        if (error) throw error;
+      }
+
+      // Mettre à jour la liste des personnages
+      setPlayers((prev) => prev.filter((p) => p.id !== character.id));
+      setDeletingCharacter(null);
+      setDeleteConfirmation('');
+
+      toast.success(`Personnage "${character.adventurer_name || character.name}" supprimé`);
+    } catch (error: any) {
+      console.error('Erreur lors de la suppression du personnage:', error);
+      toast.error('Erreur lors de la suppression du personnage');
+    }
+  };
+
+  const getClassIcon = (playerClass: string | null | undefined) => {
+    switch (playerClass) {
+      case 'Guerrier':
+      case 'Paladin':
+        return <Sword className="w-5 h-5 text-red-500" />;
+      case 'Magicien':
+      case 'Ensorceleur':
+      case 'Occultiste': // nouveau 2024
+        return <Sparkles className="w-5 h-5 text-purple-500" />;
+      case 'Clerc':
+      case 'Druide':
+        return <Shield className="w-5 h-5 text-yellow-500" />;
+      default:
+        return <User className="w-5 h-5 text-gray-500" />;
+    }
+  };
+
+  // Affichage: remplacer "Sorcier" par "Occultiste" pour les anciens persos
+  const displayClassName = (cls?: string | null) => (cls === 'Sorcier' ? 'Occultiste' : cls || '');
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto"></div>
-          <p className="text-gray-400">Chargement en cours...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (connectionError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="max-w-md w-full space-y-4 stat-card p-6">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-red-500 mb-4">Erreur de connexion</h2>
-            <p className="text-gray-300 mb-4">{connectionError}</p>
-            <p className="text-sm text-gray-400 mb-4">
-              Vérifiez votre connexion Internet et réessayez.
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              setConnectionError(null);
-              setLoading(true);
-              (async () => {
-                try {
-                  const isConnected = await testConnection();
-                  if (!isConnected.success) throw new Error('Impossible de se connecter');
-                  const inventoryData = await inventoryService.getPlayerInventory(selectedCharacter.id);
-                  setInventory(inventoryData);
-                  setCurrentPlayer(selectedCharacter);
-                  setLoading(false);
-                } catch (e: any) {
-                  console.error(e);
-                  setConnectionError(e?.message ?? 'Erreur inconnue');
-                  setLoading(false);
-                }
-              })();
-            }}
-            className="w-full btn-primary px-4 py-2 rounded-lg"
-          >
-            Réessayer
-          </button>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto" />
+          <p className="text-gray-400">Chargement des personnages...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor overflow-x-hidden">
-      <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6 overflow-x-hidden">
-        {currentPlayer && (
-          <PlayerContext.Provider value={currentPlayer}>
-            <PlayerProfile player={currentPlayer} onUpdate={applyPlayerUpdate} />
-
-            <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
-
-            <div className="w-full overflow-x-hidden">
-              <SwipePager
-                className="w-full min-w-0"
-                index={activeIndex}
-                onIndexChange={setIndex}
-                count={tabIds.length}
-                renderPage={(i) => {
-                  const id = tabIds[i];
-                  switch (id) {
-                    case 'combat':
-                      return (
-                        <TabGuard>
-                          <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-                        </TabGuard>
-                      );
-                    case 'class':
-                      return (
-                        <TabGuard>
-                          <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-                        </TabGuard>
-                      );
-                    case 'abilities':
-                      return (
-                        <TabGuard>
-                          <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-                        </TabGuard>
-                      );
-                    case 'stats':
-                      return (
-                        <TabGuard>
-                          <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-                        </TabGuard>
-                      );
-                    case 'equipment':
-                      return (
-                        <TabGuard>
-                          <EquipmentTab
-                            player={currentPlayer}
-                            inventory={inventory}
-                            onPlayerUpdate={applyPlayerUpdate}
-                            onInventoryUpdate={setInventory}
-                          />
-                        </TabGuard>
-                      );
-                    case 'profile':
-                      return (
-                        <TabGuard>
-                          <PlayerProfileProfileTab player={currentPlayer} />
-                        </TabGuard>
-                      );
-                    default:
-                      return null;
-                  }
-                }}
-              />
+    <div className="character-selection-page min-h-screen">
+      <div className="min-h-screen py-8">
+        {/* Container centré avec une largeur maximale */}
+        <div className="w-full max-w-6xl mx-auto px-4">
+          {/* Header */}
+          <div className="text-center mb-8 sm:mb-12 pt-8">
+            <h1
+              className="text-3xl font-bold text-white mb-2"
+              style={{
+                textShadow: `
+                  0 0 15px rgba(255, 255, 255, 0.9),
+                  0 0 20px rgba(255, 255, 255, 0.6),
+                  0 0 30px rgba(255, 255, 255, 0.4),
+                  0 0 40px rgba(255, 255, 255, 0.2)
+                `,
+              }}
+            >
+              Mes Personnages
+            </h1>
+            <div className="flex items-center justify-center gap-4">
+              <p
+                className="text-gray-300"
+                style={{ textShadow: '0 0 10px rgba(255, 255, 255, 0.3)' }}
+              >
+                {players.length > 0
+                  ? `${players.length} personnage${players.length > 1 ? 's' : ''} créé${
+                      players.length > 1 ? 's' : ''
+                    }`
+                  : 'Aucun personnage créé'}
+              </p>
+              {debugInfo && (
+                <button
+                  onClick={() => setShowDebug(!showDebug)}
+                  className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300"
+                >
+                  <AlertCircle size={16} />
+                  Debug
+                </button>
+              )}
             </div>
-          </PlayerContext.Provider>
-        )}
+          </div>
+
+          {/* Debug Panel */}
+          {showDebug && debugInfo && (
+            <div className="mb-8">
+              <div className="bg-gray-900/90 border border-gray-700 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-yellow-400">
+                    Informations de débogage
+                  </h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={runDiagnostic}
+                      className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300"
+                    >
+                      <RefreshCw size={14} />
+                      Actualiser
+                    </button>
+                    <button
+                      onClick={() => setShowDebug(false)}
+                      className="text-gray-400 hover:text-gray-300"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <pre className="text-xs text-gray-300 bg-black/50 p-3 rounded overflow-x-auto whitespace-pre-wrap">
+                  {debugInfo}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          {/* Modal de suppression */}
+          {deletingCharacter && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full border border-red-500/20">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center">
+                    <Trash2 className="w-6 h-6 text-red-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-100">Supprimer le personnage</h3>
+                    <p className="text-sm text-gray-400">
+                      {deletingCharacter.adventurer_name || deletingCharacter.name}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+                    <p className="text-red-300 text-sm font-medium mb-2">
+                      ⚠️ Attention : Cette action est irréversible !
+                    </p>
+                    <p className="text-gray-300 text-sm">
+                      Toutes les données du personnage (inventaire, attaques, statistiques) seront
+                      définitivement supprimées.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Pour confirmer, tapez exactement :{' '}
+                      <span className="text-red-400 font-bold">Supprime</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={deleteConfirmation}
+                      onChange={(e) => setDeleteConfirmation(e.target.value)}
+                      className="input-dark w-full px-3 py-2 rounded-md"
+                      placeholder="Tapez 'Supprime' pour confirmer"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={() => handleDeleteCharacter(deletingCharacter)}
+                      disabled={deleteConfirmation !== 'Supprime'}
+                      className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg flex-1 transition-colors"
+                    >
+                      Supprimer définitivement
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDeletingCharacter(null);
+                        setDeleteConfirmation('');
+                      }}
+                      className="btn-secondary px-4 py-2 rounded-lg"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Characters Grid */}
+          <div className="flex justify-center mb-8 sm:mb-16">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl">
+              {players.map((player) => {
+                const maxHp = Math.max(0, Number(player.max_hp || 0));
+                const currHp = Math.max(0, Number(player.current_hp || 0));
+                const tempHp = Math.max(0, Number(player.temporary_hp || 0));
+                const ratio = maxHp > 0 ? Math.min(100, Math.max(0, ((currHp + tempHp) / maxHp) * 100)) : 0;
+
+                return (
+                  <div
+                    key={player.id}
+                    className="w-full max-w-sm relative group bg-slate-800/60 backdrop-blur-sm border border-slate-600/40 rounded-xl shadow-lg overflow-hidden hover:bg-slate-700/70 transition-all duration-200"
+                  >
+                    {/* Bouton de suppression */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletingCharacter(player);
+                      }}
+                      className="absolute top-3 right-3 w-8 h-8 bg-red-600/80 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                      title="Supprimer le personnage"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+
+                    <div
+                      className="p-6 cursor-pointer hover:scale-[1.02] transition-all duration-200"
+                      onClick={() => onCharacterSelect(player)}
+                    >
+                      {/* Avatar et informations */}
+                      <div className="flex items-center gap-6">
+                        <div className="w-20 h-28 flex-shrink-0 rounded-lg overflow-hidden bg-white/10">
+                          <Avatar
+                            url={player.avatar_url}
+                            playerId={player.id}
+                            size="md"
+                            editable={false}
+                            onAvatarUpdate={() => {}}
+                          />
+                        </div>
+
+                        {/* Character Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="mb-3">
+                            <h3 className="text-lg font-bold text-gray-100 mb-1 truncate">
+                              {player.adventurer_name || player.name}
+                            </h3>
+
+                            {player.class ? (
+                              <div className="flex items-center gap-2 mb-2">
+                                {getClassIcon(player.class)}
+                                <span className="text-sm text-slate-200">
+                                  {displayClassName(player.class)} niveau {player.level}
+                                </span>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-slate-400 mb-2">Personnage non configuré</p>
+                            )}
+                          </div>
+
+                          {/* Health Bar */}
+                          <div className="space-y-2">
+                            <div className="w-full bg-slate-700/50 rounded-full h-3">
+                              <div
+                                className="bg-gradient-to-r from-red-500 to-red-400 h-3 rounded-full transition-all duration-300"
+                                style={{ width: `${ratio}%` }}
+                              />
+                            </div>
+                            <p className="text-xs text-slate-300">
+                              {currHp} / {maxHp} PV
+                              {tempHp > 0 && <span className="text-blue-300 ml-1">(+{tempHp})</span>}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Create New Character Card */}
+              <div
+                onClick={() => setShowCreateForm(true)}
+                className="w-full max-w-sm cursor-pointer hover:scale-[1.02] transition-all duration-200 bg-slate-800/40 backdrop-blur-sm border-dashed border-2 border-slate-600/50 hover:border-green-500/50 rounded-xl p-6"
+              >
+                <div className="p-6 flex items-center justify-center gap-6 min-h-[140px]">
+                  <div className="w-16 h-16 bg-green-400/20 rounded-full flex items-center justify-center">
+                    <Plus className="w-8 h-8 text-green-500" />
+                  </div>
+                  <div className="text-center">
+                    <h3 className="text-lg font-bold text-gray-100 mb-2">Nouveau Personnage</h3>
+                    <p className="text-sm text-slate-300">
+                      Créez un nouveau personnage pour vos aventures
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Create Character Modal */}
+          {showCreateForm && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
+                <h3 className="text-xl font-bold text-gray-100 mb-4">Créer un nouveau personnage</h3>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Nom du personnage
+                    </label>
+                    <input
+                      type="text"
+                      value={newCharacterName}
+                      onChange={(e) => setNewCharacterName(e.target.value)}
+                      className="input-dark w-full px-3 py-2 rounded-md"
+                      placeholder="Entrez le nom de votre personnage"
+                      autoFocus
+                      disabled={creating}
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={createNewCharacter}
+                      disabled={creating || !newCharacterName.trim()}
+                      className="btn-primary flex-1 px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {creating ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Création...
+                        </>
+                      ) : (
+                        'Créer'
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowCreateForm(false);
+                        setNewCharacterName('');
+                      }}
+                      disabled={creating}
+                      className="btn-secondary px-4 py-2 rounded-lg disabled:opacity-50"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="w-full max-w-md mx-auto mt-6 px-4">
-        <button
-          onClick={handleBackToSelection}
-          className="w-full btn-secondary px-4 py-2 rounded-lg flex items-center justify-center gap-2"
-        >
-          <LogOut size={20} />
-          Retour aux personnages
-        </button>
+      {/* Sign Out Button - Fixed at bottom */}
+      <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+        <div className="w-full max-w-md mx-auto px-4">
+          <button
+            onClick={handleSignOut}
+            className="w-full btn-secondary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
+          >
+            <LogOut size={20} />
+            Déconnexion
+          </button>
+        </div>
       </div>
     </div>
   );
 }
+
+export default CharacterSelectionPage;
