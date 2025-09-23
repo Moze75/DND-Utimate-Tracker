@@ -1,13 +1,13 @@
 import React from 'react';
 
 type Props = {
-  index: number; // index courant (contrôlé)
-  onIndexChange: (i: number) => void; // appelé quand un swipe valide veut changer d'onglet
-  count: number; // nombre total de pages
-  renderPage: (i: number) => React.ReactNode; // rend une page pour un index donné
-  wrap?: boolean; // boucler premier/dernier (par défaut true)
-  thresholdPx?: number; // distance min pour valider un swipe (par défaut 48)
-  durationMs?: number; // durée de l’anim (par défaut 240)
+  index: number;
+  onIndexChange: (i: number) => void;
+  count: number;
+  renderPage: (i: number) => React.ReactNode;
+  wrap?: boolean;
+  thresholdPx?: number;
+  durationMs?: number;
   className?: string;
   style?: React.CSSProperties;
 };
@@ -45,6 +45,15 @@ export function SwipePager({
   const startYRef = React.useRef<number | null>(null);
   const decidedRef = React.useRef(false);
 
+  // Init width at mount to avoid 0px first paint
+  React.useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (el) {
+      setWidth(el.clientWidth || window.innerWidth);
+    }
+  }, []);
+
+  // Keep width in sync on resize
   React.useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -271,7 +280,7 @@ export function SwipePager({
         ref={trackRef}
         className="flex"
         style={{
-          width: width * 2,
+          width: Math.max(width * 2, 2), // évite un track à 0px
           transform: `translate3d(${trackX}px, 0, 0)`,
           transition: trackTransition,
           userSelect: dragging ? 'none' : undefined,
@@ -283,3 +292,5 @@ export function SwipePager({
     </div>
   );
 }
+
+export default SwipePager;
