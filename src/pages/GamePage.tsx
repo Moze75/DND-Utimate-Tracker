@@ -95,9 +95,11 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // Swipe overlay (2 panneaux absolus) — pas de conteneur > 100%
+  // Swipe overlay (2 panneaux absolus) — sans doublon: soit statique, soit overlay
   const stageRef = useRef<HTMLDivElement | null>(null);       // conteneur relatif
-  const overlayRef = useRef<HTMLDivElement | null>(null);     // overlay absolu
+  const staticRef = useRef<HTMLDivElement | null>(null);      // contenu statique (hors overlay)
+  const overlayCurrentRef = useRef<HTMLDivElement | null>(null);
+  const overlayNeighborRef = useRef<HTMLDivElement | null>(null);
   const widthRef = useRef<number>(0);
 
   const startXRef = useRef<number | null>(null);
@@ -107,7 +109,8 @@ export function GamePage({
 
   const [dragX, setDragX] = useState(0);
   const [animating, setAnimating] = useState(false);
-  const [isInteracting, setIsInteracting] = useState(false);  // affiche l’overlay seulement pendant le drag/anim
+  const [isInteracting, setIsInteracting] = useState(false);  // affiche l’overlay uniquement pendant le drag/anim
+  const [containerH, setContainerH] = useState<number | undefined>(undefined);
 
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
@@ -208,6 +211,26 @@ export function GamePage({
   const prevKey = activeIndex > 0 ? TAB_ORDER[activeIndex - 1] : null;
   const nextKey = activeIndex < TAB_ORDER.length - 1 ? TAB_ORDER[activeIndex + 1] : null;
 
+  // Mesure hauteur (statique ou overlay selon le mode)
+  const measureStaticHeight = useCallback(() => {
+    const h = staticRef.current?.offsetHeight ?? 0;
+    if (h) setContainerH(h);
+  }, []);
+  const measureOverlayHeights = useCallback(() => {
+    const ch = overlayCurrentRef.current?.offsetHeight ?? 0;
+    const nh = overlayNeighborRef.current?.offsetHeight ?? 0;
+    const h = Math.max(ch, nh);
+    if (h) setContainerH(h);
+  }, []);
+
+  // Mesure au changement d’onglet en mode statique
+  useEffect(() => {
+    if (isInteracting || animating) return;
+    // Mesurer après paint
+    const id = window.requestAnimationFrame(measureStaticHeight);
+    return () => window.cancelAnimationFrame(id);
+  }, [activeTab, isInteracting, animating, measureStaticHeight]);
+
   // Pointeurs (tactile/souris) attachés au conteneur stage (toujours présent)
   const onPointerDown: React.PointerEventHandler<HTMLDivElement> = (e) => {
     if (e.pointerType === 'mouse' && e.buttons !== 1) return;
@@ -215,7 +238,6 @@ export function GamePage({
     startYRef.current = e.clientY;
     swipingRef.current = false;
     setAnimating(false);
-    // pas encore d’overlay tant qu’on n’a pas détecté un swipe horizontal
     stageRef.current?.setPointerCapture?.(e.pointerId);
   };
 
@@ -227,9 +249,13 @@ export function GamePage({
     // Déclenche si horizontal prédomine
     if (!swipingRef.current && Math.abs(dx) > 10 && Math.abs(Math.abs(dx) - Math.abs(dy)) > 4) {
       swipingRef.current = true;
-      setIsInteracting(true); // affiche l’overlay
-      dragStartScrollYRef.current = freezeScroll();
+
+      // Mesure la largeur et la hauteur courante AVANT de basculer en overlay
       widthRef.current = stageRef.current?.clientWidth ?? widthRef.current;
+      measureStaticHeight();
+
+      setIsInteracting(true); // on ne rend plus la copie statique, seulement l’overlay
+      dragStartScrollYRef.current = freezeScroll();
     }
     if (!swipingRef.current) return;
 
@@ -240,6 +266,10 @@ export function GamePage({
     if (!nextKey && clamped < 0) clamped = 0; // pas de page à droite
 
     setDragX(clamped);
+
+    // Ajuster la hauteur au max courant/voisin pendant le drag
+    const id = window.requestAnimationFrame(measureOverlayHeights);
+    return () => window.cancelAnimationFrame(id);
   };
 
   const animateTo = (toPx: number, cb?: () => void) => {
@@ -254,6 +284,8 @@ export function GamePage({
   const finishInteract = () => {
     setIsInteracting(false);
     setDragX(0);
+    // Après retour en mode statique, remesurer à la frame suivante
+    requestAnimationFrame(measureStaticHeight);
   };
 
   const onPointerUp: React.PointerEventHandler<HTMLDivElement> = () => {
@@ -336,26 +368,27 @@ export function GamePage({
 
   // Rendu d'un panneau selon la clé
   const renderPane = (key: TabKey) => {
+    if (!currentPlayer) return null;
     switch (key) {
       case 'combat':
-        return <CombatTab player={currentPlayer!} onUpdate={applyPlayerUpdate} />;
+        return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
       case 'class':
-        return <ClassesTab player={currentPlayer!} onUpdate={applyPlayerUpdate} />;
+        return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
       case 'abilities':
-        return <AbilitiesTab player={currentPlayer!} onUpdate={applyPlayerUpdate} />;
+        return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
       case 'stats':
-        return <StatsTab player={currentPlayer!} onUpdate={applyPlayerUpdate} />;
+        return <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
       case 'equipment':
         return (
           <EquipmentTab
-            player={currentPlayer!}
+            player={currentPlayer}
             inventory={inventory}
             onPlayerUpdate={applyPlayerUpdate}
             onInventoryUpdate={setInventory}
           />
         );
       case 'profile':
-        return <PlayerProfileProfileTab player={currentPlayer!} />;
+        return <PlayerProfileProfileTab player={currentPlayer} />;
       default:
         return null;
     }
@@ -436,7 +469,7 @@ export function GamePage({
 
             <TabNavigation activeTab={activeTab} onTabChange={handleTabClickChange} />
 
-            {/* Stage: conteneur RELATIF qui garde la hauteur naturelle en mode statique */}
+            {/* Stage: conteneur RELATIF qui ne rend JAMAIS statique + overlay en même temps */}
             <div
               ref={stageRef}
               className="relative"
@@ -444,17 +477,22 @@ export function GamePage({
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
-              style={{ touchAction: 'pan-y' }}
+              style={{
+                touchAction: 'pan-y',
+                // Fixe la hauteur (mesurée) pendant l’interaction/animation pour éviter les sauts
+                height: isInteracting || animating ? containerH : undefined,
+              }}
             >
-              {/* Contenu STATIQUE (toujours dans le flux, assure la hauteur) */}
-              <div>
-                {renderPane(activeTab)}
-              </div>
+              {/* MODE STATIQUE (aucune interaction en cours) */}
+              {!(isInteracting || animating) && (
+                <div ref={staticRef}>
+                  {renderPane(activeTab)}
+                </div>
+              )}
 
-              {/* Overlay ABSOLU affiché uniquement pendant le drag/animation */}
+              {/* MODE OVERLAY (pendant le drag / l’animation) */}
               {(isInteracting || animating) && (
                 <div
-                  ref={overlayRef}
                   className="sv-viewport"
                   style={{
                     position: 'absolute',
@@ -463,6 +501,7 @@ export function GamePage({
                 >
                   {/* Panneau courant (overlay) */}
                   <div
+                    ref={overlayCurrentRef}
                     className={`sv-pane ${animating ? 'sv-anim' : ''}`}
                     style={{ transform: currentTransform }}
                   >
@@ -472,6 +511,7 @@ export function GamePage({
                   {/* Panneau voisin (overlay) */}
                   {neighborType && (
                     <div
+                      ref={overlayNeighborRef}
                       className={`sv-pane ${animating ? 'sv-anim' : ''}`}
                       style={{ transform: neighborTransform }}
                     >
