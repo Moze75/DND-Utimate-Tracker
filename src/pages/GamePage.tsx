@@ -15,18 +15,18 @@ import { ClassesTab } from '../components/ClassesTab';
 import { PlayerContext } from '../contexts/PlayerContext';
 
 import { inventoryService } from '../services/inventoryService';
-import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab'; // + Profil
+import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab';
 
-// Ajout: Pager animé
 import SwipePager from '../components/SwipePager';
+import TabGuard from '../components/TabGuard'; // <- ajout
 
-type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile'; // + 'profile'
+type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile';
 
 const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter';
 const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
 const lastTabKeyFor = (playerId: string) => `ut:lastActiveTab:${playerId}`;
 const isValidTab = (t: string | null): t is TabKey =>
-  t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class' || t === 'profile'; // + profile
+  t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class' || t === 'profile';
 
 type GamePageProps = {
   session: any;
@@ -35,11 +35,9 @@ type GamePageProps = {
   onUpdateCharacter?: (p: Player) => void;
 };
 
-// Gèle le scroll (préserve la position) pendant un changement d’onglet
 function freezeScroll(): number {
   const y = window.scrollY || window.pageYOffset || 0;
   const body = document.body;
-  // Sauvegarde pour restauration
   (body as any).__scrollY = y;
   body.style.position = 'fixed';
   body.style.top = `-${y}px`;
@@ -51,18 +49,14 @@ function freezeScroll(): number {
 function unfreezeScroll() {
   const body = document.body;
   const y = (body as any).__scrollY || 0;
-  // Reset styles
   body.style.position = '';
   body.style.top = '';
   body.style.left = '';
   body.style.right = '';
   body.style.width = '';
-  // Restaure la position exacte
   window.scrollTo(0, y);
   delete (body as any).__scrollY;
 }
-
-// Maintient la position pendant quelques frames pour contrer les reflows tardifs
 function stabilizeScroll(y: number, durationMs = 350) {
   const start = performance.now();
   const tick = (now: number) => {
@@ -80,13 +74,9 @@ export function GamePage({
 }: GamePageProps) {
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-
-  // Source de vérité locale pour le joueur courant (évite les "sauts" d'UI)
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(selectedCharacter);
-
   const [inventory, setInventory] = useState<any[]>([]);
 
-  // Restaure l'onglet actif dès l'init, de façon synchrone (aucun flash vers 'combat')
   const initialTab: TabKey = (() => {
     try {
       const saved = localStorage.getItem(lastTabKeyFor(selectedCharacter.id));
@@ -97,29 +87,21 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // Indices d'onglets pour le SwipePager (ordre cohérent avec TabNavigation)
   const tabIds: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
   const activeIndex = tabIds.indexOf(activeTab);
-  // Pour le swipe: on change d'onglet directement (pas de freeze/unfreeze)
   const setIndex = (i: number) => setActiveTab(tabIds[i]);
 
-  // Pour ne pas remettre le spinner en boucle: on ne ré-initialise que si l'ID change
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
-  // Centralise toutes les mises à jour du joueur
   const applyPlayerUpdate = useCallback(
     (updated: Player) => {
       setCurrentPlayer(updated);
       try {
         onUpdateCharacter?.(updated);
-      } catch {
-        // no-op
-      }
+      } catch {}
       try {
         localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(updated));
-      } catch {
-        // non critique
-      }
+      } catch {}
     },
     [onUpdateCharacter]
   );
@@ -128,9 +110,7 @@ export function GamePage({
     if (currentPlayer) {
       try {
         localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(currentPlayer));
-      } catch {
-        // non critique
-      }
+      } catch {}
     }
   }, [currentPlayer]);
 
@@ -144,7 +124,6 @@ export function GamePage({
         localStorage.setItem(lastTabKeyFor(selectedCharacter.id), activeTab);
       } catch {}
     };
-
     window.addEventListener('visibilitychange', persist);
     window.addEventListener('pagehide', persist);
     return () => {
@@ -208,23 +187,15 @@ export function GamePage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCharacter.id]);
 
-  // Empêche le "saut" de page lors du changement d’onglet via la barre (clic)
   const handleTabChange = useCallback((tab: string) => {
-    // Gèle scroll (aucun mouvement pendant les reflows)
     const y = freezeScroll();
-
-    // Désactive temporairement le smooth scroll global pour éviter l’animation
     const root = document.documentElement;
     const prevBehavior = root.style.scrollBehavior;
     root.style.scrollBehavior = 'auto';
-
     setActiveTab(tab as TabKey);
-
-    // Laisse React peindre, puis restaure le scroll et stabilise pendant quelques frames
     requestAnimationFrame(() => {
-      unfreezeScroll();         // rétablit la position exacte
-      stabilizeScroll(y, 400);  // maintient la position ~0.4s contre les reflows tardifs
-      // Restaure le scroll-behavior précédent après stabilisation
+      unfreezeScroll();
+      stabilizeScroll(y, 400);
       setTimeout(() => {
         root.style.scrollBehavior = prevBehavior;
       }, 420);
@@ -290,7 +261,6 @@ export function GamePage({
   }
 
   return (
-    // Ajout overflow-x-hidden pour couper toute dérive horizontale
     <div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor overflow-x-hidden">
       <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6 overflow-x-hidden">
         {currentPlayer && (
@@ -299,43 +269,60 @@ export function GamePage({
 
             <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
 
-            {/* Contenu des onglets avec swipe animé, encapsulé pour éviter les débordements */}
             <div className="w-full overflow-x-hidden">
               <SwipePager
                 className="w-full min-w-0"
                 index={activeIndex}
-                onIndexChange={setIndex}            // swipe -> setActiveTab direct
+                onIndexChange={setIndex}
                 count={tabIds.length}
                 renderPage={(i) => {
                   const id = tabIds[i];
                   switch (id) {
                     case 'combat':
-                      return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+                      return (
+                        <TabGuard>
+                          <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                        </TabGuard>
+                      );
                     case 'class':
-                      return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+                      return (
+                        <TabGuard>
+                          <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                        </TabGuard>
+                      );
                     case 'abilities':
-                      return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+                      return (
+                        <TabGuard>
+                          <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                        </TabGuard>
+                      );
                     case 'stats':
-                      return <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+                      return (
+                        <TabGuard>
+                          <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                        </TabGuard>
+                      );
                     case 'equipment':
                       return (
-                        <EquipmentTab
-                          player={currentPlayer}
-                          inventory={inventory}
-                          onPlayerUpdate={applyPlayerUpdate}
-                          onInventoryUpdate={setInventory}
-                        />
+                        <TabGuard>
+                          <EquipmentTab
+                            player={currentPlayer}
+                            inventory={inventory}
+                            onPlayerUpdate={applyPlayerUpdate}
+                            onInventoryUpdate={setInventory}
+                          />
+                        </TabGuard>
                       );
                     case 'profile':
-                      return <PlayerProfileProfileTab player={currentPlayer} />;
+                      return (
+                        <TabGuard>
+                          <PlayerProfileProfileTab player={currentPlayer} />
+                        </TabGuard>
+                      );
                     default:
                       return null;
                   }
                 }}
-                // Options d’animation (facultatives) — décommente si besoin:
-                // wrap={true}
-                // thresholdPx={56}
-                // durationMs={260}
               />
             </div>
           </PlayerContext.Provider>
