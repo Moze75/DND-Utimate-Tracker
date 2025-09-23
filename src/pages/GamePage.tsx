@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { LogOut } from 'lucide-react';
-import { SwipeNavigator } from '../components/SwipeNavigator';
+// import { SwipeNavigator } from '../components/SwipeNavigator'; // plus utilisé ici
 
 import { testConnection } from '../lib/supabase';
 import { Player } from '../types/dnd';
@@ -18,17 +18,18 @@ import { PlayerContext } from '../contexts/PlayerContext';
 import { inventoryService } from '../services/inventoryService';
 import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab'; // + Profil
 
-import '../styles/swipe.css'; // <- animations de glissement
+import '../styles/swipe.css'; // animations et swipe interactif
 
-type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile'; // + 'profile'
+type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile';
 
 const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter';
 const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
 const lastTabKeyFor = (playerId: string) => `ut:lastActiveTab:${playerId}`;
 const isValidTab = (t: string | null): t is TabKey =>
-  t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class' || t === 'profile'; // + profile
+  t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class' || t === 'profile';
 
-// Ordre des onglets pour savoir où aller en swipe gauche/droite
+// Ordre des onglets (gauche -> droite)
+// PV/actions -> Classe -> Sorts -> Stats -> Sac -> Profil
 const TAB_ORDER: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
 
 type GamePageProps = {
@@ -42,7 +43,6 @@ type GamePageProps = {
 function freezeScroll(): number {
   const y = window.scrollY || window.pageYOffset || 0;
   const body = document.body;
-  // Sauvegarde pour restauration
   (body as any).__scrollY = y;
   body.style.position = 'fixed';
   body.style.top = `-${y}px`;
@@ -54,18 +54,14 @@ function freezeScroll(): number {
 function unfreezeScroll() {
   const body = document.body;
   const y = (body as any).__scrollY || 0;
-  // Reset styles
   body.style.position = '';
   body.style.top = '';
   body.style.left = '';
   body.style.right = '';
   body.style.width = '';
-  // Restaure la position exacte
   window.scrollTo(0, y);
   delete (body as any).__scrollY;
 }
-
-// Maintient la position pendant quelques frames pour contrer les reflows tardifs
 function stabilizeScroll(y: number, durationMs = 350) {
   const start = performance.now();
   const tick = (now: number) => {
@@ -84,12 +80,9 @@ export function GamePage({
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
-  // Source de vérité locale pour le joueur courant (évite les "sauts" d'UI)
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(selectedCharacter);
-
   const [inventory, setInventory] = useState<any[]>([]);
 
-  // Restaure l'onglet actif dès l'init, de façon synchrone (aucun flash vers 'combat')
   const initialTab: TabKey = (() => {
     try {
       const saved = localStorage.getItem(lastTabKeyFor(selectedCharacter.id));
@@ -100,26 +93,27 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // Direction de l'animation: 'left' => arrivée depuis la droite, 'right' => arrivée depuis la gauche
-  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
+  // Etat pour le swipe interactif
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const widthRef = useRef<number>(0);
+  const startXRef = useRef<number | null>(null);
+  const startYRef = useRef<number | null>(null);
+  const swipingRef = useRef<boolean>(false);
+  const [dragX, setDragX] = useState(0);
+  const [animating, setAnimating] = useState(false);
+  const dragStartScrollYRef = useRef<number>(0);
 
-  // Pour ne pas remettre le spinner en boucle: on ne ré-initialise que si l'ID change
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
-  // Centralise toutes les mises à jour du joueur
   const applyPlayerUpdate = useCallback(
     (updated: Player) => {
       setCurrentPlayer(updated);
       try {
         onUpdateCharacter?.(updated);
-      } catch {
-        // no-op
-      }
+      } catch {}
       try {
         localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(updated));
-      } catch {
-        // non critique
-      }
+      } catch {}
     },
     [onUpdateCharacter]
   );
@@ -128,9 +122,7 @@ export function GamePage({
     if (currentPlayer) {
       try {
         localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(currentPlayer));
-      } catch {
-        // non critique
-      }
+      } catch {}
     }
   }, [currentPlayer]);
 
@@ -144,7 +136,6 @@ export function GamePage({
         localStorage.setItem(lastTabKeyFor(selectedCharacter.id), activeTab);
       } catch {}
     };
-
     window.addEventListener('visibilitychange', persist);
     window.addEventListener('pagehide', persist);
     return () => {
@@ -201,64 +192,138 @@ export function GamePage({
       prevPlayerId.current = selectedCharacter.id;
       initialize();
     } else {
-      if (loading) {
-        initialize();
-      }
+      if (loading) initialize();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCharacter.id]);
 
-  // Calcul de direction d'animation par rapport à l'ordre TAB_ORDER
-  const computeDirection = (from: TabKey, to: TabKey): 'left' | 'right' | null => {
-    const fromIdx = TAB_ORDER.indexOf(from);
-    const toIdx = TAB_ORDER.indexOf(to);
-    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return null;
-    return toIdx > fromIdx ? 'left' : 'right';
+  // Détermination des voisins (pour afficher seulement prev/current/next)
+  const activeIndex = TAB_ORDER.indexOf(activeTab);
+  const prevKey = activeIndex > 0 ? TAB_ORDER[activeIndex - 1] : null;
+  const nextKey = activeIndex < TAB_ORDER.length - 1 ? TAB_ORDER[activeIndex + 1] : null;
+
+  // Mesure la largeur quand ça (re)monte
+  useEffect(() => {
+    const measure = () => {
+      if (!viewportRef.current) return;
+      widthRef.current = viewportRef.current.clientWidth;
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
+  // Handlers pointer/touch pour le suivi du doigt
+  const onPointerDown: React.PointerEventHandler<HTMLDivElement> = (e) => {
+    if (e.pointerType === 'mouse' && e.buttons !== 1) return;
+    startXRef.current = e.clientX;
+    startYRef.current = e.clientY;
+    swipingRef.current = false;
+    setAnimating(false);
+    if (viewportRef.current) {
+      viewportRef.current.setPointerCapture?.(e.pointerId);
+    }
   };
 
-  // Empêche le "saut" de page lors du changement d’onglet + déclenche l'animation
-  const handleTabChange = useCallback((tab: string) => {
-    const target = tab as TabKey;
-    const dir = computeDirection(activeTab, target);
+  const onPointerMove: React.PointerEventHandler<HTMLDivElement> = (e) => {
+    if (startXRef.current == null || startYRef.current == null) return;
 
-    // Gèle scroll (aucun mouvement pendant les reflows)
+    const dx = e.clientX - startXRef.current;
+    const dy = e.clientY - startYRef.current;
+
+    // Déclenche le swipe si prédominance horizontale
+    if (!swipingRef.current && Math.abs(dx) > 10 && Math.abs(Math.abs(dx) - Math.abs(dy)) > 4) {
+      swipingRef.current = true;
+      // On gèle le scroll dès qu'on part en horizontal
+      dragStartScrollYRef.current = freezeScroll();
+      // Mesure largeur si besoin
+      if (viewportRef.current) {
+        widthRef.current = viewportRef.current.clientWidth;
+      }
+    }
+
+    if (!swipingRef.current) return;
+
+    // Empêche le scroll natif horizontal
+    e.preventDefault();
+
+    // On empêche de tirer là où il n'y a pas de page
+    let clampedDx = dx;
+    if (!prevKey && dx > 0) clampedDx = 0;      // pas de page à gauche
+    if (!nextKey && dx < 0) clampedDx = 0;      // pas de page à droite
+
+    setDragX(clampedDx);
+  };
+
+  const completeTransition = (direction: -1 | 1) => {
+    // direction -1 = vers la page de gauche (prev), 1 = vers la page de droite (next)
+    const width = widthRef.current || (viewportRef.current?.clientWidth ?? 0);
+    setAnimating(true);
+    setDragX(direction * width);
+    // Après l'animation, on change réellement d'onglet puis on reset
+    window.setTimeout(() => {
+      const idx = TAB_ORDER.indexOf(activeTab);
+      const targetIndex = idx + (direction === 1 ? 1 : -1);
+      const targetKey = TAB_ORDER[targetIndex] ?? activeTab;
+      setActiveTab(targetKey);
+      setAnimating(false);
+      setDragX(0);
+      unfreezeScroll();
+      stabilizeScroll(dragStartScrollYRef.current, 400);
+    }, 310);
+  };
+
+  const cancelTransition = () => {
+    setAnimating(true);
+    setDragX(0);
+    window.setTimeout(() => {
+      setAnimating(false);
+      unfreezeScroll();
+      stabilizeScroll(dragStartScrollYRef.current, 300);
+    }, 300);
+  };
+
+  const onPointerUp: React.PointerEventHandler<HTMLDivElement> = () => {
+    if (startXRef.current == null || startYRef.current == null) return;
+
+    if (swipingRef.current) {
+      const width = widthRef.current || (viewportRef.current?.clientWidth ?? 0);
+      const threshold = Math.max(48, width * 0.25);
+      if (dragX <= -threshold && nextKey) {
+        // glisse vers la gauche -> page suivante (droite visuelle)
+        completeTransition(1);
+      } else if (dragX >= threshold && prevKey) {
+        // glisse vers la droite -> page précédente (gauche visuelle)
+        completeTransition(-1);
+      } else {
+        cancelTransition();
+      }
+    }
+
+    // reset
+    startXRef.current = null;
+    startYRef.current = null;
+    swipingRef.current = false;
+  };
+
+  const handleTabClickChange = useCallback((tab: string) => {
+    // Changement via clic: on réutilise le freeze pour éviter les sauts,
+    // mais sans animation de swipe.
     const y = freezeScroll();
-
-    // Désactive temporairement le smooth scroll global pour éviter l’animation native
     const root = document.documentElement;
     const prevBehavior = root.style.scrollBehavior;
     root.style.scrollBehavior = 'auto';
 
-    setSlideDirection(dir);
-    setActiveTab(target);
+    setActiveTab(tab as TabKey);
 
-    // Laisse React peindre, puis restaure le scroll et stabilise pendant quelques frames
     requestAnimationFrame(() => {
-      unfreezeScroll();         // rétablit la position exacte
-      stabilizeScroll(y, 400);  // maintient la position ~0.4s contre les reflows tardifs
-      // Restaure le scroll-behavior précédent après stabilisation
+      unfreezeScroll();
+      stabilizeScroll(y, 400);
       setTimeout(() => {
         root.style.scrollBehavior = prevBehavior;
       }, 420);
-      // Nettoie la direction après l'animation
-      setTimeout(() => {
-        setSlideDirection(null);
-      }, 450);
     });
-  }, [activeTab]);
-
-  // Swipes: aller à l'onglet suivant / précédent selon TAB_ORDER
-  const goToNextTab = useCallback(() => {
-    const idx = TAB_ORDER.indexOf(activeTab);
-    if (idx === -1 || idx === TAB_ORDER.length - 1) return; // déjà au dernier
-    handleTabChange(TAB_ORDER[idx + 1]);
-  }, [activeTab, handleTabChange]);
-
-  const goToPrevTab = useCallback(() => {
-    const idx = TAB_ORDER.indexOf(activeTab);
-    if (idx <= 0) return; // déjà au premier
-    handleTabChange(TAB_ORDER[idx - 1]);
-  }, [activeTab, handleTabChange]);
+  }, []);
 
   const handleBackToSelection = () => {
     try {
@@ -319,38 +384,74 @@ export function GamePage({
   }
 
   return (
-    // Ajoute la classe utilitaire pour neutraliser l'overflow anchoring
     <div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor">
       <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6">
         {currentPlayer && (
           <PlayerContext.Provider value={currentPlayer}>
             <PlayerProfile player={currentPlayer} onUpdate={applyPlayerUpdate} />
 
-            <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
+            <TabNavigation activeTab={activeTab} onTabChange={handleTabClickChange} />
 
-            {/* Zone swipe + animation d'arrivée du contenu */}
-            <SwipeNavigator onSwipeLeft={goToNextTab} onSwipeRight={goToPrevTab}>
-              <div className="slide-container">
-                <div
-                  key={activeTab}
-                  className={[
-                    'slide-content',
-                    slideDirection === 'left' ? 'slide-in-left' : '',
-                    slideDirection === 'right' ? 'slide-in-right' : '',
-                  ].join(' ')}
-                >
+            {/* Swipe interactif: on affiche seulement prev / current / next */}
+            <div
+              ref={viewportRef}
+              className="swipe-viewport"
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+              style={{ touchAction: 'pan-y' }}
+            >
+              {/* La piste est centrée sur le panneau courant (-100%) + offset en px */}
+              <div
+                className={`swipe-track ${animating ? 'animating' : ''}`}
+                style={{
+                  transform: `translateX(calc(-100% + ${dragX}px))`,
+                }}
+              >
+                <div className="swipe-pane adjacent">
+                  {prevKey && (
+                    <>
+                      {prevKey === 'combat' && (
+                        <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                      )}
+                      {prevKey === 'class' && (
+                        <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                      )}
+                      {prevKey === 'abilities' && (
+                        <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                      )}
+                      {prevKey === 'stats' && (
+                        <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                      )}
+                      {prevKey === 'equipment' && (
+                        <EquipmentTab
+                          player={currentPlayer}
+                          inventory={inventory}
+                          onPlayerUpdate={applyPlayerUpdate}
+                          onInventoryUpdate={setInventory}
+                        />
+                      )}
+                      {prevKey === 'profile' && (
+                        <PlayerProfileProfileTab player={currentPlayer} />
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <div className="swipe-pane">
                   {activeTab === 'combat' && (
                     <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
                   )}
-
+                  {activeTab === 'class' && (
+                    <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                  )}
                   {activeTab === 'abilities' && (
                     <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
                   )}
-
                   {activeTab === 'stats' && (
                     <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
                   )}
-
                   {activeTab === 'equipment' && (
                     <EquipmentTab
                       player={currentPlayer}
@@ -359,17 +460,42 @@ export function GamePage({
                       onInventoryUpdate={setInventory}
                     />
                   )}
-
-                  {activeTab === 'class' && (
-                    <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-                  )}
-
                   {activeTab === 'profile' && (
                     <PlayerProfileProfileTab player={currentPlayer} />
                   )}
                 </div>
+
+                <div className="swipe-pane adjacent">
+                  {nextKey && (
+                    <>
+                      {nextKey === 'combat' && (
+                        <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                      )}
+                      {nextKey === 'class' && (
+                        <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                      )}
+                      {nextKey === 'abilities' && (
+                        <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                      )}
+                      {nextKey === 'stats' && (
+                        <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                      )}
+                      {nextKey === 'equipment' && (
+                        <EquipmentTab
+                          player={currentPlayer}
+                          inventory={inventory}
+                          onPlayerUpdate={applyPlayerUpdate}
+                          onInventoryUpdate={setInventory}
+                        />
+                      )}
+                      {nextKey === 'profile' && (
+                        <PlayerProfileProfileTab player={currentPlayer} />
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
-            </SwipeNavigator>
+            </div>
           </PlayerContext.Provider>
         )}
       </div>
