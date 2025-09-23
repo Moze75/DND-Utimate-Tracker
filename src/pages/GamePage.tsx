@@ -95,6 +95,13 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
+// Ordre identique à TabNavigation.tsx
+const tabIds: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
+const activeIndex = tabIds.indexOf(activeTab);
+
+// Important: pour le swipe, on change d'onglet SANS freeze/unfreeze du scroll
+const setIndex = (i: number) => setActiveTab(tabIds[i]);
+  
   // Pour ne pas remettre le spinner en boucle: on ne ré-initialise que si l'ID change
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
