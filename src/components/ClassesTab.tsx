@@ -18,7 +18,7 @@ import {
   Plus,
   Minus,
   ListChecks,
-  biceps-flexed,
+  biceps,
 } from 'lucide-react';
 
 import toast from 'react-hot-toast';
@@ -1353,7 +1353,7 @@ function ClassResourcesCard({
           items.push(
             <ResourceBlock
               key="innate_sorcery"
-              icon={<biceps-flexed size={20} />}
+              icon={<biceps size={20} />}
               label="Sorcellerie innée"
               total={innateTotal}
               used={innateUsed}
