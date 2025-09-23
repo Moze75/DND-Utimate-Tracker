@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { LogOut } from 'lucide-react';
-// import { SwipeNavigator } from '../components/SwipeNavigator'; // plus utilisé ici
+// import { SwipeNavigator } from '../components/SwipeNavigator'; // non utilisé avec le swipe progressif
 
 import { testConnection } from '../lib/supabase';
 import { Player } from '../types/dnd';
@@ -16,9 +16,9 @@ import { ClassesTab } from '../components/ClassesTab';
 import { PlayerContext } from '../contexts/PlayerContext';
 
 import { inventoryService } from '../services/inventoryService';
-import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab'; // + Profil
+import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab';
 
-import '../styles/swipe.css'; // animations et swipe interactif
+import '../styles/swipe.css';
 
 type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile';
 
@@ -28,7 +28,7 @@ const lastTabKeyFor = (playerId: string) => `ut:lastActiveTab:${playerId}`;
 const isValidTab = (t: string | null): t is TabKey =>
   t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class' || t === 'profile';
 
-// Ordre des onglets (gauche -> droite)
+// IMPORTANT: ordre visuel de gauche à droite
 // PV/actions -> Classe -> Sorts -> Stats -> Sac -> Profil
 const TAB_ORDER: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
 
@@ -44,11 +44,13 @@ function freezeScroll(): number {
   const y = window.scrollY || window.pageYOffset || 0;
   const body = document.body;
   (body as any).__scrollY = y;
+  // Astuce: on évite 100vh ici (problème barre d'adresse mobile)
   body.style.position = 'fixed';
   body.style.top = `-${y}px`;
   body.style.left = '0';
   body.style.right = '0';
-  body.style.width = '100%';
+  body.style.width = '100%';      // pas de 100vw (peut inclure la scrollbar et déborder)
+  body.style.overflowY = 'scroll';// conserve la largeur, évite "jump" lié à la scrollbar
   return y;
 }
 function unfreezeScroll() {
@@ -59,6 +61,7 @@ function unfreezeScroll() {
   body.style.left = '';
   body.style.right = '';
   body.style.width = '';
+  body.style.overflowY = '';
   window.scrollTo(0, y);
   delete (body as any).__scrollY;
 }
@@ -93,7 +96,7 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // Etat pour le swipe interactif
+  // Swipe interactif (progressif)
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const widthRef = useRef<number>(0);
   const startXRef = useRef<number | null>(null);
@@ -197,12 +200,12 @@ export function GamePage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCharacter.id]);
 
-  // Détermination des voisins (pour afficher seulement prev/current/next)
+  // voisins
   const activeIndex = TAB_ORDER.indexOf(activeTab);
   const prevKey = activeIndex > 0 ? TAB_ORDER[activeIndex - 1] : null;
   const nextKey = activeIndex < TAB_ORDER.length - 1 ? TAB_ORDER[activeIndex + 1] : null;
 
-  // Mesure la largeur quand ça (re)monte
+  // mesure largeur
   useEffect(() => {
     const measure = () => {
       if (!viewportRef.current) return;
@@ -213,16 +216,14 @@ export function GamePage({
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  // Handlers pointer/touch pour le suivi du doigt
+  // Handlers pointer (fonctionne souris + tactile); sur iOS, TouchEvents marchent aussi
   const onPointerDown: React.PointerEventHandler<HTMLDivElement> = (e) => {
     if (e.pointerType === 'mouse' && e.buttons !== 1) return;
     startXRef.current = e.clientX;
     startYRef.current = e.clientY;
     swipingRef.current = false;
     setAnimating(false);
-    if (viewportRef.current) {
-      viewportRef.current.setPointerCapture?.(e.pointerId);
-    }
+    viewportRef.current?.setPointerCapture?.(e.pointerId);
   };
 
   const onPointerMove: React.PointerEventHandler<HTMLDivElement> = (e) => {
@@ -231,36 +232,33 @@ export function GamePage({
     const dx = e.clientX - startXRef.current;
     const dy = e.clientY - startYRef.current;
 
-    // Déclenche le swipe si prédominance horizontale
+    // déclenche si l’horizontal prend le dessus
     if (!swipingRef.current && Math.abs(dx) > 10 && Math.abs(Math.abs(dx) - Math.abs(dy)) > 4) {
       swipingRef.current = true;
-      // On gèle le scroll dès qu'on part en horizontal
       dragStartScrollYRef.current = freezeScroll();
-      // Mesure largeur si besoin
-      if (viewportRef.current) {
-        widthRef.current = viewportRef.current.clientWidth;
-      }
+      widthRef.current = viewportRef.current?.clientWidth ?? widthRef.current;
     }
 
     if (!swipingRef.current) return;
 
-    // Empêche le scroll natif horizontal
     e.preventDefault();
 
-    // On empêche de tirer là où il n'y a pas de page
-    let clampedDx = dx;
-    if (!prevKey && dx > 0) clampedDx = 0;      // pas de page à gauche
-    if (!nextKey && dx < 0) clampedDx = 0;      // pas de page à droite
+    const width = widthRef.current || viewportRef.current?.clientWidth || 0;
+
+    // borne le drag à [-width, width]
+    let clampedDx = Math.max(Math.min(dx, width), -width);
+
+    // bloque si pas de page de ce côté
+    if (!prevKey && clampedDx > 0) clampedDx = 0;
+    if (!nextKey && clampedDx < 0) clampedDx = 0;
 
     setDragX(clampedDx);
   };
 
   const completeTransition = (direction: -1 | 1) => {
-    // direction -1 = vers la page de gauche (prev), 1 = vers la page de droite (next)
     const width = widthRef.current || (viewportRef.current?.clientWidth ?? 0);
     setAnimating(true);
     setDragX(direction * width);
-    // Après l'animation, on change réellement d'onglet puis on reset
     window.setTimeout(() => {
       const idx = TAB_ORDER.indexOf(activeTab);
       const targetIndex = idx + (direction === 1 ? 1 : -1);
@@ -290,25 +288,20 @@ export function GamePage({
       const width = widthRef.current || (viewportRef.current?.clientWidth ?? 0);
       const threshold = Math.max(48, width * 0.25);
       if (dragX <= -threshold && nextKey) {
-        // glisse vers la gauche -> page suivante (droite visuelle)
-        completeTransition(1);
+        completeTransition(1);   // vers la page de droite (prochaine)
       } else if (dragX >= threshold && prevKey) {
-        // glisse vers la droite -> page précédente (gauche visuelle)
-        completeTransition(-1);
+        completeTransition(-1);  // vers la page de gauche (précédente)
       } else {
         cancelTransition();
       }
     }
 
-    // reset
     startXRef.current = null;
     startYRef.current = null;
     swipingRef.current = false;
   };
 
   const handleTabClickChange = useCallback((tab: string) => {
-    // Changement via clic: on réutilise le freeze pour éviter les sauts,
-    // mais sans animation de swipe.
     const y = freezeScroll();
     const root = document.documentElement;
     const prevBehavior = root.style.scrollBehavior;
@@ -392,7 +385,7 @@ export function GamePage({
 
             <TabNavigation activeTab={activeTab} onTabChange={handleTabClickChange} />
 
-            {/* Swipe interactif: on affiche seulement prev / current / next */}
+            {/* 3) Swipe progressif verrouillé à la largeur du viewport */}
             <div
               ref={viewportRef}
               className="swipe-viewport"
@@ -402,11 +395,11 @@ export function GamePage({
               onPointerCancel={onPointerUp}
               style={{ touchAction: 'pan-y' }}
             >
-              {/* La piste est centrée sur le panneau courant (-100%) + offset en px */}
               <div
                 className={`swipe-track ${animating ? 'animating' : ''}`}
                 style={{
-                  transform: `translateX(calc(-100% + ${dragX}px))`,
+                  // translate3d évite des sous-pixels qui peuvent créer un 1px de débordement
+                  transform: `translate3d(calc(-100% + ${dragX}px), 0, 0)`,
                 }}
               >
                 <div className="swipe-pane adjacent">
