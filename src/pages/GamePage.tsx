@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { LogOut } from 'lucide-react';
 import { SwipeNavigator } from '../components/SwipeNavigator';
-import { SwipePager } from '../components/SwipePager';
 
 import { testConnection } from '../lib/supabase';
 import { Player } from '../types/dnd';
@@ -96,15 +95,6 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-// Doit refléter l'ordre des 6 onglets (cohérent avec TabNavigation.tsx)
-const tabIds: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
-
-const tabIndex = tabIds.indexOf(activeTab);
-const setTabIndex = (i: number) => {
-  const next = (i + tabIds.length) % tabIds.length; // wrap
-  handleTabChange(tabIds[next]);
-};
-  
   // Pour ne pas remettre le spinner en boucle: on ne ré-initialise que si l'ID change
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
@@ -300,38 +290,6 @@ const setTabIndex = (i: number) => {
             <PlayerProfile player={currentPlayer} onUpdate={applyPlayerUpdate} />
 
             <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
-
-                  {/* Contenu swipable */}
-        <SwipeNavigator index={tabIndex} setIndex={setTabIndex} count={tabIds.length}>
-          {activeTab === 'combat' && (
-            <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-          )}
-        
-          {activeTab === 'abilities' && (
-            <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-          )}
-        
-          {activeTab === 'stats' && (
-            <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-          )}
-        
-          {activeTab === 'equipment' && (
-            <EquipmentTab
-              player={currentPlayer}
-              inventory={inventory}
-              onPlayerUpdate={applyPlayerUpdate}
-              onInventoryUpdate={setInventory}
-            />
-          )}
-        
-          {activeTab === 'class' && (
-            <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-          )}
-        
-          {activeTab === 'profile' && (
-            <PlayerProfileProfileTab player={currentPlayer} />
-          )}
-        </SwipeNavigator>
             
             {activeTab === 'combat' && (
               <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
