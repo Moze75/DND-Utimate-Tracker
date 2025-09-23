@@ -18,8 +18,7 @@ import {
   Plus,
   Minus,
   ListChecks,
-  Dumbbell,
-} from 'lucide-react';
+  } from 'lucide-react';
 
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
@@ -1353,7 +1352,7 @@ function ClassResourcesCard({
           items.push(
             <ResourceBlock
               key="innate_sorcery"
-              icon={<Dumbbell size={20} />}
+              icon={<Flame size={20} />}
               label="Sorcellerie innée"
               total={innateTotal}
               used={innateUsed}
