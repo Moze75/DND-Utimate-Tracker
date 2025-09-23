@@ -302,7 +302,8 @@ const setIndex = (i: number) => setActiveTab(tabIds[i]);
               <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
             )}
 
-<SwipePager
+    <SwipePager
+  className="w-full"
   index={activeIndex}
   onIndexChange={setIndex}
   count={tabIds.length}
@@ -324,12 +325,15 @@ const setIndex = (i: number) => setActiveTab(tabIds[i]);
             inventory={inventory}
             onPlayerUpdate={applyPlayerUpdate}
             onInventoryUpdate={setInventory}
-          /> 
+          />
         );
       case 'profile':
         return <PlayerProfileProfileTab player={currentPlayer} />;
       default:
         return null;
+    }
+  }}
+/>
     }
   }}
   // Options d’animation (facultatives)
