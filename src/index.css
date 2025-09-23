@@ -1,4 +1,4 @@
-@tailwind base; 
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -215,5 +215,4 @@ select {
 
 /* Styles pour le reste des éléments et animations conservés depuis ton CSS précédent */
 
-/* … (tout le reste de ton CSS précédent reste inchangé) … */
-  
+/* … (tout le reste de ton CSS précédent reste inchangé) … */ 
