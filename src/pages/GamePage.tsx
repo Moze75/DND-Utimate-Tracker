@@ -290,45 +290,52 @@ const setIndex = (i: number) => setActiveTab(tabIds[i]);
 
   return (
     // Ajoute la classe utilitaire pour neutraliser l'overflow anchoring
-    <div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor">
-      <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6">
-        {currentPlayer && (
-          <PlayerContext.Provider value={currentPlayer}>
-            <PlayerProfile player={currentPlayer} onUpdate={applyPlayerUpdate} />
+<div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor overflow-x-hidden">
 
-            <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
-<div className="w-full overflow-x-hidden">
-  <SwipePager
-    className="w-full min-w-0"
-    index={activeIndex}
-    onIndexChange={setIndex}        // setIndex = (i) => setActiveTab(tabIds[i])
-    count={tabIds.length}
-    renderPage={(i) => {
-      const id = tabIds[i];
-      switch (id) {
-        case 'combat':
-          return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-        case 'class':
-          return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-        case 'abilities':
-          return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-        case 'stats':
-          return <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-        case 'equipment':
-          return (
-            <EquipmentTab
-              player={currentPlayer}
-              inventory={inventory}
-              onPlayerUpdate={applyPlayerUpdate}
-              onInventoryUpdate={setInventory}
-            />
-          );
-        case 'profile':
-          return <PlayerProfileProfileTab player={currentPlayer} />;
-        default:
-          return null;
-      }
-    }}
+  // 2) Conteneur centré
+  <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6 overflow-x-hidden">
+    {currentPlayer && (
+      <PlayerContext.Provider value={currentPlayer}>
+        <PlayerProfile player={currentPlayer} onUpdate={applyPlayerUpdate} />
+        <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
+
+        {/* 3) Wrapper autour du pager (tu l’as déjà ajouté) */}
+        <div className="w-full overflow-x-hidden">
+          <SwipePager
+            className="w-full min-w-0"
+            index={activeIndex}
+            onIndexChange={setIndex}
+            count={tabIds.length}
+            renderPage={(i) => {
+              const id = tabIds[i];
+              switch (id) {
+                case 'combat':
+                  return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+                case 'class':
+                  return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+                case 'abilities':
+                  return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+                case 'stats':
+                  return <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+                case 'equipment':
+                  return (
+                    <EquipmentTab
+                      player={currentPlayer}
+                      inventory={inventory}
+                      onPlayerUpdate={applyPlayerUpdate}
+                      onInventoryUpdate={setInventory}
+                    />
+                  );
+                case 'profile':
+                  return <PlayerProfileProfileTab player={currentPlayer} />;
+                default:
+                  return null;
+              }
+            }}
+          />
+        </div>
+      </PlayerContext.Provider>
+    )}
   />
 </div>
             {activeTab === 'combat' && (
