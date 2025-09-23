@@ -30,30 +30,27 @@ export function SwipePager({
   const currentRef = React.useRef<HTMLDivElement | null>(null);
   const nextRef = React.useRef<HTMLDivElement | null>(null);
 
-  const [displayIndex, setDisplayIndex] = React.useState(index); // ce qui est montré "à l'écran"
+  const [displayIndex, setDisplayIndex] = React.useState(index);
   const prevIndexRef = React.useRef(index);
   const [width, setWidth] = React.useState(0);
   const [height, setHeight] = React.useState<number | 'auto'>('auto');
 
-  // Drag/anim state
   const [dragX, setDragX] = React.useState(0);
-  const [dir, setDir] = React.useState<0 | 1 | -1>(0); // 1: vers droite->gauche (page à droite), -1: vers gauche->droite (page à gauche)
+  const [dir, setDir] = React.useState<0 | 1 | -1>(0);
   const [dragging, setDragging] = React.useState(false);
   const [animating, setAnimating] = React.useState(false);
   const [animTargetX, setAnimTargetX] = React.useState<number | null>(null);
   const pointerIdRef = React.useRef<number | null>(null);
   const startXRef = React.useRef<number | null>(null);
   const startYRef = React.useRef<number | null>(null);
-  const decidedRef = React.useRef(false); // orientation décidée (horizontal vs vertical)
+  const decidedRef = React.useRef(false);
 
-  // Mesure largeur (ResizeObserver)
   React.useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => {
       const w = el.clientWidth;
       setWidth(w);
-      // si on redimensionne pendant une anim, on recentre
       if (!dragging && !animating) {
         setDragX(0);
       }
@@ -62,7 +59,6 @@ export function SwipePager({
     return () => ro.disconnect();
   }, [dragging, animating]);
 
-  // Calcule l’index voisin selon dir
   const neighborIndex = React.useMemo(() => {
     if (dir === 0) return null;
     const step = dir;
@@ -74,7 +70,6 @@ export function SwipePager({
     return raw;
   }, [dir, displayIndex, count, wrap]);
 
-  // Hauteur: on locke la hauteur à max(current, next) pendant anim
   const lockHeightToContent = React.useCallback(() => {
     const h1 = currentRef.current?.offsetHeight ?? 0;
     const h2 = nextRef.current?.offsetHeight ?? 0;
@@ -84,7 +79,6 @@ export function SwipePager({
 
   const unlockHeight = React.useCallback(() => setHeight('auto'), []);
 
-  // Programme l’animation vers targetX
   const animateTo = React.useCallback((targetX: number, onDone?: () => void) => {
     if (!trackRef.current) return;
     setAnimating(true);
@@ -100,7 +94,6 @@ export function SwipePager({
       onDone?.();
     };
 
-    // fallback timer + event
     const timer = window.setTimeout(handle, durationMs + 40);
     const onEnd = (e: TransitionEvent) => {
       if (e.propertyName !== 'transform') return;
@@ -110,7 +103,6 @@ export function SwipePager({
     trackRef.current.addEventListener('transitionend', onEnd, { once: true });
   }, [durationMs, lockHeightToContent, unlockHeight]);
 
-  // Gestion pointer (drag)
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (count <= 1) return;
     if (!(e.isPrimary ?? true)) return;
@@ -141,23 +133,18 @@ export function SwipePager({
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       decidedRef.current = true;
       if (Math.abs(dy) > Math.abs(dx)) {
-        // scroll vertical: on abandonne
         setDragging(false);
         startXRef.current = null;
         startYRef.current = null;
         pointerIdRef.current = null;
         return;
       }
-      // horizontal: fixe la direction au premier mouvement horizontal
       setDir(dx < 0 ? 1 : -1);
     }
 
-    // Si pas de voisin (bord sans wrap), on autorise un léger "stretch"
     const hasNeighbor = neighborIndex != null;
     const effDx = hasNeighbor ? dx : dx * 0.2;
-
     setDragX(effDx);
-    // e.preventDefault(); // décommenter si conflits de scroll horizontal
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -169,36 +156,29 @@ export function SwipePager({
     const baseX = dir === -1 ? -width : 0;
 
     if (commit) {
-      const targetX = dir === 1 ? -width : 0; // va vers la page voisine
+      const targetX = dir === 1 ? -width : 0;
       animateTo(targetX, () => {
-        // Valide le changement d’index (contrôlé par parent)
         const next = wrap
           ? (displayIndex + dir + count) % count
           : Math.max(0, Math.min(count - 1, displayIndex + dir));
         onIndexChange(next);
-        setDisplayIndex(next); // garde l’illusion fluide si parent tarde
+        setDisplayIndex(next);
       });
     } else {
-      // Retour à la position de base
       animateTo(baseX);
     }
 
-    // reset drag
     setDragging(false);
     startXRef.current = null;
     startYRef.current = null;
     pointerIdRef.current = null;
   };
 
-  // Changement d’onglet via boutons (index prop) → animer aussi
   React.useEffect(() => {
     const prev = prevIndexRef.current;
     if (index === prev) return;
-
-    // Si on vient juste de swiper, displayIndex peut déjà avoir été synché
     if (dragging || animating) return;
 
-    // Déterminer la direction "la plus courte"
     const forward = ((index - prev + count) % count);
     const backward = ((prev - index + count) % count);
     let sign: 1 | -1 = 1;
@@ -207,15 +187,11 @@ export function SwipePager({
     else sign = -1;
 
     setDir(sign);
-    // On part de displayIndex = prev
     setDisplayIndex(prev);
     setDragX(0);
 
-    // Anime un seul pas visuel vers la cible (même si saut > 1 onglet)
     const targetX = sign === 1 ? -width : 0;
-    // Lock hauteur avant anim
     lockHeightToContent();
-    // Lance l’anim au prochain frame pour que CSS prenne le transition
     requestAnimationFrame(() => {
       setAnimating(true);
       setAnimTargetX(targetX);
@@ -239,17 +215,14 @@ export function SwipePager({
     prevIndexRef.current = index;
   }, [index, count, width, dragging, animating, durationMs, lockHeightToContent, unlockHeight]);
 
-  // met à jour prevIndexRef quand index change
   React.useEffect(() => {
     prevIndexRef.current = index;
   }, [index]);
 
-  // Calcul du style du track
   const baseX = dir === -1 ? -width : 0;
   const trackX = animTargetX != null ? animTargetX : baseX + (dragging ? dragX : 0);
   const trackTransition = animTargetX != null ? `transform ${durationMs}ms ${EASING}` : 'none';
 
-  // Ordre des slides en fonction de dir
   const currentSlide = (
     <div ref={currentRef} className="w-full shrink-0">
       {renderPage(displayIndex)}
@@ -261,7 +234,6 @@ export function SwipePager({
         {renderPage(neighborIndex)}
       </div>
     ) : (
-      // Pas de voisin: affiche une "copie" pour éviter trou visuel
       <div ref={nextRef} className="w-full shrink-0" />
     );
 
