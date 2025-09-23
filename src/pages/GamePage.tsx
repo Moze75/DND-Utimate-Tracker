@@ -302,11 +302,15 @@ const setIndex = (i: number) => setActiveTab(tabIds[i]);
               <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
             )}
 
-    <SwipePager
-  className="w-full"
+  {/* Options d’animation (facultatives) */}
+<SwipePager
+  className="w-full min-w-0"
   index={activeIndex}
   onIndexChange={setIndex}
   count={tabIds.length}
+  wrap={true}          // ou false pour bloquer au premier/dernier onglet
+  thresholdPx={56}     // distance minimale pour valider un swipe
+  durationMs={260}     // durée de la transition
   renderPage={(i) => {
     const id = tabIds[i];
     switch (id) {
@@ -333,13 +337,6 @@ const setIndex = (i: number) => setActiveTab(tabIds[i]);
         return null;
     }
   }}
-/>
-    
-
-  // Options d’animation (facultatives)
-  // wrap={true}
-  // thresholdPx={56}
-  // durationMs={260}
 />
           </PlayerContext.Provider>
         )}
