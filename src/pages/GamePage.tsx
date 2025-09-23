@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { LogOut } from 'lucide-react';
-import { SwipePager } from '../components/SwipePager';
+import { LogOut } from 'lucide-react'; 
 
 import { testConnection } from '../lib/supabase';
 import { Player } from '../types/dnd';
@@ -95,13 +94,6 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
- // Ordre identique à TabNavigation.tsx
-const tabIds: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
-const activeIndex = tabIds.indexOf(activeTab);
-
-// Important: pour le swipe, on change d'onglet SANS freeze/unfreeze du scroll
-const setIndex = (i: number) => setActiveTab(tabIds[i]);
-  
   // Pour ne pas remettre le spinner en boucle: on ne ré-initialise que si l'ID change
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
@@ -297,42 +289,27 @@ const setIndex = (i: number) => setActiveTab(tabIds[i]);
             <PlayerProfile player={currentPlayer} onUpdate={applyPlayerUpdate} />
 
             <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
-            
-<SwipePager
-  index={activeIndex}
-  onIndexChange={setIndex}
-  count={tabIds.length}
-  renderPage={(i) => {
-    const id = tabIds[i];
-    switch (id) {
-      case 'combat':
-        return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-      case 'class':
-        return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-      case 'abilities':
-        return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-      case 'stats':
-        return <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-      case 'equipment':
-        return (
-          <EquipmentTab
-            player={currentPlayer}
-            inventory={inventory}
-            onPlayerUpdate={applyPlayerUpdate}
-            onInventoryUpdate={setInventory}
-          />
-        );
-      case 'profile':
-        return <PlayerProfileProfileTab player={currentPlayer} />;
-      default:
-        return null;
-    }
-  }}
-  // Options d’animation (facultatives)
-  // wrap={true}
-  // thresholdPx={56}
-  // durationMs={260}
-/>
+
+            {activeTab === 'combat' && (
+              <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+            )}
+
+            {activeTab === 'abilities' && (
+              <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+            )}
+
+            {activeTab === 'stats' && (
+              <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+            )}
+
+            {activeTab === 'equipment' && (
+              <EquipmentTab
+                player={currentPlayer}
+                inventory={inventory}
+                onPlayerUpdate={applyPlayerUpdate}
+                onInventoryUpdate={setInventory}
+              />
+            )}
 
             {activeTab === 'class' && (
               <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
