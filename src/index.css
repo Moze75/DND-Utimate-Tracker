@@ -33,7 +33,7 @@ body {
   padding: 0;
   width: 100vw;
   overflow-x: hidden !important;
-    overflow-x: hidden;
+  overflow-x: hidden;
   max-width: 100%;
 }
 
