@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { LogOut } from 'lucide-react';
+import { SwipeNavigator } from '../components/SwipeNavigator';
 
 import { testConnection } from '../lib/supabase';
 import { Player } from '../types/dnd';
@@ -15,19 +16,19 @@ import { ClassesTab } from '../components/ClassesTab';
 import { PlayerContext } from '../contexts/PlayerContext';
 
 import { inventoryService } from '../services/inventoryService';
-import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab';
+import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab'; // + Profil
 
-import '../styles/swipe.css';
+import '../styles/swipe.css'; // <- animations de glissement
 
-type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile';
+type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile'; // + 'profile'
 
 const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter';
 const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
 const lastTabKeyFor = (playerId: string) => `ut:lastActiveTab:${playerId}`;
 const isValidTab = (t: string | null): t is TabKey =>
-  t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class' || t === 'profile';
+  t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class' || t === 'profile'; // + profile
 
-// IMPORTANT: ordre visuel de gauche à droite (PV/actions -> Classe -> Sorts -> Stats -> Sac -> Profil)
+// Ordre des onglets pour savoir où aller en swipe gauche/droite
 const TAB_ORDER: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
 
 type GamePageProps = {
@@ -41,28 +42,30 @@ type GamePageProps = {
 function freezeScroll(): number {
   const y = window.scrollY || window.pageYOffset || 0;
   const body = document.body;
+  // Sauvegarde pour restauration
   (body as any).__scrollY = y;
-  // Evite 100vw/100vh qui causent des débordements sur mobile
   body.style.position = 'fixed';
   body.style.top = `-${y}px`;
   body.style.left = '0';
   body.style.right = '0';
   body.style.width = '100%';
-  body.style.overflowY = 'scroll';
   return y;
 }
 function unfreezeScroll() {
   const body = document.body;
   const y = (body as any).__scrollY || 0;
+  // Reset styles
   body.style.position = '';
   body.style.top = '';
   body.style.left = '';
   body.style.right = '';
   body.style.width = '';
-  body.style.overflowY = '';
+  // Restaure la position exacte
   window.scrollTo(0, y);
   delete (body as any).__scrollY;
 }
+
+// Maintient la position pendant quelques frames pour contrer les reflows tardifs
 function stabilizeScroll(y: number, durationMs = 350) {
   const start = performance.now();
   const tick = (now: number) => {
@@ -81,10 +84,12 @@ export function GamePage({
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
+  // Source de vérité locale pour le joueur courant (évite les "sauts" d'UI)
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(selectedCharacter);
+
   const [inventory, setInventory] = useState<any[]>([]);
 
-  // Onglet initial depuis localStorage
+  // Restaure l'onglet actif dès l'init, de façon synchrone (aucun flash vers 'combat')
   const initialTab: TabKey = (() => {
     try {
       const saved = localStorage.getItem(lastTabKeyFor(selectedCharacter.id));
@@ -95,32 +100,26 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // Swipe progressif en overlay (2 panneaux absolus: courant + voisin)
-  const viewportRef = useRef<HTMLDivElement | null>(null);
-  const currentRef = useRef<HTMLDivElement | null>(null);
-  const neighborRef = useRef<HTMLDivElement | null>(null);
-  const widthRef = useRef<number>(0);
+  // Direction de l'animation: 'left' => arrivée depuis la droite, 'right' => arrivée depuis la gauche
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
 
-  const startXRef = useRef<number | null>(null);
-  const startYRef = useRef<number | null>(null);
-  const swipingRef = useRef<boolean>(false);
-  const dragStartScrollYRef = useRef<number>(0);
-
-  const [dragX, setDragX] = useState(0);
-  const [animating, setAnimating] = useState(false);
-  const [containerH, setContainerH] = useState<number | undefined>(undefined);
-
+  // Pour ne pas remettre le spinner en boucle: on ne ré-initialise que si l'ID change
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
+  // Centralise toutes les mises à jour du joueur
   const applyPlayerUpdate = useCallback(
     (updated: Player) => {
       setCurrentPlayer(updated);
       try {
         onUpdateCharacter?.(updated);
-      } catch {}
+      } catch {
+        // no-op
+      }
       try {
         localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(updated));
-      } catch {}
+      } catch {
+        // non critique
+      }
     },
     [onUpdateCharacter]
   );
@@ -129,7 +128,9 @@ export function GamePage({
     if (currentPlayer) {
       try {
         localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(currentPlayer));
-      } catch {}
+      } catch {
+        // non critique
+      }
     }
   }, [currentPlayer]);
 
@@ -143,6 +144,7 @@ export function GamePage({
         localStorage.setItem(lastTabKeyFor(selectedCharacter.id), activeTab);
       } catch {}
     };
+
     window.addEventListener('visibilitychange', persist);
     window.addEventListener('pagehide', persist);
     return () => {
@@ -199,159 +201,64 @@ export function GamePage({
       prevPlayerId.current = selectedCharacter.id;
       initialize();
     } else {
-      if (loading) initialize();
+      if (loading) {
+        initialize();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCharacter.id]);
 
-  // Détermination des voisins
-  const activeIndex = TAB_ORDER.indexOf(activeTab);
-  const prevKey = activeIndex > 0 ? TAB_ORDER[activeIndex - 1] : null;
-  const nextKey = activeIndex < TAB_ORDER.length - 1 ? TAB_ORDER[activeIndex + 1] : null;
-
-  // Mesure de la largeur + hauteur actuelle du panneau pour fixer la hauteur du conteneur
-  const measureHeights = useCallback(() => {
-    if (viewportRef.current) {
-      widthRef.current = viewportRef.current.clientWidth;
-    }
-    const ch = currentRef.current?.offsetHeight ?? 0;
-    if (ch) {
-      setContainerH(ch);
-    }
-  }, []);
-
-  useEffect(() => {
-    measureHeights();
-    const onRz = () => {
-      measureHeights();
-    };
-    window.addEventListener('resize', onRz);
-    const id = window.setTimeout(measureHeights, 0);
-    return () => {
-      window.removeEventListener('resize', onRz);
-      window.clearTimeout(id);
-    };
-  }, [activeTab, measureHeights]);
-
-  // Pendant le drag, on ajuste la hauteur au max entre courant et voisin si visible
-  useEffect(() => {
-    if (!neighborRef.current || !currentRef.current) return;
-    const ch = currentRef.current.offsetHeight ?? 0;
-    const nh = neighborRef.current.offsetHeight ?? 0;
-    if (ch && nh) {
-      setContainerH(Math.max(ch, nh));
-    }
-  }, [dragX]);
-
-  // Pointeurs (tactile/souris)
-  const onPointerDown: React.PointerEventHandler<HTMLDivElement> = (e) => {
-    if (e.pointerType === 'mouse' && e.buttons !== 1) return;
-    startXRef.current = e.clientX;
-    startYRef.current = e.clientY;
-    swipingRef.current = false;
-    setAnimating(false);
-    viewportRef.current?.setPointerCapture?.(e.pointerId);
+  // Calcul de direction d'animation par rapport à l'ordre TAB_ORDER
+  const computeDirection = (from: TabKey, to: TabKey): 'left' | 'right' | null => {
+    const fromIdx = TAB_ORDER.indexOf(from);
+    const toIdx = TAB_ORDER.indexOf(to);
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return null;
+    return toIdx > fromIdx ? 'left' : 'right';
   };
 
-  const onPointerMove: React.PointerEventHandler<HTMLDivElement> = (e) => {
-    if (startXRef.current == null || startYRef.current == null) return;
-    const dx = e.clientX - startXRef.current;
-    const dy = e.clientY - startYRef.current;
+  // Empêche le "saut" de page lors du changement d’onglet + déclenche l'animation
+  const handleTabChange = useCallback((tab: string) => {
+    const target = tab as TabKey;
+    const dir = computeDirection(activeTab, target);
 
-    // Déclenche si horizontal prédomine
-    if (!swipingRef.current && Math.abs(dx) > 10 && Math.abs(Math.abs(dx) - Math.abs(dy)) > 4) {
-      swipingRef.current = true;
-      dragStartScrollYRef.current = freezeScroll();
-      widthRef.current = viewportRef.current?.clientWidth ?? widthRef.current;
-    }
-    if (!swipingRef.current) return;
-
-    e.preventDefault();
-
-    let clamped = dx;
-    if (!prevKey && clamped > 0) clamped = 0;
-    if (!nextKey && clamped < 0) clamped = 0;
-
-    setDragX(clamped);
-  };
-
-  const animateTo = (toPx: number, cb?: () => void) => {
-    setAnimating(true);
-    setDragX(toPx);
-    window.setTimeout(() => {
-      setAnimating(false);
-      cb?.();
-    }, 310);
-  };
-
-  const onPointerUp: React.PointerEventHandler<HTMLDivElement> = () => {
-    if (startXRef.current == null || startYRef.current == null) return;
-
-    if (swipingRef.current) {
-      const width = widthRef.current || (viewportRef.current?.clientWidth ?? 0);
-      const threshold = Math.max(48, width * 0.25);
-
-      const commit = (dir: -1 | 1) => {
-        const toPx = dir === 1 ? -width : width; // le panneau courant sort
-        animateTo(toPx, () => {
-          const next =
-            dir === 1
-              ? nextKey // aller à la page de droite (suivante)
-              : prevKey; // aller à la page de gauche (précédente)
-          if (next) {
-            setActiveTab(next);
-            try {
-              localStorage.setItem(lastTabKeyFor(selectedCharacter.id), next);
-            } catch {}
-          }
-          setDragX(0);
-          unfreezeScroll();
-          stabilizeScroll(dragStartScrollYRef.current, 400);
-        });
-      };
-
-      const cancel = () => {
-        animateTo(0, () => {
-          unfreezeScroll();
-          stabilizeScroll(dragStartScrollYRef.current, 300);
-        });
-      };
-
-      if (dragX <= -threshold && nextKey) {
-        commit(1);
-      } else if (dragX >= threshold && prevKey) {
-        commit(-1);
-      } else {
-        cancel();
-      }
-    }
-
-    startXRef.current = null;
-    startYRef.current = null;
-    swipingRef.current = false;
-  };
-
-  // Changement via clic sur les onglets
-  const handleTabClickChange = useCallback((tab: string) => {
-    if (!isValidTab(tab)) return;
+    // Gèle scroll (aucun mouvement pendant les reflows)
     const y = freezeScroll();
+
+    // Désactive temporairement le smooth scroll global pour éviter l’animation native
     const root = document.documentElement;
     const prevBehavior = root.style.scrollBehavior;
     root.style.scrollBehavior = 'auto';
 
-    setActiveTab(tab);
+    setSlideDirection(dir);
+    setActiveTab(target);
 
+    // Laisse React peindre, puis restaure le scroll et stabilise pendant quelques frames
     requestAnimationFrame(() => {
-      unfreezeScroll();
-      stabilizeScroll(y, 400);
+      unfreezeScroll();         // rétablit la position exacte
+      stabilizeScroll(y, 400);  // maintient la position ~0.4s contre les reflows tardifs
+      // Restaure le scroll-behavior précédent après stabilisation
       setTimeout(() => {
         root.style.scrollBehavior = prevBehavior;
       }, 420);
-      try {
-        localStorage.setItem(lastTabKeyFor(selectedCharacter.id), tab);
-      } catch {}
+      // Nettoie la direction après l'animation
+      setTimeout(() => {
+        setSlideDirection(null);
+      }, 450);
     });
-  }, [selectedCharacter.id]);
+  }, [activeTab]);
+
+  // Swipes: aller à l'onglet suivant / précédent selon TAB_ORDER
+  const goToNextTab = useCallback(() => {
+    const idx = TAB_ORDER.indexOf(activeTab);
+    if (idx === -1 || idx === TAB_ORDER.length - 1) return; // déjà au dernier
+    handleTabChange(TAB_ORDER[idx + 1]);
+  }, [activeTab, handleTabChange]);
+
+  const goToPrevTab = useCallback(() => {
+    const idx = TAB_ORDER.indexOf(activeTab);
+    if (idx <= 0) return; // déjà au premier
+    handleTabChange(TAB_ORDER[idx - 1]);
+  }, [activeTab, handleTabChange]);
 
   const handleBackToSelection = () => {
     try {
@@ -360,49 +267,6 @@ export function GamePage({
     onBackToSelection?.();
     toast.success('Retour à la sélection des personnages');
   };
-
-  // Rendu d'un panneau selon la clé
-  const renderPane = (key: TabKey) => {
-    switch (key) {
-      case 'combat':
-        return <CombatTab player={currentPlayer!} onUpdate={applyPlayerUpdate} />;
-      case 'class':
-        return <ClassesTab player={currentPlayer!} onUpdate={applyPlayerUpdate} />;
-      case 'abilities':
-        return <AbilitiesTab player={currentPlayer!} onUpdate={applyPlayerUpdate} />;
-      case 'stats':
-        return <StatsTab player={currentPlayer!} onUpdate={applyPlayerUpdate} />;
-      case 'equipment':
-        return (
-          <EquipmentTab
-            player={currentPlayer!}
-            inventory={inventory}
-            onPlayerUpdate={applyPlayerUpdate}
-            onInventoryUpdate={setInventory}
-          />
-        );
-      case 'profile':
-        return <PlayerProfileProfileTab player={currentPlayer!} />;
-      default:
-        return null;
-    }
-  };
-
-  // Détermine quel voisin afficher pendant le drag
-  const neighborType: 'prev' | 'next' | null = (() => {
-    if (dragX > 0 && prevKey) return 'prev';
-    if (dragX < 0 && nextKey) return 'next';
-    return null;
-  })();
-
-  // Transforms des panneaux
-  const currentTransform = `translate3d(${dragX}px, 0, 0)`;
-  const neighborTransform =
-    neighborType === 'next'
-      ? `translate3d(calc(100% + ${dragX}px), 0, 0)` // voisin à droite
-      : neighborType === 'prev'
-      ? `translate3d(calc(-100% + ${dragX}px), 0, 0)` // voisin à gauche
-      : undefined;
 
   if (loading) {
     return (
@@ -455,45 +319,57 @@ export function GamePage({
   }
 
   return (
+    // Ajoute la classe utilitaire pour neutraliser l'overflow anchoring
     <div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor">
       <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6">
         {currentPlayer && (
           <PlayerContext.Provider value={currentPlayer}>
             <PlayerProfile player={currentPlayer} onUpdate={applyPlayerUpdate} />
 
-            <TabNavigation activeTab={activeTab} onTabChange={handleTabClickChange} />
+            <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
 
-            {/* Swipe progressif en overlay: 100% de largeur, aucun débordement */}
-            <div
-              ref={viewportRef}
-              className="sv-viewport"
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={onPointerUp}
-              style={{ height: containerH }}
-            >
-              {/* Panneau courant */}
-              <div
-                ref={currentRef}
-                className={`sv-pane ${animating ? 'sv-anim' : ''}`}
-                style={{ transform: currentTransform }}
-              >
-                {renderPane(activeTab)}
-              </div>
-
-              {/* Panneau voisin (affiché uniquement pendant le drag) */}
-              {neighborType && (
+            {/* Zone swipe + animation d'arrivée du contenu */}
+            <SwipeNavigator onSwipeLeft={goToNextTab} onSwipeRight={goToPrevTab}>
+              <div className="slide-container">
                 <div
-                  ref={neighborRef}
-                  className={`sv-pane ${animating ? 'sv-anim' : ''}`}
-                  style={{ transform: neighborTransform }}
+                  key={activeTab}
+                  className={[
+                    'slide-content',
+                    slideDirection === 'left' ? 'slide-in-left' : '',
+                    slideDirection === 'right' ? 'slide-in-right' : '',
+                  ].join(' ')}
                 >
-                  {neighborType === 'next' && nextKey ? renderPane(nextKey) : null}
-                  {neighborType === 'prev' && prevKey ? renderPane(prevKey) : null}
+                  {activeTab === 'combat' && (
+                    <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                  )}
+
+                  {activeTab === 'abilities' && (
+                    <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                  )}
+
+                  {activeTab === 'stats' && (
+                    <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                  )}
+
+                  {activeTab === 'equipment' && (
+                    <EquipmentTab
+                      player={currentPlayer}
+                      inventory={inventory}
+                      onPlayerUpdate={applyPlayerUpdate}
+                      onInventoryUpdate={setInventory}
+                    />
+                  )}
+
+                  {activeTab === 'class' && (
+                    <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                  )}
+
+                  {activeTab === 'profile' && (
+                    <PlayerProfileProfileTab player={currentPlayer} />
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            </SwipeNavigator>
           </PlayerContext.Provider>
         )}
       </div>
