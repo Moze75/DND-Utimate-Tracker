@@ -1,51 +1,56 @@
-/* 2) Conteneur étanche au dépassement horizontal */
-.swipe-viewport {
+:root {
+  --sv-transition-ms: 300ms;
+  --sv-shadow-w: 8px;
+  --sv-adjacent-opacity: 0.98;
+}
+
+/* Conteneur, masque tout débordement horizontal */
+.sv-viewport {
   position: relative;
   width: 100%;
   max-width: 100%;
-  overflow: hidden;               /* coupe tout débordement de la piste */
-  touch-action: pan-y;            /* permet le scroll vertical tant qu’on n’est pas en swipe horizontal */
-  contain: layout paint size;     /* isole le layout interne, évite d’influencer l’extérieur */
+  overflow: hidden;
+  touch-action: pan-y;        /* laisse le scroll vertical quand pas en swipe */
+  contain: layout paint size; /* isole le layout interne */
 }
 
-/* Piste: 3 panneaux (prev, current, next) => 300% */
-.swipe-track {
-  display: flex;
-  width: 300%;
-  will-change: transform;
-}
-
-/* Transition uniquement à la fin du swipe (pas pendant le suivi du doigt) */
-.swipe-track.animating {
-  transition: transform 300ms ease-out;
-}
-
-.swipe-pane {
-  flex: 0 0 100%;
+/* Panneaux en overlay, chacun 100% de large */
+.sv-pane {
+  position: absolute;
+  inset: 0 0 auto 0; /* top:0; left:0; right:0 */
   width: 100%;
   min-width: 100%;
+  will-change: transform;
+  contain: layout paint;
 }
 
-/* Optionnel: un léger effet visuel sur les panneaux adjacents */
-.swipe-pane.adjacent {
-  opacity: 0.98;
+/* Transition activée uniquement lors de l’animation (pas pendant le suivi du doigt) */
+.sv-anim {
+  transition: transform var(--sv-transition-ms) ease-out;
 }
 
-/* Petites ombres pour un rendu "pile de cartes" (optionnel) */
-.swipe-viewport::before,
-.swipe-viewport::after {
+/* Optionnel: petit effet de liseré aux bords pour profondeur */
+.sv-viewport::before,
+.sv-viewport::after {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 8px;
+  width: var(--sv-shadow-w);
   pointer-events: none;
 }
-.swipe-viewport::before {
+.sv-viewport::before {
   left: 0;
   background: linear-gradient(to right, rgba(0,0,0,0.18), rgba(0,0,0,0));
 }
-.swipe-viewport::after {
+.sv-viewport::after {
   right: 0;
   background: linear-gradient(to left, rgba(0,0,0,0.18), rgba(0,0,0,0));
+}
+
+/* Accessibilité: réduire les animations si l’utilisateur le demande */
+@media (prefers-reduced-motion: reduce) {
+  .sv-anim {
+    transition: none !important;
+  }
 }
