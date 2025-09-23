@@ -88,29 +88,32 @@ export function SwipePager({
 
   const unlockHeight = React.useCallback(() => setHeight('auto'), []);
 
-  const animateTo = React.useCallback((targetX: number, onDone?: () => void) => {
-    if (!trackRef.current) return;
-    setAnimating(true);
-    setAnimTargetX(targetX);
-    lockHeightToContent();
+  const animateTo = React.useCallback(
+    (targetX: number, onDone?: () => void) => {
+      if (!trackRef.current) return;
+      setAnimating(true);
+      setAnimTargetX(targetX);
+      lockHeightToContent();
 
-    const handle = () => {
-      setAnimating(false);
-      setAnimTargetX(null);
-      setDragX(0);
-      setDir(0);
-      unlockHeight();
-      onDone?.();
-    };
+      const handle = () => {
+        setAnimating(false);
+        setAnimTargetX(null);
+        setDragX(0);
+        setDir(0);
+        unlockHeight();
+        onDone?.();
+      };
 
-    const timer = window.setTimeout(handle, durationMs + 40);
-    const onEnd = (e: TransitionEvent) => {
-      if (e.propertyName !== 'transform') return;
-      clearTimeout(timer);
-      handle();
-    };
-    trackRef.current.addEventListener('transitionend', onEnd, { once: true });
-  }, [durationMs, lockHeightToContent, unlockHeight]);
+      const timer = window.setTimeout(handle, durationMs + 40);
+      const onEnd = (e: TransitionEvent) => {
+        if (e.propertyName !== 'transform') return;
+        clearTimeout(timer);
+        handle();
+      };
+      trackRef.current.addEventListener('transitionend', onEnd, { once: true });
+    },
+    [durationMs, lockHeightToContent, unlockHeight]
+  );
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (count <= 1) return;
@@ -188,8 +191,8 @@ export function SwipePager({
     if (index === prev) return;
     if (dragging || animating) return;
 
-    const forward = ((index - prev + count) % count);
-    const backward = ((prev - index + count) % count);
+    const forward = (index - prev + count) % count;
+    const backward = (prev - index + count) % count;
     let sign: 1 | -1 = 1;
     if (forward === 0) return;
     if (forward <= backward) sign = 1;
@@ -228,22 +231,40 @@ export function SwipePager({
     prevIndexRef.current = index;
   }, [index]);
 
+  // Styles de sécurité pour éviter tout débordement
+  const slideStyle: React.CSSProperties = {
+    width: '100%',
+    minWidth: 0,            // autorise le contenu à rétrécir dans un flex
+    overflow: 'hidden',     // coupe tout débordement horizontal
+    boxSizing: 'border-box' // inclut padding/border dans la largeur
+  };
+
+  const pageWrapperStyle: React.CSSProperties = {
+    width: '100%',
+    maxWidth: '100%',
+    overflowX: 'hidden'
+  };
+
   const baseX = dir === -1 ? -width : 0;
   const trackX = animTargetX != null ? animTargetX : baseX + (dragging ? dragX : 0);
   const trackTransition = animTargetX != null ? `transform ${durationMs}ms ${EASING}` : 'none';
 
   const currentSlide = (
-    <div ref={currentRef} className="w-full shrink-0">
-      {renderPage(displayIndex)}
+    <div ref={currentRef} style={slideStyle} className="w-full shrink-0 min-w-0 overflow-hidden">
+      <div style={pageWrapperStyle} className="min-w-0 max-w-full overflow-x-hidden">
+        {renderPage(displayIndex)}
+      </div>
     </div>
   );
   const neighborSlide =
     neighborIndex != null ? (
-      <div ref={nextRef} className="w-full shrink-0">
-        {renderPage(neighborIndex)}
+      <div ref={nextRef} style={slideStyle} className="w-full shrink-0 min-w-0 overflow-hidden">
+        <div style={pageWrapperStyle} className="min-w-0 max-w-full overflow-x-hidden">
+          {renderPage(neighborIndex)}
+        </div>
       </div>
     ) : (
-      <div ref={nextRef} className="w-full shrink-0" />
+      <div ref={nextRef} style={slideStyle} className="w-full shrink-0 min-w-0 overflow-hidden" />
     );
 
   const slides =
@@ -266,9 +287,11 @@ export function SwipePager({
       style={{
         overflow: 'hidden',
         position: 'relative',
+        width: '100%',
         height: typeof height === 'number' ? `${height}px` : height,
         transition: `height ${durationMs}ms ${EASING}`,
         touchAction: 'pan-y',
+        boxSizing: 'border-box',
         ...style,
       }}
       onPointerDown={onPointerDown}
@@ -280,7 +303,7 @@ export function SwipePager({
         ref={trackRef}
         className="flex"
         style={{
-          width: Math.max(width * 2, 2), // évite un track à 0px
+          width: '200%',                   // 2 slides côte à côte
           transform: `translate3d(${trackX}px, 0, 0)`,
           transition: trackTransition,
           userSelect: dragging ? 'none' : undefined,
