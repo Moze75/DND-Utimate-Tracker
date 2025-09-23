@@ -300,37 +300,37 @@ const setTabIndex = (i: number) => {
 
             <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
 
-          {/* Contenu swipable */}
-<SwipeNavigator index={tabIndex} setIndex={setTabIndex} count={tabIds.length}>
-  {activeTab === 'combat' && (
-    <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-  )}
-
-  {activeTab === 'abilities' && (
-    <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-  )}
-
-  {activeTab === 'stats' && (
-    <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-  )}
-
-  {activeTab === 'equipment' && (
-    <EquipmentTab
-      player={currentPlayer}
-      inventory={inventory}
-      onPlayerUpdate={applyPlayerUpdate}
-      onInventoryUpdate={setInventory}
-    />
-  )}
-
-  {activeTab === 'class' && (
-    <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-  )}
-
-  {activeTab === 'profile' && (
-    <PlayerProfileProfileTab player={currentPlayer} />
-  )}
-</SwipeNavigator>
+                  {/* Contenu swipable */}
+        <SwipeNavigator index={tabIndex} setIndex={setTabIndex} count={tabIds.length}>
+          {activeTab === 'combat' && (
+            <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+          )}
+        
+          {activeTab === 'abilities' && (
+            <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+          )}
+        
+          {activeTab === 'stats' && (
+            <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+          )}
+        
+          {activeTab === 'equipment' && (
+            <EquipmentTab
+              player={currentPlayer}
+              inventory={inventory}
+              onPlayerUpdate={applyPlayerUpdate}
+              onInventoryUpdate={setInventory}
+            />
+          )}
+        
+          {activeTab === 'class' && (
+            <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+          )}
+        
+          {activeTab === 'profile' && (
+            <PlayerProfileProfileTab player={currentPlayer} />
+          )}
+        </SwipeNavigator>
             
             {activeTab === 'combat' && (
               <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
