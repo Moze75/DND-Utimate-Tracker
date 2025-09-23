@@ -18,6 +18,7 @@ import {
   Plus,
   Minus,
   ListChecks,
+  HandHeart,
   } from 'lucide-react';
 
 import toast from 'react-hot-toast';
@@ -1452,7 +1453,7 @@ function ClassResourcesCard({
           items.push(
             <ResourceBlock
               key="supernatural_metabolism"
-              icon={<Sparkles size={20} />}
+              icon={<HandHeart size={20} />}
               label="Métabolisme surnaturel"
               total={metaTotal}
               used={usedMeta}
