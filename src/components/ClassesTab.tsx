@@ -18,7 +18,6 @@ import {
   Plus,
   Minus,
   ListChecks,
-  HandHeart,
   } from 'lucide-react';
 
 import toast from 'react-hot-toast';
