@@ -297,7 +297,40 @@ const setIndex = (i: number) => setActiveTab(tabIds[i]);
             <PlayerProfile player={currentPlayer} onUpdate={applyPlayerUpdate} />
 
             <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
-
+<div className="w-full overflow-x-hidden">
+  <SwipePager
+    className="w-full min-w-0"
+    index={activeIndex}
+    onIndexChange={setIndex}        // setIndex = (i) => setActiveTab(tabIds[i])
+    count={tabIds.length}
+    renderPage={(i) => {
+      const id = tabIds[i];
+      switch (id) {
+        case 'combat':
+          return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+        case 'class':
+          return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+        case 'abilities':
+          return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+        case 'stats':
+          return <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+        case 'equipment':
+          return (
+            <EquipmentTab
+              player={currentPlayer}
+              inventory={inventory}
+              onPlayerUpdate={applyPlayerUpdate}
+              onInventoryUpdate={setInventory}
+            />
+          );
+        case 'profile':
+          return <PlayerProfileProfileTab player={currentPlayer} />;
+        default:
+          return null;
+      }
+    }}
+  />
+</div>
             {activeTab === 'combat' && (
               <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
             )}
