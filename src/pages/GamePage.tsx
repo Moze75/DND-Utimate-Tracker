@@ -18,6 +18,8 @@ import { PlayerContext } from '../contexts/PlayerContext';
 import { inventoryService } from '../services/inventoryService';
 import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab'; // + Profil
 
+import '../styles/swipe.css'; // <- animations de glissement
+
 type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile'; // + 'profile'
 
 const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter';
@@ -25,6 +27,9 @@ const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
 const lastTabKeyFor = (playerId: string) => `ut:lastActiveTab:${playerId}`;
 const isValidTab = (t: string | null): t is TabKey =>
   t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class' || t === 'profile'; // + profile
+
+// Ordre des onglets pour savoir où aller en swipe gauche/droite
+const TAB_ORDER: TabKey[] = ['combat', 'abilities', 'stats', 'equipment', 'class', 'profile'];
 
 type GamePageProps = {
   session: any;
@@ -94,6 +99,9 @@ export function GamePage({
     }
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+
+  // Direction de l'animation: 'left' => arrivée depuis la droite, 'right' => arrivée depuis la gauche
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
 
   // Pour ne pas remettre le spinner en boucle: on ne ré-initialise que si l'ID change
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
@@ -200,17 +208,29 @@ export function GamePage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCharacter.id]);
 
-  // Empêche le "saut" de page lors du changement d’onglet (ex: Sorts, Classe)
+  // Calcul de direction d'animation par rapport à l'ordre TAB_ORDER
+  const computeDirection = (from: TabKey, to: TabKey): 'left' | 'right' | null => {
+    const fromIdx = TAB_ORDER.indexOf(from);
+    const toIdx = TAB_ORDER.indexOf(to);
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return null;
+    return toIdx > fromIdx ? 'left' : 'right';
+  };
+
+  // Empêche le "saut" de page lors du changement d’onglet + déclenche l'animation
   const handleTabChange = useCallback((tab: string) => {
+    const target = tab as TabKey;
+    const dir = computeDirection(activeTab, target);
+
     // Gèle scroll (aucun mouvement pendant les reflows)
     const y = freezeScroll();
 
-    // Désactive temporairement le smooth scroll global pour éviter l’animation
+    // Désactive temporairement le smooth scroll global pour éviter l’animation native
     const root = document.documentElement;
     const prevBehavior = root.style.scrollBehavior;
     root.style.scrollBehavior = 'auto';
 
-    setActiveTab(tab as TabKey);
+    setSlideDirection(dir);
+    setActiveTab(target);
 
     // Laisse React peindre, puis restaure le scroll et stabilise pendant quelques frames
     requestAnimationFrame(() => {
@@ -220,8 +240,25 @@ export function GamePage({
       setTimeout(() => {
         root.style.scrollBehavior = prevBehavior;
       }, 420);
+      // Nettoie la direction après l'animation
+      setTimeout(() => {
+        setSlideDirection(null);
+      }, 450);
     });
-  }, []);
+  }, [activeTab]);
+
+  // Swipes: aller à l'onglet suivant / précédent selon TAB_ORDER
+  const goToNextTab = useCallback(() => {
+    const idx = TAB_ORDER.indexOf(activeTab);
+    if (idx === -1 || idx === TAB_ORDER.length - 1) return; // déjà au dernier
+    handleTabChange(TAB_ORDER[idx + 1]);
+  }, [activeTab, handleTabChange]);
+
+  const goToPrevTab = useCallback(() => {
+    const idx = TAB_ORDER.indexOf(activeTab);
+    if (idx <= 0) return; // déjà au premier
+    handleTabChange(TAB_ORDER[idx - 1]);
+  }, [activeTab, handleTabChange]);
 
   const handleBackToSelection = () => {
     try {
@@ -291,34 +328,48 @@ export function GamePage({
 
             <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
 
-            {activeTab === 'combat' && (
-              <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-            )}
+            {/* Zone swipe + animation d'arrivée du contenu */}
+            <SwipeNavigator onSwipeLeft={goToNextTab} onSwipeRight={goToPrevTab}>
+              <div className="slide-container">
+                <div
+                  key={activeTab}
+                  className={[
+                    'slide-content',
+                    slideDirection === 'left' ? 'slide-in-left' : '',
+                    slideDirection === 'right' ? 'slide-in-right' : '',
+                  ].join(' ')}
+                >
+                  {activeTab === 'combat' && (
+                    <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                  )}
 
-            {activeTab === 'abilities' && (
-              <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-            )}
+                  {activeTab === 'abilities' && (
+                    <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                  )}
 
-            {activeTab === 'stats' && (
-              <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-            )}
+                  {activeTab === 'stats' && (
+                    <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                  )}
 
-            {activeTab === 'equipment' && (
-              <EquipmentTab
-                player={currentPlayer}
-                inventory={inventory}
-                onPlayerUpdate={applyPlayerUpdate}
-                onInventoryUpdate={setInventory}
-              />
-            )}
+                  {activeTab === 'equipment' && (
+                    <EquipmentTab
+                      player={currentPlayer}
+                      inventory={inventory}
+                      onPlayerUpdate={applyPlayerUpdate}
+                      onInventoryUpdate={setInventory}
+                    />
+                  )}
 
-            {activeTab === 'class' && (
-              <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-            )}
+                  {activeTab === 'class' && (
+                    <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+                  )}
 
-            {activeTab === 'profile' && (
-              <PlayerProfileProfileTab player={currentPlayer} />
-            )}
+                  {activeTab === 'profile' && (
+                    <PlayerProfileProfileTab player={currentPlayer} />
+                  )}
+                </div>
+              </div>
+            </SwipeNavigator>
           </PlayerContext.Provider>
         )}
       </div>
