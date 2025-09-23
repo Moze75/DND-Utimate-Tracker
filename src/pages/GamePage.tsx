@@ -334,7 +334,7 @@ const setIndex = (i: number) => setActiveTab(tabIds[i]);
     }
   }}
 />
-    }
+    
   }}
   // Options d’animation (facultatives)
   // wrap={true}
