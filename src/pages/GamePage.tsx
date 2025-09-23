@@ -17,6 +17,7 @@ import { PlayerContext } from '../contexts/PlayerContext';
 import { inventoryService } from '../services/inventoryService';
 import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab'; // + Profil
 
+// Ajout: Pager animé
 import SwipePager from '../components/SwipePager';
 
 type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile'; // + 'profile'
@@ -96,10 +97,10 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // Indices d'onglets pour le SwipePager
+  // Indices d'onglets pour le SwipePager (ordre cohérent avec TabNavigation)
   const tabIds: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
   const activeIndex = tabIds.indexOf(activeTab);
-  // Important: pour le swipe, on change d'onglet directement (sans freeze/unfreeze)
+  // Pour le swipe: on change d'onglet directement (pas de freeze/unfreeze)
   const setIndex = (i: number) => setActiveTab(tabIds[i]);
 
   // Pour ne pas remettre le spinner en boucle: on ne ré-initialise que si l'ID change
@@ -207,7 +208,7 @@ export function GamePage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCharacter.id]);
 
-  // Empêche le "saut" de page lors du changement d’onglet via clic (TabNavigation)
+  // Empêche le "saut" de page lors du changement d’onglet via la barre (clic)
   const handleTabChange = useCallback((tab: string) => {
     // Gèle scroll (aucun mouvement pendant les reflows)
     const y = freezeScroll();
@@ -289,7 +290,7 @@ export function GamePage({
   }
 
   return (
-    // Ajoute la classe utilitaire pour neutraliser l'overflow anchoring et couper tout débordement horizontal
+    // Ajout overflow-x-hidden pour couper toute dérive horizontale
     <div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor overflow-x-hidden">
       <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6 overflow-x-hidden">
         {currentPlayer && (
@@ -298,12 +299,12 @@ export function GamePage({
 
             <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
 
-            {/* Contenu des onglets avec swipe animé */}
+            {/* Contenu des onglets avec swipe animé, encapsulé pour éviter les débordements */}
             <div className="w-full overflow-x-hidden">
               <SwipePager
                 className="w-full min-w-0"
                 index={activeIndex}
-                onIndexChange={setIndex}
+                onIndexChange={setIndex}            // swipe -> setActiveTab direct
                 count={tabIds.length}
                 renderPage={(i) => {
                   const id = tabIds[i];
@@ -331,6 +332,10 @@ export function GamePage({
                       return null;
                   }
                 }}
+                // Options d’animation (facultatives) — décommente si besoin:
+                // wrap={true}
+                // thresholdPx={56}
+                // durationMs={260}
               />
             </div>
           </PlayerContext.Provider>
