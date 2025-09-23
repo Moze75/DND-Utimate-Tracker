@@ -298,41 +298,41 @@ const setIndex = (i: number) => setActiveTab(tabIds[i]);
 
             <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
             
-            <SwipePager
-              index={activeIndex}
-              onIndexChange={setIndex}
-              count={tabIds.length}
-              renderPage={(i) => {
-                const id = tabIds[i];
-                switch (id) {
-                  case 'combat':
-                    return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-                  case 'class':
-                    return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-                  case 'abilities':
-                    return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-                  case 'stats':
-                    return <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-                  case 'equipment':
-                    return (
-                      <EquipmentTab
-                        player={currentPlayer}
-                        inventory={inventory}
-                        onPlayerUpdate={applyPlayerUpdate}
-                        onInventoryUpdate={setInventory}
-                      />
-                    );
-                  case 'profile':
-                    return <PlayerProfileProfileTab player={currentPlayer} />;
-                  default:
-                    return null;
-                }
-              }}
-              // Options d’animation (facultatives)
-              // wrap={true}
-              // thresholdPx={56}
-              // durationMs={260}
-            />
+<SwipePager
+  index={activeIndex}
+  onIndexChange={setIndex}
+  count={tabIds.length}
+  renderPage={(i) => {
+    const id = tabIds[i];
+    switch (id) {
+      case 'combat':
+        return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+      case 'class':
+        return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+      case 'abilities':
+        return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+      case 'stats':
+        return <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+      case 'equipment':
+        return (
+          <EquipmentTab
+            player={currentPlayer}
+            inventory={inventory}
+            onPlayerUpdate={applyPlayerUpdate}
+            onInventoryUpdate={setInventory}
+          />
+        );
+      case 'profile':
+        return <PlayerProfileProfileTab player={currentPlayer} />;
+      default:
+        return null;
+    }
+  }}
+  // Options d’animation (facultatives)
+  // wrap={true}
+  // thresholdPx={56}
+  // durationMs={260}
+/>
 
             {activeTab === 'class' && (
               <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
