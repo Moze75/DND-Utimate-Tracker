@@ -1,41 +1,64 @@
-/* Zone d’affichage: on masque le débordement pendant le swipe */
+/* =========================================
+   Swipe progressif pour changement d’onglets
+   - Suit le doigt (drag)
+   - Animation fluide au relâchement
+   - Pas de débordement horizontal
+   - Compatible mobile (touch/pointer)
+   ========================================= */
+
+:root {
+  --swipe-transition-ms: 300ms;
+  --swipe-shadow-w: 8px;
+  --swipe-adjacent-opacity: 0.98;
+}
+
+/* Conteneur d’affichage: coupe tout débordement horizontal */
 .swipe-viewport {
   position: relative;
-  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;             /* important: évite barre de scroll X */
+  touch-action: pan-y;          /* laisse le scroll vertical quand pas en swipe */
+  contain: layout paint size;   /* isole le layout interne, perf + pas d’influence externe */
 }
 
-/* Piste qui contient les 3 panneaux (précédent, courant, suivant) */
+/* Piste qui contient uniquement 3 panneaux (précédent, courant, suivant) */
 .swipe-track {
   display: flex;
-  width: 300%;
-  will-change: transform;
-  touch-action: pan-y; /* on laisse le scroll vertical tant que le swipe horizontal n'est pas déclenché */
+  width: 300%;                  /* 3 panneaux de 100% */
+  will-change: transform;       /* hint perf */
+  /* Position de base centrée sur le panneau courant:
+     la valeur finale est pilotée en inline-style depuis React,
+     ex: transform: translate3d(calc(-100% + 32px), 0, 0)
+   */
 }
 
-/* Active la transition uniquement lors du relâchement (pas pendant le suivi du doigt) */
+/* Transition uniquement lors du relâchement (pas pendant le suivi du doigt) */
 .swipe-track.animating {
-  transition: transform 300ms ease-out;
+  transition: transform var(--swipe-transition-ms) ease-out;
 }
 
+/* Un panneau = 100% de la largeur visible */
 .swipe-pane {
   flex: 0 0 100%;
   width: 100%;
   min-width: 100%;
+  contain: layout paint;        /* isole chaque panneau, améliore la stabilité */
 }
 
-/* Optionnel: léger effet d’opacité sur les panneaux adjacents */
+/* Optionnel: un léger effet visuel sur les panneaux adjacents */
 .swipe-pane.adjacent {
-  opacity: 0.98;
+  opacity: var(--swipe-adjacent-opacity);
 }
 
-/* Optionnel: ombres aux bords pour un rendu plus "stack" */
+/* Liserés d’ombres pour un rendu "pile de cartes" (optionnel) */
 .swipe-viewport::before,
 .swipe-viewport::after {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 8px;
+  width: var(--swipe-shadow-w);
   pointer-events: none;
 }
 .swipe-viewport::before {
@@ -45,4 +68,47 @@
 .swipe-viewport::after {
   right: 0;
   background: linear-gradient(to left, rgba(0,0,0,0.18), rgba(0,0,0,0));
+}
+
+/* ============================= */
+/* Fallback: slide-in simple     */
+/* (utile si tu veux garder l’anim
+   non progressive pour certains
+   écrans ou actions de clic)
+   ============================= */
+
+.slide-container {
+  position: relative;
+  overflow: hidden;
+}
+.slide-content {
+  will-change: transform, opacity;
+  animation-duration: 320ms;
+  animation-timing-function: ease-out;
+}
+
+.slide-in-left {  /* arrivée depuis la droite (swipe vers la gauche) */
+  animation-name: slideFromRight;
+}
+.slide-in-right { /* arrivée depuis la gauche (swipe vers la droite) */
+  animation-name: slideFromLeft;
+}
+
+@keyframes slideFromRight {
+  from { transform: translateX(100%); opacity: 0.6; }
+  to   { transform: translateX(0%);   opacity: 1;   }
+}
+@keyframes slideFromLeft {
+  from { transform: translateX(-100%); opacity: 0.6; }
+  to   { transform: translateX(0%);    opacity: 1;   }
+}
+
+/* Accessibilité: réduit/neutralise les animations si l’utilisateur préfère */
+@media (prefers-reduced-motion: reduce) {
+  .swipe-track.animating {
+    transition: none !important;
+  }
+  .slide-content {
+    animation: none !important;
+  }
 }
