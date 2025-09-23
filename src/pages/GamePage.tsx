@@ -29,7 +29,7 @@ const isValidTab = (t: string | null): t is TabKey =>
   t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class' || t === 'profile'; // + profile
 
 // Ordre des onglets pour savoir où aller en swipe gauche/droite
-const TAB_ORDER: TabKey[] = ['combat', 'abilities', 'stats', 'equipment', 'class', 'profile'];
+const TAB_ORDER: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
 
 type GamePageProps = {
   session: any;
