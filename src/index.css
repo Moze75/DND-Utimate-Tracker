@@ -4,11 +4,15 @@
 
 :root {
   color-scheme: dark;
+    overflow-x: hidden;
+  max-width: 100%;
 }
 
 html {
   font-size: 15px; /* légèrement augmenté pour les typos */
   overscroll-behavior-y: contain;
+    overflow-x: hidden;
+  max-width: 100%;
 }
 
 @media (min-width: 640px) {
@@ -29,6 +33,8 @@ body {
   padding: 0;
   width: 100vw;
   overflow-x: hidden !important;
+    overflow-x: hidden;
+  max-width: 100%;
 }
 
 /* Background spécifique pour la page de login */
