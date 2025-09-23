@@ -1,44 +1,48 @@
-/* Conteneur d'animation */
-.slide-container {
+/* Zone d’affichage: on masque le débordement pendant le swipe */
+.swipe-viewport {
   position: relative;
   overflow: hidden;
 }
 
-/* Élément qui s'anime à chaque changement d'onglet */
-.slide-content {
-  will-change: transform, opacity;
-  animation-duration: 320ms;
-  animation-timing-function: ease-out;
+/* Piste qui contient les 3 panneaux (précédent, courant, suivant) */
+.swipe-track {
+  display: flex;
+  width: 300%;
+  will-change: transform;
+  touch-action: pan-y; /* on laisse le scroll vertical tant que le swipe horizontal n'est pas déclenché */
 }
 
-/* Arrivée depuis la droite (l'utilisateur a swipé vers la gauche) */
-.slide-in-left {
-  animation-name: slideFromRight;
+/* Active la transition uniquement lors du relâchement (pas pendant le suivi du doigt) */
+.swipe-track.animating {
+  transition: transform 300ms ease-out;
 }
 
-/* Arrivée depuis la gauche (l'utilisateur a swipé vers la droite) */
-.slide-in-right {
-  animation-name: slideFromLeft;
+.swipe-pane {
+  flex: 0 0 100%;
+  width: 100%;
+  min-width: 100%;
 }
 
-@keyframes slideFromRight {
-  from {
-    transform: translateX(100%);
-    opacity: 0.6;
-  }
-  to {
-    transform: translateX(0%);
-    opacity: 1;
-  }
+/* Optionnel: léger effet d’opacité sur les panneaux adjacents */
+.swipe-pane.adjacent {
+  opacity: 0.98;
 }
 
-@keyframes slideFromLeft {
-  from {
-    transform: translateX(-100%);
-    opacity: 0.6;
-  }
-  to {
-    transform: translateX(0%);
-    opacity: 1;
-  }
+/* Optionnel: ombres aux bords pour un rendu plus "stack" */
+.swipe-viewport::before,
+.swipe-viewport::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  pointer-events: none;
+}
+.swipe-viewport::before {
+  left: 0;
+  background: linear-gradient(to right, rgba(0,0,0,0.18), rgba(0,0,0,0));
+}
+.swipe-viewport::after {
+  right: 0;
+  background: linear-gradient(to left, rgba(0,0,0,0.18), rgba(0,0,0,0));
 }
