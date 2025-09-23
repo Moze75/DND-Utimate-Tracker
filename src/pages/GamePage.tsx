@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { LogOut } from 'lucide-react'; 
-import { SwipePager } from '../components/SwipePager';
+import { LogOut } from 'lucide-react';
 
 import { testConnection } from '../lib/supabase';
 import { Player } from '../types/dnd';
@@ -17,6 +16,8 @@ import { PlayerContext } from '../contexts/PlayerContext';
 
 import { inventoryService } from '../services/inventoryService';
 import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab'; // + Profil
+
+import SwipePager from '../components/SwipePager';
 
 type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile'; // + 'profile'
 
@@ -95,13 +96,12 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-// Ordre identique à TabNavigation.tsx
-const tabIds: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
-const activeIndex = tabIds.indexOf(activeTab);
+  // Indices d'onglets pour le SwipePager
+  const tabIds: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
+  const activeIndex = tabIds.indexOf(activeTab);
+  // Important: pour le swipe, on change d'onglet directement (sans freeze/unfreeze)
+  const setIndex = (i: number) => setActiveTab(tabIds[i]);
 
-// Important: pour le swipe, on change d'onglet SANS freeze/unfreeze du scroll
-const setIndex = (i: number) => setActiveTab(tabIds[i]);
-  
   // Pour ne pas remettre le spinner en boucle: on ne ré-initialise que si l'ID change
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
@@ -207,7 +207,7 @@ const setIndex = (i: number) => setActiveTab(tabIds[i]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCharacter.id]);
 
-  // Empêche le "saut" de page lors du changement d’onglet (ex: Sorts, Classe)
+  // Empêche le "saut" de page lors du changement d’onglet via clic (TabNavigation)
   const handleTabChange = useCallback((tab: string) => {
     // Gèle scroll (aucun mouvement pendant les reflows)
     const y = freezeScroll();
@@ -289,95 +289,50 @@ const setIndex = (i: number) => setActiveTab(tabIds[i]);
   }
 
   return (
-    // Ajoute la classe utilitaire pour neutraliser l'overflow anchoring
-<div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor overflow-x-hidden">
+    // Ajoute la classe utilitaire pour neutraliser l'overflow anchoring et couper tout débordement horizontal
+    <div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor overflow-x-hidden">
+      <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6 overflow-x-hidden">
+        {currentPlayer && (
+          <PlayerContext.Provider value={currentPlayer}>
+            <PlayerProfile player={currentPlayer} onUpdate={applyPlayerUpdate} />
 
-  // 2) Conteneur centré
-  <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6 overflow-x-hidden">
-    {currentPlayer && (
-      <PlayerContext.Provider value={currentPlayer}>
-        <PlayerProfile player={currentPlayer} onUpdate={applyPlayerUpdate} />
-        <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
+            <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
 
-        {/* 3) Wrapper autour du pager (tu l’as déjà ajouté) */}
-        <div className="w-full overflow-x-hidden">
-          <SwipePager
-            className="w-full min-w-0"
-            index={activeIndex}
-            onIndexChange={setIndex}
-            count={tabIds.length}
-            renderPage={(i) => {
-              const id = tabIds[i];
-              switch (id) {
-                case 'combat':
-                  return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-                case 'class':
-                  return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-                case 'abilities':
-                  return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-                case 'stats':
-                  return <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-                case 'equipment':
-                  return (
-                    <EquipmentTab
-                      player={currentPlayer}
-                      inventory={inventory}
-                      onPlayerUpdate={applyPlayerUpdate}
-                      onInventoryUpdate={setInventory}
-                    />
-                  );
-                case 'profile':
-                  return <PlayerProfileProfileTab player={currentPlayer} />;
-                default:
-                  return null;
-              }
-            }}
-          />
-        </div>
-      </PlayerContext.Provider>
-    )}
-  />
-</div>
-            {activeTab === 'combat' && (
-              <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
-            )}
-
-  {/* Options d’animation (facultatives) */}
-<SwipePager
-  className="w-full min-w-0"
-  index={activeIndex}
-  onIndexChange={setIndex}
-  count={tabIds.length}
-  wrap={true}          // ou false pour bloquer au premier/dernier onglet
-  thresholdPx={56}     // distance minimale pour valider un swipe
-  durationMs={260}     // durée de la transition
-  renderPage={(i) => {
-    const id = tabIds[i];
-    switch (id) {
-      case 'combat':
-        return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-      case 'class':
-        return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-      case 'abilities':
-        return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-      case 'stats':
-        return <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-      case 'equipment':
-        return (
-          <EquipmentTab
-            player={currentPlayer}
-            inventory={inventory}
-            onPlayerUpdate={applyPlayerUpdate}
-            onInventoryUpdate={setInventory}
-          />
-        );
-      case 'profile':
-        return <PlayerProfileProfileTab player={currentPlayer} />;
-      default:
-        return null;
-    }
-  }}
-/>
+            {/* Contenu des onglets avec swipe animé */}
+            <div className="w-full overflow-x-hidden">
+              <SwipePager
+                className="w-full min-w-0"
+                index={activeIndex}
+                onIndexChange={setIndex}
+                count={tabIds.length}
+                renderPage={(i) => {
+                  const id = tabIds[i];
+                  switch (id) {
+                    case 'combat':
+                      return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+                    case 'class':
+                      return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+                    case 'abilities':
+                      return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+                    case 'stats':
+                      return <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+                    case 'equipment':
+                      return (
+                        <EquipmentTab
+                          player={currentPlayer}
+                          inventory={inventory}
+                          onPlayerUpdate={applyPlayerUpdate}
+                          onInventoryUpdate={setInventory}
+                        />
+                      );
+                    case 'profile':
+                      return <PlayerProfileProfileTab player={currentPlayer} />;
+                    default:
+                      return null;
+                  }
+                }}
+              />
+            </div>
           </PlayerContext.Provider>
         )}
       </div>
