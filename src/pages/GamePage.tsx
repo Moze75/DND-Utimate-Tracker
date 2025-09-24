@@ -98,7 +98,7 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // Onglets visités (garder montés pour éviter les “premiers rendus”)
+  // Onglets visités (garder montés pour persistance et éviter “premiers rendus”)
   const [visitedTabs, setVisitedTabs] = useState<Set<TabKey>>(
     () => new Set<TabKey>([initialTab, 'class', 'abilities'])
   );
@@ -111,13 +111,14 @@ export function GamePage({
     });
   }, [activeTab]);
 
-  // Swipe overlay — on garde le bloc statique TOUJOURS monté
+  // Conteneur et mesures
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const staticRef = useRef<HTMLDivElement | null>(null);
-  const overlayCurrentRef = useRef<HTMLDivElement | null>(null);
-  const overlayNeighborRef = useRef<HTMLDivElement | null>(null);
   const widthRef = useRef<number>(0);
 
+  // Références des wrappers pour mesurer leur hauteur sans remonter un 2e arbre
+  const paneRefs = useRef<Record<TabKey, HTMLDivElement | null>>({} as any);
+
+  // Swipe state
   const startXRef = useRef<number | null>(null);
   const startYRef = useRef<number | null>(null);
   const swipingRef = useRef<boolean>(false);
@@ -125,7 +126,7 @@ export function GamePage({
 
   const [dragX, setDragX] = useState(0);
   const [animating, setAnimating] = useState(false);
-  const [isInteracting, setIsInteracting] = useState(false);  // overlay pendant le drag/anim
+  const [isInteracting, setIsInteracting] = useState(false);
   const [containerH, setContainerH] = useState<number | undefined>(undefined);
 
   // Lock de hauteur pendant switch par clic
@@ -231,26 +232,33 @@ export function GamePage({
   const prevKey = activeIndex > 0 ? TAB_ORDER[activeIndex - 1] : null;
   const nextKey = activeIndex < TAB_ORDER.length - 1 ? TAB_ORDER[activeIndex + 1] : null;
 
-  // Mesure hauteur (statique ou overlay)
-  const measureStaticHeight = useCallback(() => {
-    const h = staticRef.current?.offsetHeight ?? 0;
-    if (h) setContainerH(h);
-  }, []);
-  const measureOverlayHeights = useCallback(() => {
-    const ch = overlayCurrentRef.current?.offsetHeight ?? 0;
-    const nh = overlayNeighborRef.current?.offsetHeight ?? 0;
-    const h = Math.max(ch, nh);
-    if (h) setContainerH(h);
+  // Mesures
+  const measurePaneHeight = useCallback((key: TabKey | null | undefined) => {
+    if (!key) return 0;
+    const el = paneRefs.current[key];
+    return el?.offsetHeight ?? 0;
   }, []);
 
-  // Mesure au changement d’onglet en mode statique
+  const measureActiveHeight = useCallback(() => {
+    const h = measurePaneHeight(activeTab);
+    if (h) setContainerH(h);
+  }, [activeTab, measurePaneHeight]);
+
+  const measureDuringSwipe = useCallback(() => {
+    const ch = measurePaneHeight(activeTab);
+    const neighbor = dragX > 0 ? prevKey : dragX < 0 ? nextKey : null;
+    const nh = measurePaneHeight(neighbor as any);
+    const h = Math.max(ch, nh || 0);
+    if (h) setContainerH(h);
+  }, [activeTab, dragX, nextKey, prevKey, measurePaneHeight]);
+
   useEffect(() => {
     if (isInteracting || animating) return;
-    const id = window.requestAnimationFrame(measureStaticHeight);
+    const id = window.requestAnimationFrame(measureActiveHeight);
     return () => window.cancelAnimationFrame(id);
-  }, [activeTab, isInteracting, animating, measureStaticHeight]);
+  }, [activeTab, isInteracting, animating, measureActiveHeight]);
 
-  // Pointeurs (tactile/souris) pour swipe
+  // Pointeurs (tactile/souris) pour swipe — transforme les wrappers persistants
   const onPointerDown: React.PointerEventHandler<HTMLDivElement> = (e) => {
     if (e.pointerType === 'mouse' && e.buttons !== 1) return;
     startXRef.current = e.clientX;
@@ -269,11 +277,9 @@ export function GamePage({
     if (!swipingRef.current && Math.abs(dx) > 10 && Math.abs(Math.abs(dx) - Math.abs(dy)) > 4) {
       swipingRef.current = true;
 
-      // Mesure la largeur et la hauteur courante AVANT de basculer en overlay
       widthRef.current = stageRef.current?.clientWidth ?? widthRef.current;
-      measureStaticHeight();
-
       setIsInteracting(true);
+      setContainerH(measurePaneHeight(activeTab)); // lock hauteur de départ
       dragStartScrollYRef.current = freezeScroll();
     }
     if (!swipingRef.current) return;
@@ -286,7 +292,7 @@ export function GamePage({
 
     setDragX(clamped);
 
-    const id = window.requestAnimationFrame(measureOverlayHeights);
+    const id = window.requestAnimationFrame(measureDuringSwipe);
     return () => window.cancelAnimationFrame(id);
   };
 
@@ -302,7 +308,7 @@ export function GamePage({
   const finishInteract = () => {
     setIsInteracting(false);
     setDragX(0);
-    requestAnimationFrame(measureStaticHeight);
+    requestAnimationFrame(measureActiveHeight);
   };
 
   const onPointerUp: React.PointerEventHandler<HTMLDivElement> = () => {
@@ -353,12 +359,12 @@ export function GamePage({
     swipingRef.current = false;
   };
 
-  // Switch via clic: lock de hauteur au lieu de freeze/unfreeze
+  // Switch via clic: lock de hauteur (sans overlay/duplicat)
   const handleTabClickChange = useCallback((tab: string) => {
     if (!isValidTab(tab)) return;
 
     // Mesure hauteur actuelle (fromH)
-    const fromH = staticRef.current?.offsetHeight ?? 0;
+    const fromH = measurePaneHeight(activeTab);
     if (fromH > 0) {
       setContainerH(fromH);
       setHeightLocking(true);
@@ -370,13 +376,13 @@ export function GamePage({
     // Mesure hauteur cible (toH) après rendu (double RAF)
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const toH = staticRef.current?.offsetHeight ?? fromH;
+        const toH = measurePaneHeight(tab as TabKey) || fromH;
         if (toH > 0) setContainerH(toH);
 
         // Relâche le lock après la transition
         setTimeout(() => {
           setHeightLocking(false);
-          requestAnimationFrame(measureStaticHeight);
+          requestAnimationFrame(measureActiveHeight);
         }, 280);
       });
     });
@@ -384,7 +390,7 @@ export function GamePage({
     try {
       localStorage.setItem(lastTabKeyFor(selectedCharacter.id), tab);
     } catch {}
-  }, [selectedCharacter.id, measureStaticHeight]);
+  }, [activeTab, selectedCharacter.id, measureActiveHeight, measurePaneHeight]);
 
   const handleBackToSelection = () => {
     try {
@@ -459,22 +465,6 @@ export function GamePage({
     }
   };
 
-  // Quel voisin afficher pendant le drag
-  const neighborType: 'prev' | 'next' | null = (() => {
-    if (dragX > 0 && prevKey) return 'prev';
-    if (dragX < 0 && nextKey) return 'next';
-    return null;
-  })();
-
-  // Transforms des panneaux overlay
-  const currentTransform = `translate3d(${dragX}px, 0, 0)`;
-  const neighborTransform =
-    neighborType === 'next'
-      ? `translate3d(calc(100% + ${dragX}px), 0, 0)`
-      : neighborType === 'prev'
-      ? `translate3d(calc(-100% + ${dragX}px), 0, 0)`
-      : undefined;
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -525,6 +515,21 @@ export function GamePage({
     );
   }
 
+  // Styles de déplacement pendant swipe: on applique transform sur les wrappers persistants
+  const neighborType: 'prev' | 'next' | null = (() => {
+    if (dragX > 0 && prevKey) return 'prev';
+    if (dragX < 0 && nextKey) return 'next';
+    return null;
+  })();
+
+  const currentTransform = `translate3d(${dragX}px, 0, 0)`;
+  const neighborTransform =
+    neighborType === 'next'
+      ? `translate3d(calc(100% + ${dragX}px), 0, 0)`
+      : neighborType === 'prev'
+      ? `translate3d(calc(-100% + ${dragX}px), 0, 0)`
+      : undefined;
+
   return (
     <div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor">
       <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6">
@@ -534,7 +539,7 @@ export function GamePage({
 
             <TabNavigation activeTab={activeTab} onTabChange={handleTabClickChange} />
 
-            {/* Stage: conteneur RELATIF */}
+            {/* Stage: conteneur RELATIF, un seul arbre par onglet, persistant */}
             <div
               ref={stageRef}
               className="relative"
@@ -544,61 +549,47 @@ export function GamePage({
               onPointerCancel={onPointerUp}
               style={{
                 touchAction: 'pan-y',
-                // Fixe la hauteur pendant drag/anim OU pendant le lock de switch
                 height: (isInteracting || animating || heightLocking) ? containerH : undefined,
                 transition: heightLocking ? 'height 280ms ease' : undefined,
               }}
             >
-              {/* MODE STATIQUE: TOUJOURS monté. Masqué pendant overlay pour ne pas doubler l’affichage */}
-              <div
-                ref={staticRef}
-                aria-hidden={isInteracting || animating ? true : undefined}
-                style={{
-                  visibility: isInteracting || animating ? 'hidden' : 'visible',
-                }}
-              >
-                {Array.from(visitedTabs).map((key) => (
-                  <div key={key} style={{ display: key === activeTab ? 'block' : 'none' }}>
+              {Array.from(visitedTabs).map((key) => {
+                const isActive = key === activeTab;
+                const isNeighbor =
+                  (neighborType === 'next' && key === nextKey) ||
+                  (neighborType === 'prev' && key === prevKey);
+
+                // Par défaut, le wrapper n’occupe pas l’écran
+                let display = isActive || (isInteracting && isNeighbor) ? 'block' : 'none';
+                let transform = 'translate3d(0,0,0)';
+
+                if (isInteracting) {
+                  if (isActive) transform = currentTransform;
+                  if (isNeighbor && neighborTransform) transform = neighborTransform;
+                }
+
+                return (
+                  <div
+                    key={key}
+                    ref={(el) => { paneRefs.current[key] = el; }}
+                    data-tab={key}
+                    className={`sv-pane ${animating ? 'sv-anim' : ''}`}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display,
+                      transform,
+                      willChange: isInteracting ? 'transform' : undefined,
+                    }}
+                  >
                     {key === 'class' && classSections === null ? (
                       <div className="py-12 text-center text-white/70">Chargement des aptitudes…</div>
                     ) : (
                       renderPane(key)
                     )}
                   </div>
-                ))}
-              </div>
-
-              {/* MODE OVERLAY (pendant le drag / l’animation) */}
-              {(isInteracting || animating) && (
-                <div
-                  className="sv-viewport"
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                  }}
-                >
-                  {/* Panneau courant (overlay) */}
-                  <div
-                    ref={overlayCurrentRef}
-                    className={`sv-pane ${animating ? 'sv-anim' : ''}`}
-                    style={{ transform: currentTransform }}
-                  >
-                    {renderPane(activeTab)}
-                  </div>
-
-                  {/* Panneau voisin (overlay) */}
-                  {neighborType && (
-                    <div
-                      ref={overlayNeighborRef}
-                      className={`sv-pane ${animating ? 'sv-anim' : ''}`}
-                      style={{ transform: neighborTransform }}
-                    >
-                      {neighborType === 'next' && nextKey ? renderPane(nextKey) : null}
-                      {neighborType === 'prev' && prevKey ? renderPane(prevKey) : null}
-                    </div>
-                  )}
-                </div>
-              )}
+                );
+              })}
             </div>
           </PlayerContext.Provider>
         )}
