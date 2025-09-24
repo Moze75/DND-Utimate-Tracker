@@ -98,7 +98,7 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // Onglets visités (pour garder les composants montés et éviter les “premiers rendus”)
+  // Onglets visités (garder montés pour éviter les “premiers rendus”)
   const [visitedTabs, setVisitedTabs] = useState<Set<TabKey>>(
     () => new Set<TabKey>([initialTab, 'class', 'abilities'])
   );
@@ -111,9 +111,9 @@ export function GamePage({
     });
   }, [activeTab]);
 
-  // Swipe overlay (2 panneaux absolus) — soit statique, soit overlay
-  const stageRef = useRef<HTMLDivElement | null>(null);       // conteneur relatif
-  const staticRef = useRef<HTMLDivElement | null>(null);      // contenu statique (hors overlay)
+  // Swipe overlay — on garde le bloc statique TOUJOURS monté
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const staticRef = useRef<HTMLDivElement | null>(null);
   const overlayCurrentRef = useRef<HTMLDivElement | null>(null);
   const overlayNeighborRef = useRef<HTMLDivElement | null>(null);
   const widthRef = useRef<number>(0);
@@ -394,7 +394,7 @@ export function GamePage({
     toast.success('Retour à la sélection des personnages');
   };
 
-  // Rechargement d’inventaire lors d’un changement d’id (sécurité additionnelle)
+  // Rechargement d’inventaire lors d’un changement d’id
   useEffect(() => {
     async function loadInventory() {
       if (!selectedCharacter) return;
@@ -534,7 +534,7 @@ export function GamePage({
 
             <TabNavigation activeTab={activeTab} onTabChange={handleTabClickChange} />
 
-            {/* Stage: conteneur RELATIF qui ne rend JAMAIS statique + overlay en même temps */}
+            {/* Stage: conteneur RELATIF */}
             <div
               ref={stageRef}
               className="relative"
@@ -549,20 +549,24 @@ export function GamePage({
                 transition: heightLocking ? 'height 280ms ease' : undefined,
               }}
             >
-              {/* MODE STATIQUE (aucune interaction en cours) */}
-              {!(isInteracting || animating) && (
-                <div ref={staticRef}>
-                  {Array.from(visitedTabs).map((key) => (
-                    <div key={key} style={{ display: key === activeTab ? 'block' : 'none' }}>
-                      {key === 'class' && classSections === null ? (
-                        <div className="py-12 text-center text-white/70">Chargement des aptitudes…</div>
-                      ) : (
-                        renderPane(key)
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* MODE STATIQUE: TOUJOURS monté. Masqué pendant overlay pour ne pas doubler l’affichage */}
+              <div
+                ref={staticRef}
+                aria-hidden={isInteracting || animating ? true : undefined}
+                style={{
+                  visibility: isInteracting || animating ? 'hidden' : 'visible',
+                }}
+              >
+                {Array.from(visitedTabs).map((key) => (
+                  <div key={key} style={{ display: key === activeTab ? 'block' : 'none' }}>
+                    {key === 'class' && classSections === null ? (
+                      <div className="py-12 text-center text-white/70">Chargement des aptitudes…</div>
+                    ) : (
+                      renderPane(key)
+                    )}
+                  </div>
+                ))}
+              </div>
 
               {/* MODE OVERLAY (pendant le drag / l’animation) */}
               {(isInteracting || animating) && (
