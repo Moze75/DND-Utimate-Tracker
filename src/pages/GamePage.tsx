@@ -258,28 +258,26 @@ export function GamePage({
     return () => window.cancelAnimationFrame(id);
   }, [activeTab, isInteracting, animating, measureActiveHeight]);
 
-  // Pointeurs (tactile/souris) pour swipe — transforme les wrappers persistants
-  const onPointerDown: React.PointerEventHandler<HTMLDivElement> = (e) => {
-    if (e.pointerType === 'mouse' && e.buttons !== 1) return;
-    startXRef.current = e.clientX;
-    startYRef.current = e.clientY;
+  const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    startXRef.current = t.clientX;
+    startYRef.current = t.clientY;
     swipingRef.current = false;
     setAnimating(false);
-    stageRef.current?.setPointerCapture?.(e.pointerId);
   };
 
-  const onPointerMove: React.PointerEventHandler<HTMLDivElement> = (e) => {
+  const onTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (startXRef.current == null || startYRef.current == null) return;
-    const dx = e.clientX - startXRef.current;
-    const dy = e.clientY - startYRef.current;
+    const t = e.touches[0];
+    const dx = t.clientX - startXRef.current;
+    const dy = t.clientY - startYRef.current;
 
-    // Déclenche si horizontal prédomine
     if (!swipingRef.current && Math.abs(dx) > 10 && Math.abs(Math.abs(dx) - Math.abs(dy)) > 4) {
       swipingRef.current = true;
-
       widthRef.current = stageRef.current?.clientWidth ?? widthRef.current;
       setIsInteracting(true);
-      setContainerH(measurePaneHeight(activeTab)); // lock hauteur de départ
+      setContainerH(measurePaneHeight(activeTab));
       dragStartScrollYRef.current = freezeScroll();
     }
     if (!swipingRef.current) return;
@@ -287,11 +285,10 @@ export function GamePage({
     e.preventDefault();
 
     let clamped = dx;
-    if (!prevKey && clamped > 0) clamped = 0; // pas de page à gauche
-    if (!nextKey && clamped < 0) clamped = 0; // pas de page à droite
+    if (!prevKey && clamped > 0) clamped = 0;
+    if (!nextKey && clamped < 0) clamped = 0;
 
     setDragX(clamped);
-
     const id = window.requestAnimationFrame(measureDuringSwipe);
     return () => window.cancelAnimationFrame(id);
   };
@@ -311,7 +308,7 @@ export function GamePage({
     requestAnimationFrame(measureActiveHeight);
   };
 
-  const onPointerUp: React.PointerEventHandler<HTMLDivElement> = () => {
+  const onTouchEnd = () => {
     if (startXRef.current == null || startYRef.current == null) return;
 
     if (swipingRef.current) {
@@ -319,24 +316,18 @@ export function GamePage({
       const threshold = Math.max(48, width * 0.25);
 
       const commit = (dir: -1 | 1) => {
-        const toPx = dir === 1 ? -width : width; // le panneau courant sort
+        const toPx = dir === 1 ? -width : width;
         animateTo(toPx, () => {
-          const next =
-            dir === 1
-              ? nextKey // aller à la page de droite (suivante)
-              : prevKey; // aller à la page de gauche (précédente)
+          const next = dir === 1 ? nextKey : prevKey;
           if (next) {
             setActiveTab(next);
-            try {
-              localStorage.setItem(lastTabKeyFor(selectedCharacter.id), next);
-            } catch {}
+            try { localStorage.setItem(lastTabKeyFor(selectedCharacter.id), next); } catch {}
           }
           unfreezeScroll();
-          stabilizeScroll(dragStartScrollYRef.current, 400);
+            stabilizeScroll(dragStartScrollYRef.current, 400);
           finishInteract();
         });
       };
-
       const cancel = () => {
         animateTo(0, () => {
           unfreezeScroll();
@@ -345,13 +336,9 @@ export function GamePage({
         });
       };
 
-      if (dragX <= -threshold && nextKey) {
-        commit(1);
-      } else if (dragX >= threshold && prevKey) {
-        commit(-1);
-      } else {
-        cancel();
-      }
+      if (dragX <= -threshold && nextKey) commit(1);
+      else if (dragX >= threshold && prevKey) commit(-1);
+      else cancel();
     }
 
     startXRef.current = null;
