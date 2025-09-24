@@ -435,6 +435,7 @@ function ScreenRipple({
         onUpdate,
         sections: preloadedSections, // <- ajouté
       }: Props) {
+        
   const [sections, setSections] = useState<AbilitySection[]>([]);
   const [loading, setLoading] = useState(false);
 
