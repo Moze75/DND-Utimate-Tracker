@@ -729,21 +729,21 @@ function ScreenRipple({
             </div>
 
             <div className="space-y-4">
-              {visible.map((s, i) => (
-                <AbilityCard
-                  key={`${s.origin}-${s.level ?? 'x'}-${i}`}
-                  section={s}
-                  defaultOpen={s.level === finalLevel}
-                  ctx={{
-                    characterId,
-                    className: displayClass,
-                    subclassName: displaySubclass,
-                    checkedMap,
-                    onToggle: handleToggle,
-                  }}
-                  disableContentWhileLoading={loadingChecks}
-                />
-              ))}
+          {visible.map((s, i) => (
+            <AbilityCard
+              key={`${s.origin}-${s.level ?? 'x'}-${i}`}
+              section={s}
+              defaultOpen={!firstMountRef.current && s.level === finalLevel}
+              ctx={{
+                characterId,
+                className: displayClass,
+                subclassName: displaySubclass,
+                checkedMap,
+                onToggle: handleToggle,
+              }}
+              disableContentWhileLoading={loadingChecks}
+            />
+          ))}
             </div>
           </>
         )}
