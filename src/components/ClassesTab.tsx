@@ -426,7 +426,15 @@ function ScreenRipple({
    Composant principal
    =========================================================== */
 
-function ClassesTab({ player, playerClass, className, subclassName, characterLevel, onUpdate }: Props) {
+      function ClassesTab({
+        player,
+        playerClass,
+        className,
+        subclassName,
+        characterLevel,
+        onUpdate,
+        sections: preloadedSections, // <- ajouté
+      }: Props) {
   const [sections, setSections] = useState<AbilitySection[]>([]);
   const [loading, setLoading] = useState(false);
 
