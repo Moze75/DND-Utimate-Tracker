@@ -103,7 +103,7 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // PRE-MONTAGE COMPLET : tous les onglets sont montés dès le début
+  // PRE-MONTAGE COMPLET : tous les onglets montés dès le début
   const [visitedTabs] = useState<Set<TabKey>>(
     () => new Set<TabKey>(['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'])
   );
@@ -116,8 +116,11 @@ export function GamePage({
   // Swipe tactile
   const startXRef = useRef<number | null>(null);
   const startYRef = useRef<number | null>(null);
-  const swipingRef = useRef<boolean>(false);
   const dragStartScrollYRef = useRef<number>(0);
+
+  // Décision d'orientation: 'undetermined' | 'horizontal' | 'vertical'
+  const gestureDirRef = useRef<'undetermined' | 'horizontal' | 'vertical'>('undetermined');
+  const hasFrozenRef = useRef(false);
 
   const [dragX, setDragX] = useState(0);
   const [animating, setAnimating] = useState(false);
@@ -268,15 +271,20 @@ export function GamePage({
     return () => window.cancelAnimationFrame(id);
   }, [activeTab, isInteracting, animating, measureActiveHeight]);
 
-  /* ---------------- Swipe tactile ---------------- */
+  /* ---------------- Swipe tactile (amélioré) ---------------- */
   const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
     startXRef.current = t.clientX;
     startYRef.current = t.clientY;
-    swipingRef.current = false;
+    gestureDirRef.current = 'undetermined';
+    hasFrozenRef.current = false;
     setAnimating(false);
+    // On ne touche pas au dragX tant qu'on n'a pas confirmé horizontal
   };
+
+  const HORIZONTAL_DECIDE_THRESHOLD = 12; // px
+  const HORIZONTAL_DOMINANCE_RATIO = 1.15; // dx > dy * 1.15
 
   const onTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (startXRef.current == null || startYRef.current == null) return;
@@ -284,22 +292,43 @@ export function GamePage({
     const dx = t.clientX - startXRef.current;
     const dy = t.clientY - startYRef.current;
 
-    if (!swipingRef.current && Math.abs(dx) > 10 && Math.abs(Math.abs(dx) - Math.abs(dy)) > 4) {
-      swipingRef.current = true;
-      widthRef.current = stageRef.current?.clientWidth ?? widthRef.current;
-      setIsInteracting(true);
-      setContainerH(measurePaneHeight(activeTab));
-      dragStartScrollYRef.current = freezeScroll();
+    // Décision de direction si encore indéterminée
+    if (gestureDirRef.current === 'undetermined') {
+      const adx = Math.abs(dx);
+      const ady = Math.abs(dy);
+      if (adx >= HORIZONTAL_DECIDE_THRESHOLD || ady >= HORIZONTAL_DECIDE_THRESHOLD) {
+        if (adx > ady * HORIZONTAL_DOMINANCE_RATIO) {
+          gestureDirRef.current = 'horizontal';
+          // On initialise le contexte horizontal maintenant
+          widthRef.current = stageRef.current?.clientWidth ?? widthRef.current;
+          setIsInteracting(true);
+          setContainerH(measurePaneHeight(activeTab));
+          dragStartScrollYRef.current = freezeScroll();
+          hasFrozenRef.current = true;
+        } else {
+          gestureDirRef.current = 'vertical';
+          // On laisse le scroll se faire, on ABORT le swipe
+        }
+      }
     }
-    if (!swipingRef.current) return;
 
-    e.preventDefault(); // Empêche le scroll vertical pendant le drag horizontal
+    if (gestureDirRef.current !== 'horizontal') {
+      // vertical ou pas encore décidé → ne surtout pas empêcher le scroll
+      return;
+    }
 
+    // A partir d'ici on est certain d'être en horizontal → empêcher le scroll natif
+    e.preventDefault();
+
+    // Calcul + clamp
     let clamped = dx;
     if (!prevKey && clamped > 0) clamped = 0;
     if (!nextKey && clamped < 0) clamped = 0;
 
+    // Appliquer la translation
     setDragX(clamped);
+
+    // Mesures dynamiques (hauteur max)
     const id = window.requestAnimationFrame(measureDuringSwipe);
     return () => window.cancelAnimationFrame(id);
   };
@@ -320,41 +349,57 @@ export function GamePage({
   };
 
   const onTouchEnd = () => {
-    if (startXRef.current == null || startYRef.current == null) return;
+    if (startXRef.current == null || startYRef.current == null) {
+      gestureDirRef.current = 'undetermined';
+      return;
+    }
 
-    if (swipingRef.current) {
-      const width = widthRef.current || (stageRef.current?.clientWidth ?? 0);
-      const threshold = Math.max(48, width * 0.25);
+    // Si la direction a été jugée verticale → rien à faire
+    if (gestureDirRef.current !== 'horizontal') {
+      startXRef.current = null;
+      startYRef.current = null;
+      gestureDirRef.current = 'undetermined';
+      return;
+    }
 
-      const commit = (dir: -1 | 1) => {
-        const toPx = dir === 1 ? -width : width;
-        animateTo(toPx, () => {
-          const next = dir === 1 ? nextKey : prevKey;
-          if (next) {
-            setActiveTab(next);
-            try { localStorage.setItem(lastTabKeyFor(selectedCharacter.id), next); } catch {}
-          }
+    // Geste horizontal terminé: décider du changement d’onglet
+    const width = widthRef.current || (stageRef.current?.clientWidth ?? 0);
+    const threshold = Math.max(48, width * 0.25);
+
+    const commit = (dir: -1 | 1) => {
+      const toPx = dir === 1 ? -width : width;
+      animateTo(toPx, () => {
+        const next = dir === 1 ? nextKey : prevKey;
+        if (next) {
+          setActiveTab(next);
+          try { localStorage.setItem(lastTabKeyFor(selectedCharacter.id), next); } catch {}
+        }
+        if (hasFrozenRef.current) {
           unfreezeScroll();
           stabilizeScroll(dragStartScrollYRef.current, 400);
-          finishInteract();
-        });
-      };
-      const cancel = () => {
-        animateTo(0, () => {
+        }
+        finishInteract();
+      });
+    };
+
+    const cancel = () => {
+      animateTo(0, () => {
+        if (hasFrozenRef.current) {
           unfreezeScroll();
           stabilizeScroll(dragStartScrollYRef.current, 300);
-          finishInteract();
-        });
-      };
+        }
+        finishInteract();
+      });
+    };
 
-      if (dragX <= -threshold && nextKey) commit(1);
-      else if (dragX >= threshold && prevKey) commit(-1);
-      else cancel();
-    }
+    if (dragX <= -threshold && nextKey) commit(1);
+    else if (dragX >= threshold && prevKey) commit(-1);
+    else cancel();
 
     startXRef.current = null;
     startYRef.current = null;
-    swipingRef.current = false;
+    gestureDirRef.current = 'undetermined';
+    hasFrozenRef.current = false;
   };
 
   /* ---------------- Changement via clic nav ---------------- */
@@ -504,7 +549,7 @@ export function GamePage({
               onTouchEnd={onTouchEnd}
               onTouchCancel={onTouchEnd}
               style={{
-                touchAction: 'pan-y',
+                touchAction: 'pan-y', // permet au scroll vertical de rester naturel tant qu'on n'a pas "lock" horizontal
                 height: (isInteracting || animating || heightLocking) ? containerH : undefined,
                 transition: heightLocking ? 'height 280ms ease' : undefined,
               }}
@@ -515,7 +560,6 @@ export function GamePage({
                   (neighborType === 'next' && key === nextKey) ||
                   (neighborType === 'prev' && key === prevKey);
 
-                // Mode statique (pas de swipe en cours)
                 if (showAsStatic) {
                   return (
                     <div
@@ -535,7 +579,6 @@ export function GamePage({
                   );
                 }
 
-                // Mode interaction (swipe) : animer actif + voisin
                 const display = isActive || isNeighbor ? 'block' : 'none';
                 let transform = 'translate3d(0,0,0)';
                 if (isActive) transform = currentTransform;
