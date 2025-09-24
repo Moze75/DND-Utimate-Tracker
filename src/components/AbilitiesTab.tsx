@@ -206,6 +206,12 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
     modifier: number;
   } | null>(null);
 
+// Guard: éviter les setState au tout premier rendu (réduit le “saut”)
+const firstMountRef = useRef(true);
+useEffect(() => {
+  firstMountRef.current = false;
+}, []);
+  
   useEffect(() => {
     if (player.class !== previousClass || player.level !== previousLevel) {
       setPreviousClass(player.class);
