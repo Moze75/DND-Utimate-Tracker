@@ -223,7 +223,9 @@ useEffect(() => {
   // Bard: clamp used_bardic_inspiration if cap auto changes
   const lastClampKey = useRef<string | null>(null);
   useEffect(() => {
-    if (player.class !== 'Barde' || !player?.id) return;
+    useEffect(() => {
+  if (firstMountRef.current) return; // skip au premier rendu
+  if (player.class !== 'Barde' || !player?.id) return;
 
     const cap = getBardicCap(player);
     const upper = Math.max(0, cap);
