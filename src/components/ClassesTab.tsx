@@ -59,6 +59,9 @@ type Props = {
   subclassName?: string | null;
   characterLevel?: number;
   onUpdate?: (player: Player) => void;
+
+  // Nouveau: sections préchargées (depuis GamePage)
+  sections?: AbilitySection[] | null;
 };
 
 const DEBUG = typeof window !== 'undefined' && (window as any).UT_DEBUG === true;
