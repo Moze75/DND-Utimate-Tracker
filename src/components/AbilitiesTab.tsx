@@ -818,6 +818,16 @@ export function AbilitiesTab({ player, onUpdate }: AbilitiesTabProps) {
 
 /* ============================ Sous-composants Ressources ============================ */
 
+
+function ClassesTab({ player, sections, ... }) {
+  // Enlève l'effet de fetch !
+  // const [sections, setSections] = useState([]);
+  // useEffect(() => { ... }, [player]);
+
+  if (!sections) return <div>Chargement…</div>; // loader squelettique stylé
+  // ...affichage normal avec sections
+}
+
 function ResourceEditModal({
   label,
   total,
