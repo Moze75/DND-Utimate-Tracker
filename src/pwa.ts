@@ -63,4 +63,4 @@ export function setupPWA() {
   }, ONE_HOUR);
 }
 
-setupPWA();
+setupPWA(); 
