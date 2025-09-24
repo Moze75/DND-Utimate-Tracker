@@ -186,7 +186,13 @@ export function GamePage({
           prev && prev.id === selectedCharacter.id ? prev : selectedCharacter
         );
 
-        const inventoryData = await inventoryService.getPlayerInventory(selectedCharacter.id);
+        // Remplacé par getForPlayer pour rester cohérent avec les autres appels
+        const inventoryData = await inventoryService.getForPlayer(selectedCharacter.id).catch(async () => {
+          // fallback si l'ancienne signature existe encore
+          return inventoryService.getPlayerInventory
+            ? inventoryService.getPlayerInventory(selectedCharacter.id)
+            : [];
+        });
         setInventory(inventoryData);
 
         setLoading(false);
@@ -336,6 +342,20 @@ export function GamePage({
     swipingRef.current = false;
   };
 
+  // Onglets visités persistants (pré-monte 'class' et 'abilities' pour charger le contenu externe dès le début)
+  const [visitedTabs, setVisitedTabs] = useState<Set<TabKey>>(() => {
+    const init = new Set<TabKey>([initialTab, 'class', 'abilities']);
+    return init;
+  });
+  useEffect(() => {
+    setVisitedTabs(prev => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
+
   // Changement via clic sur les onglets
   const handleTabClickChange = useCallback((tab: string) => {
     if (!isValidTab(tab)) return;
@@ -440,7 +460,11 @@ export function GamePage({
                 try {
                   const isConnected = await testConnection();
                   if (!isConnected.success) throw new Error('Impossible de se connecter');
-                  const inventoryData = await inventoryService.getPlayerInventory(selectedCharacter.id);
+                  const inventoryData = await inventoryService.getForPlayer(selectedCharacter.id).catch(async () => {
+                    return inventoryService.getPlayerInventory
+                      ? inventoryService.getPlayerInventory(selectedCharacter.id)
+                      : [];
+                  });
                   setInventory(inventoryData);
                   setCurrentPlayer(selectedCharacter);
                   setLoading(false);
@@ -486,7 +510,12 @@ export function GamePage({
               {/* MODE STATIQUE (aucune interaction en cours) */}
               {!(isInteracting || animating) && (
                 <div ref={staticRef}>
-                  {renderPane(activeTab)}
+                  {/* Rendre tous les onglets "visités" pour préserver leur état (pré-monte class/abilities) */}
+                  {Array.from(visitedTabs).map((key) => (
+                    <div key={key} style={{ display: key === activeTab ? 'block' : 'none' }}>
+                      {renderPane(key)}
+                    </div>
+                  ))}
                 </div>
               )}
 
