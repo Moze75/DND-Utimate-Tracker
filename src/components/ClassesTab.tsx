@@ -468,31 +468,49 @@ function ScreenRipple({
     setClassResources(player?.class_resources);
   }, [player?.class_resources, player?.id]);
 
-  // Charger les aptitudes
-  useEffect(() => {
-    let mounted = true;
-    if (!rawClass) {
-      setSections([]);
-      return;
-    }
-    (async () => {
-      setLoading(true);
-      try {
-        const res = await loadSectionsSmart({ className: rawClass, subclassName: rawSubclass, level: finalLevel });
-        if (!mounted) return;
-        setSections(res);
-      } catch (e) {
-        if (DEBUG) console.debug('[ClassesTab] loadSectionsSmart error:', e);
-        if (!mounted) return;
-        setSections([]);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [rawClass, rawSubclass, finalLevel]);
+      // Charger les aptitudes (court-circuite si sections préchargées)
+      useEffect(() => {
+        let mounted = true;
+      
+        if (!rawClass) {
+          setSections([]);
+          setLoading(false);
+          return () => { mounted = false; };
+        }
+      
+        // Si GamePage a déjà préchargé les sections, on les utilise directement
+        if (preloadedSections) {
+          setSections(preloadedSections);
+          setLoading(false);
+          return () => { mounted = false; };
+        }
+      
+        // Si GamePage est EN TRAIN de précharger (null), on affiche le loader
+        if (preloadedSections === null) {
+          setLoading(true);
+          return () => { mounted = false; };
+        }
+      
+        // Fallback: comportement existant (auto-fetch depuis ce composant)
+        (async () => {
+          setLoading(true);
+          try {
+            const res = await loadSectionsSmart({ className: rawClass, subclassName: rawSubclass, level: finalLevel });
+            if (!mounted) return;
+            setSections(res);
+          } catch (e) {
+            if (DEBUG) console.debug('[ClassesTab] loadSectionsSmart error:', e);
+            if (!mounted) return;
+            setSections([]);
+          } finally {
+            if (mounted) setLoading(false);
+          }
+        })();
+      
+        return () => {
+          mounted = false;
+        };
+      }, [preloadedSections, rawClass, rawSubclass, finalLevel]);
 
   // Charger l’état des cases cochées (aptitudes) pour le personnage
   useEffect(() => {
