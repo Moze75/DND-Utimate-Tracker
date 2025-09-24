@@ -654,6 +654,12 @@ function ScreenRipple({
     }
   }
 
+      // Guard: ne pas ouvrir automatiquement au tout premier rendu
+      const firstMountRef = useRef(true);
+      useEffect(() => {
+        firstMountRef.current = false;
+      }, []);
+        
   /* ===========================================================
      UI: rendu
      =========================================================== */
