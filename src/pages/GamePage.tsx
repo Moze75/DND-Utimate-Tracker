@@ -16,7 +16,6 @@ import { PlayerContext } from '../contexts/PlayerContext';
 
 import { inventoryService } from '../services/inventoryService';
 import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab';
-
 import { loadAbilitySections } from '../services/classesContent';
 
 import '../styles/swipe.css';
@@ -39,12 +38,11 @@ type GamePageProps = {
   onUpdateCharacter?: (p: Player) => void;
 };
 
-// Gèle le scroll (préserve la position) pendant un changement/drag
+// Gèle le scroll (préserve la position) pendant un drag swipe
 function freezeScroll(): number {
   const y = window.scrollY || window.pageYOffset || 0;
   const body = document.body;
   (body as any).__scrollY = y;
-  // Evite 100vw/100vh qui causent des débordements sur mobile
   body.style.position = 'fixed';
   body.style.top = `-${y}px`;
   body.style.left = '0';
@@ -100,7 +98,20 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // Swipe overlay (2 panneaux absolus) — sans doublon: soit statique, soit overlay
+  // Onglets visités (pour garder les composants montés et éviter les “premiers rendus”)
+  const [visitedTabs, setVisitedTabs] = useState<Set<TabKey>>(
+    () => new Set<TabKey>([initialTab, 'class', 'abilities'])
+  );
+  useEffect(() => {
+    setVisitedTabs((prev) => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
+
+  // Swipe overlay (2 panneaux absolus) — soit statique, soit overlay
   const stageRef = useRef<HTMLDivElement | null>(null);       // conteneur relatif
   const staticRef = useRef<HTMLDivElement | null>(null);      // contenu statique (hors overlay)
   const overlayCurrentRef = useRef<HTMLDivElement | null>(null);
@@ -114,8 +125,11 @@ export function GamePage({
 
   const [dragX, setDragX] = useState(0);
   const [animating, setAnimating] = useState(false);
-  const [isInteracting, setIsInteracting] = useState(false);  // affiche l’overlay uniquement pendant le drag/anim
+  const [isInteracting, setIsInteracting] = useState(false);  // overlay pendant le drag/anim
   const [containerH, setContainerH] = useState<number | undefined>(undefined);
+
+  // Lock de hauteur pendant switch par clic
+  const [heightLocking, setHeightLocking] = useState(false);
 
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
@@ -176,7 +190,7 @@ export function GamePage({
     setActiveTab(saved);
   }, [selectedCharacter.id]);
 
-  // Init: connexion + player + inventaire
+  // Initialisation: connexion + player + inventaire
   useEffect(() => {
     const initialize = async () => {
       try {
@@ -217,7 +231,7 @@ export function GamePage({
   const prevKey = activeIndex > 0 ? TAB_ORDER[activeIndex - 1] : null;
   const nextKey = activeIndex < TAB_ORDER.length - 1 ? TAB_ORDER[activeIndex + 1] : null;
 
-  // Mesure hauteur (statique ou overlay selon le mode)
+  // Mesure hauteur (statique ou overlay)
   const measureStaticHeight = useCallback(() => {
     const h = staticRef.current?.offsetHeight ?? 0;
     if (h) setContainerH(h);
@@ -232,12 +246,11 @@ export function GamePage({
   // Mesure au changement d’onglet en mode statique
   useEffect(() => {
     if (isInteracting || animating) return;
-    // Mesurer après paint
     const id = window.requestAnimationFrame(measureStaticHeight);
     return () => window.cancelAnimationFrame(id);
   }, [activeTab, isInteracting, animating, measureStaticHeight]);
 
-  // Pointeurs (tactile/souris) attachés au conteneur stage (toujours présent)
+  // Pointeurs (tactile/souris) pour swipe
   const onPointerDown: React.PointerEventHandler<HTMLDivElement> = (e) => {
     if (e.pointerType === 'mouse' && e.buttons !== 1) return;
     startXRef.current = e.clientX;
@@ -260,7 +273,7 @@ export function GamePage({
       widthRef.current = stageRef.current?.clientWidth ?? widthRef.current;
       measureStaticHeight();
 
-      setIsInteracting(true); // on ne rend plus la copie statique, seulement l’overlay
+      setIsInteracting(true);
       dragStartScrollYRef.current = freezeScroll();
     }
     if (!swipingRef.current) return;
@@ -273,7 +286,6 @@ export function GamePage({
 
     setDragX(clamped);
 
-    // Ajuster la hauteur au max courant/voisin pendant le drag
     const id = window.requestAnimationFrame(measureOverlayHeights);
     return () => window.cancelAnimationFrame(id);
   };
@@ -290,7 +302,6 @@ export function GamePage({
   const finishInteract = () => {
     setIsInteracting(false);
     setDragX(0);
-    // Après retour en mode statique, remesurer à la frame suivante
     requestAnimationFrame(measureStaticHeight);
   };
 
@@ -342,27 +353,38 @@ export function GamePage({
     swipingRef.current = false;
   };
 
-  // Changement via clic sur les onglets
+  // Switch via clic: lock de hauteur au lieu de freeze/unfreeze
   const handleTabClickChange = useCallback((tab: string) => {
     if (!isValidTab(tab)) return;
-    const y = freezeScroll();
-    const root = document.documentElement;
-    const prevBehavior = root.style.scrollBehavior;
-    root.style.scrollBehavior = 'auto';
 
+    // Mesure hauteur actuelle (fromH)
+    const fromH = staticRef.current?.offsetHeight ?? 0;
+    if (fromH > 0) {
+      setContainerH(fromH);
+      setHeightLocking(true);
+    }
+
+    // Switch
     setActiveTab(tab as TabKey);
 
+    // Mesure hauteur cible (toH) après rendu (double RAF)
     requestAnimationFrame(() => {
-      unfreezeScroll();
-      stabilizeScroll(y, 400);
-      setTimeout(() => {
-        root.style.scrollBehavior = prevBehavior;
-      }, 420);
-      try {
-        localStorage.setItem(lastTabKeyFor(selectedCharacter.id), tab);
-      } catch {}
+      requestAnimationFrame(() => {
+        const toH = staticRef.current?.offsetHeight ?? fromH;
+        if (toH > 0) setContainerH(toH);
+
+        // Relâche le lock après la transition
+        setTimeout(() => {
+          setHeightLocking(false);
+          requestAnimationFrame(measureStaticHeight);
+        }, 280);
+      });
     });
-  }, [selectedCharacter.id]);
+
+    try {
+      localStorage.setItem(lastTabKeyFor(selectedCharacter.id), tab);
+    } catch {}
+  }, [selectedCharacter.id, measureStaticHeight]);
 
   const handleBackToSelection = () => {
     try {
@@ -372,7 +394,7 @@ export function GamePage({
     toast.success('Retour à la sélection des personnages');
   };
 
-  // Rechargement d’inventaire (ex: si id change)
+  // Rechargement d’inventaire lors d’un changement d’id (sécurité additionnelle)
   useEffect(() => {
     async function loadInventory() {
       if (!selectedCharacter) return;
@@ -448,9 +470,9 @@ export function GamePage({
   const currentTransform = `translate3d(${dragX}px, 0, 0)`;
   const neighborTransform =
     neighborType === 'next'
-      ? `translate3d(calc(100% + ${dragX}px), 0, 0)` // voisin à droite
+      ? `translate3d(calc(100% + ${dragX}px), 0, 0)`
       : neighborType === 'prev'
-      ? `translate3d(calc(-100% + ${dragX}px), 0, 0)` // voisin à gauche
+      ? `translate3d(calc(-100% + ${dragX}px), 0, 0)`
       : undefined;
 
   if (loading) {
@@ -522,14 +544,23 @@ export function GamePage({
               onPointerCancel={onPointerUp}
               style={{
                 touchAction: 'pan-y',
-                // Fixe la hauteur (mesurée) pendant l’interaction/animation pour éviter les sauts
-                height: isInteracting || animating ? containerH : undefined,
+                // Fixe la hauteur pendant drag/anim OU pendant le lock de switch
+                height: (isInteracting || animating || heightLocking) ? containerH : undefined,
+                transition: heightLocking ? 'height 280ms ease' : undefined,
               }}
             >
               {/* MODE STATIQUE (aucune interaction en cours) */}
               {!(isInteracting || animating) && (
                 <div ref={staticRef}>
-                  {renderPane(activeTab)}
+                  {Array.from(visitedTabs).map((key) => (
+                    <div key={key} style={{ display: key === activeTab ? 'block' : 'none' }}>
+                      {key === 'class' && classSections === null ? (
+                        <div className="py-12 text-center text-white/70">Chargement des aptitudes…</div>
+                      ) : (
+                        renderPane(key)
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
 
