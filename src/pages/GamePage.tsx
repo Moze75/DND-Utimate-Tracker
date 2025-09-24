@@ -17,6 +17,8 @@ import { PlayerContext } from '../contexts/PlayerContext';
 import { inventoryService } from '../services/inventoryService';
 import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab';
 
+import { loadAbilitySections } from '../services/classesContent';
+
 import '../styles/swipe.css';
 
 type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile';
@@ -83,6 +85,9 @@ export function GamePage({
 
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(selectedCharacter);
   const [inventory, setInventory] = useState<any[]>([]);
+
+  // Préchargement sections de classe (markdown)
+  const [classSections, setClassSections] = useState<any[] | null>(null);
 
   // Onglet initial depuis localStorage
   const initialTab: TabKey = (() => {
@@ -171,6 +176,7 @@ export function GamePage({
     setActiveTab(saved);
   }, [selectedCharacter.id]);
 
+  // Init: connexion + player + inventaire
   useEffect(() => {
     const initialize = async () => {
       try {
@@ -186,13 +192,7 @@ export function GamePage({
           prev && prev.id === selectedCharacter.id ? prev : selectedCharacter
         );
 
-        // Remplacé par getForPlayer pour rester cohérent avec les autres appels
-        const inventoryData = await inventoryService.getForPlayer(selectedCharacter.id).catch(async () => {
-          // fallback si l'ancienne signature existe encore
-          return inventoryService.getPlayerInventory
-            ? inventoryService.getPlayerInventory(selectedCharacter.id)
-            : [];
-        });
+        const inventoryData = await inventoryService.getPlayerInventory(selectedCharacter.id);
         setInventory(inventoryData);
 
         setLoading(false);
@@ -342,20 +342,6 @@ export function GamePage({
     swipingRef.current = false;
   };
 
-  // Onglets visités persistants (pré-monte 'class' et 'abilities' pour charger le contenu externe dès le début)
-  const [visitedTabs, setVisitedTabs] = useState<Set<TabKey>>(() => {
-    const init = new Set<TabKey>([initialTab, 'class', 'abilities']);
-    return init;
-  });
-  useEffect(() => {
-    setVisitedTabs(prev => {
-      if (prev.has(activeTab)) return prev;
-      const next = new Set(prev);
-      next.add(activeTab);
-      return next;
-    });
-  }, [activeTab]);
-
   // Changement via clic sur les onglets
   const handleTabClickChange = useCallback((tab: string) => {
     if (!isValidTab(tab)) return;
@@ -386,6 +372,43 @@ export function GamePage({
     toast.success('Retour à la sélection des personnages');
   };
 
+  // Rechargement d’inventaire (ex: si id change)
+  useEffect(() => {
+    async function loadInventory() {
+      if (!selectedCharacter) return;
+      try {
+        const items = await inventoryService.getPlayerInventory(selectedCharacter.id);
+        setInventory(items);
+      } catch (e) {}
+    }
+    loadInventory();
+  }, [selectedCharacter?.id]);
+
+  // Préchargement sections de classe dès que le personnage change
+  useEffect(() => {
+    let cancelled = false;
+    setClassSections(null);
+    async function preloadClassContent() {
+      const cls = selectedCharacter?.class;
+      if (!cls) {
+        setClassSections([]);
+        return;
+      }
+      try {
+        const res = await loadAbilitySections({
+          className: cls,
+          subclassName: (selectedCharacter as any)?.subclass ?? null,
+          characterLevel: selectedCharacter?.level ?? 1,
+        });
+        if (!cancelled) setClassSections(res?.sections ?? []);
+      } catch (e) {
+        if (!cancelled) setClassSections([]);
+      }
+    }
+    preloadClassContent();
+    return () => { cancelled = true; };
+  }, [selectedCharacter?.id, selectedCharacter?.class, (selectedCharacter as any)?.subclass, selectedCharacter?.level]);
+
   // Rendu d'un panneau selon la clé
   const renderPane = (key: TabKey) => {
     if (!currentPlayer) return null;
@@ -393,7 +416,7 @@ export function GamePage({
       case 'combat':
         return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
       case 'class':
-        return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+        return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} sections={classSections} />;
       case 'abilities':
         return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
       case 'stats':
@@ -460,11 +483,7 @@ export function GamePage({
                 try {
                   const isConnected = await testConnection();
                   if (!isConnected.success) throw new Error('Impossible de se connecter');
-                  const inventoryData = await inventoryService.getForPlayer(selectedCharacter.id).catch(async () => {
-                    return inventoryService.getPlayerInventory
-                      ? inventoryService.getPlayerInventory(selectedCharacter.id)
-                      : [];
-                  });
+                  const inventoryData = await inventoryService.getPlayerInventory(selectedCharacter.id);
                   setInventory(inventoryData);
                   setCurrentPlayer(selectedCharacter);
                   setLoading(false);
@@ -510,12 +529,7 @@ export function GamePage({
               {/* MODE STATIQUE (aucune interaction en cours) */}
               {!(isInteracting || animating) && (
                 <div ref={staticRef}>
-                  {/* Rendre tous les onglets "visités" pour préserver leur état (pré-monte class/abilities) */}
-                  {Array.from(visitedTabs).map((key) => (
-                    <div key={key} style={{ display: key === activeTab ? 'block' : 'none' }}>
-                      {renderPane(key)}
-                    </div>
-                  ))}
+                  {renderPane(activeTab)}
                 </div>
               )}
 
