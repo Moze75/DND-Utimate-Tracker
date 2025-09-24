@@ -20,18 +20,17 @@ import { loadAbilitySections } from '../services/classesContent';
 
 import '../styles/swipe.css';
 
-// Types d'onglets
+/* ===========================================================
+   Types & Constantes
+   =========================================================== */
 type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile';
+const TAB_ORDER: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
 
-// Constantes de persistance
 const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter';
 const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
 const lastTabKeyFor = (playerId: string) => `ut:lastActiveTab:${playerId}`;
 const isValidTab = (t: string | null): t is TabKey =>
   t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class' || t === 'profile';
-
-// Ordre visuel
-const TAB_ORDER: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
 
 type GamePageProps = {
   session: any;
@@ -40,9 +39,9 @@ type GamePageProps = {
   onUpdateCharacter?: (p: Player) => void;
 };
 
-/* =====================
+/* ===========================================================
    Helpers Scroll
-   ===================== */
+   =========================================================== */
 function freezeScroll(): number {
   const y = window.scrollY || window.pageYOffset || 0;
   const body = document.body;
@@ -76,15 +75,16 @@ function stabilizeScroll(y: number, durationMs = 350) {
   requestAnimationFrame(tick);
 }
 
+/* ===========================================================
+   Composant principal
+   =========================================================== */
 export function GamePage({
   session,
   selectedCharacter,
   onBackToSelection,
   onUpdateCharacter,
 }: GamePageProps) {
-  /* =====================
-     States principaux
-     ===================== */
+  /* ---------------- State principal ---------------- */
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
@@ -103,22 +103,12 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // Persistance des onglets montés
-  const [visitedTabs, setVisitedTabs] = useState<Set<TabKey>>(
-    () => new Set<TabKey>(['combat', 'class', 'abilities'])
+  // PRE-MONTAGE COMPLET : tous les onglets sont montés dès le début
+  const [visitedTabs] = useState<Set<TabKey>>(
+    () => new Set<TabKey>(['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'])
   );
-  useEffect(() => {
-    setVisitedTabs((prev) => {
-      if (prev.has(activeTab)) return prev;
-      const next = new Set(prev);
-      next.add(activeTab);
-      return next;
-    });
-  }, [activeTab]);
 
-  /* =====================
-     Refs layout & swipe
-     ===================== */
+  /* ---------------- Refs layout & swipe ---------------- */
   const stageRef = useRef<HTMLDivElement | null>(null);
   const widthRef = useRef<number>(0);
   const paneRefs = useRef<Record<TabKey, HTMLDivElement | null>>({} as any);
@@ -133,15 +123,11 @@ export function GamePage({
   const [animating, setAnimating] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
   const [containerH, setContainerH] = useState<number | undefined>(undefined);
-
-  // Lock hauteur lors de switch par clic
   const [heightLocking, setHeightLocking] = useState(false);
 
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
-  /* =====================
-     Player update
-     ===================== */
+  /* ---------------- Update player ---------------- */
   const applyPlayerUpdate = useCallback(
     (updated: Player) => {
       setCurrentPlayer(updated);
@@ -163,9 +149,7 @@ export function GamePage({
     }
   }, [currentPlayer]);
 
-  /* =====================
-     Persistance snapshot
-     ===================== */
+  /* ---------------- Persistance snapshot & tab ---------------- */
   useEffect(() => {
     const persist = () => {
       if (!currentPlayer) return;
@@ -200,9 +184,7 @@ export function GamePage({
     setActiveTab(saved);
   }, [selectedCharacter.id]);
 
-  /* =====================
-     Initialisation
-     ===================== */
+  /* ---------------- Initialisation ---------------- */
   useEffect(() => {
     const initialize = async () => {
       try {
@@ -214,7 +196,6 @@ export function GamePage({
         setCurrentPlayer((prev) =>
           prev && prev.id === selectedCharacter.id ? prev : selectedCharacter
         );
-
         const inventoryData = await inventoryService.getPlayerInventory(selectedCharacter.id);
         setInventory(inventoryData);
         setLoading(false);
@@ -234,16 +215,34 @@ export function GamePage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCharacter.id]);
 
-  /* =====================
-     Voisins d'onglet
-     ===================== */
+  /* ---------------- Préchargement Sections Classe ---------------- */
+  useEffect(() => {
+    let cancelled = false;
+    setClassSections(null);
+    async function preloadClassContent() {
+      const cls = selectedCharacter?.class;
+      if (!cls) { setClassSections([]); return; }
+      try {
+        const res = await loadAbilitySections({
+          className: cls,
+          subclassName: (selectedCharacter as any)?.subclass ?? null,
+          characterLevel: selectedCharacter?.level ?? 1,
+        });
+        if (!cancelled) setClassSections(res?.sections ?? []);
+      } catch {
+        if (!cancelled) setClassSections([]);
+      }
+    }
+    preloadClassContent();
+    return () => { cancelled = true; };
+  }, [selectedCharacter?.id, selectedCharacter?.class, (selectedCharacter as any)?.subclass, selectedCharacter?.level]);
+
+  /* ---------------- Voisins d'onglet ---------------- */
   const activeIndex = TAB_ORDER.indexOf(activeTab);
   const prevKey = activeIndex > 0 ? TAB_ORDER[activeIndex - 1] : null;
   const nextKey = activeIndex < TAB_ORDER.length - 1 ? TAB_ORDER[activeIndex + 1] : null;
 
-  /* =====================
-     Mesures
-     ===================== */
+  /* ---------------- Mesures ---------------- */
   const measurePaneHeight = useCallback((key: TabKey | null | undefined) => {
     if (!key) return 0;
     const el = paneRefs.current[key];
@@ -269,9 +268,7 @@ export function GamePage({
     return () => window.cancelAnimationFrame(id);
   }, [activeTab, isInteracting, animating, measureActiveHeight]);
 
-  /* =====================
-     Swipe tactile (TouchEvents uniquement)
-     ===================== */
+  /* ---------------- Swipe tactile ---------------- */
   const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
@@ -296,7 +293,7 @@ export function GamePage({
     }
     if (!swipingRef.current) return;
 
-    e.preventDefault(); // stop scroll vertical pendant le drag horizontal
+    e.preventDefault(); // Empêche le scroll vertical pendant le drag horizontal
 
     let clamped = dx;
     if (!prevKey && clamped > 0) clamped = 0;
@@ -333,7 +330,7 @@ export function GamePage({
         const toPx = dir === 1 ? -width : width;
         animateTo(toPx, () => {
           const next = dir === 1 ? nextKey : prevKey;
-            if (next) {
+          if (next) {
             setActiveTab(next);
             try { localStorage.setItem(lastTabKeyFor(selectedCharacter.id), next); } catch {}
           }
@@ -360,9 +357,7 @@ export function GamePage({
     swipingRef.current = false;
   };
 
-  /* =====================
-     Switch onglet par clic
-     ===================== */
+  /* ---------------- Changement via clic nav ---------------- */
   const handleTabClickChange = useCallback((tab: string) => {
     if (!isValidTab(tab)) return;
     const fromH = measurePaneHeight(activeTab);
@@ -386,18 +381,14 @@ export function GamePage({
     try { localStorage.setItem(lastTabKeyFor(selectedCharacter.id), tab); } catch {}
   }, [activeTab, selectedCharacter.id, measureActiveHeight, measurePaneHeight]);
 
-  /* =====================
-     Back button
-     ===================== */
+  /* ---------------- Bouton retour ---------------- */
   const handleBackToSelection = () => {
     try { sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1'); } catch {}
     onBackToSelection?.();
     toast.success('Retour à la sélection des personnages');
   };
 
-  /* =====================
-     Reload Inventaire sécu
-     ===================== */
+  /* ---------------- Reload inventaire (sécurité) ---------------- */
   useEffect(() => {
     async function loadInventory() {
       if (!selectedCharacter) return;
@@ -409,33 +400,7 @@ export function GamePage({
     loadInventory();
   }, [selectedCharacter?.id]);
 
-  /* =====================
-     Préchargement sections de classe
-     ===================== */
-  useEffect(() => {
-    let cancelled = false;
-    setClassSections(null);
-    async function preloadClassContent() {
-      const cls = selectedCharacter?.class;
-      if (!cls) { setClassSections([]); return; }
-      try {
-        const res = await loadAbilitySections({
-          className: cls,
-          subclassName: (selectedCharacter as any)?.subclass ?? null,
-          characterLevel: selectedCharacter?.level ?? 1,
-        });
-        if (!cancelled) setClassSections(res?.sections ?? []);
-      } catch {
-        if (!cancelled) setClassSections([]);
-      }
-    }
-    preloadClassContent();
-    return () => { cancelled = true; };
-  }, [selectedCharacter?.id, selectedCharacter?.class, (selectedCharacter as any)?.subclass, selectedCharacter?.level]);
-
-  /* =====================
-     Rendu d'un onglet
-     ===================== */
+  /* ---------------- Rendu d'un pane ---------------- */
   const renderPane = (key: TabKey) => {
     if (!currentPlayer) return null;
     switch (key) {
@@ -457,9 +422,7 @@ export function GamePage({
     }
   };
 
-  /* =====================
-     Loading / Errors
-     ===================== */
+  /* ---------------- Loading / Error ---------------- */
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -470,7 +433,6 @@ export function GamePage({
       </div>
     );
   }
-
   if (connectionError) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -510,9 +472,7 @@ export function GamePage({
     );
   }
 
-  /* =====================
-     Swipe transforms
-     ===================== */
+  /* ---------------- Swipe transforms ---------------- */
   const neighborType: 'prev' | 'next' | null = (() => {
     if (dragX > 0 && prevKey) return 'prev';
     if (dragX < 0 && nextKey) return 'next';
@@ -523,13 +483,11 @@ export function GamePage({
     neighborType === 'next'
       ? `translate3d(calc(100% + ${dragX}px), 0, 0)`
       : neighborType === 'prev'
-        ? `translate3d(calc(-100% + ${dragX}px), 0, 0)`
-        : undefined;
+      ? `translate3d(calc(-100% + ${dragX}px), 0, 0)`
+      : undefined;
   const showAsStatic = !isInteracting && !animating;
 
-  /* =====================
-     Rendu principal
-     ===================== */
+  /* ---------------- Rendu principal ---------------- */
   return (
     <div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor">
       <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6">
@@ -557,6 +515,7 @@ export function GamePage({
                   (neighborType === 'next' && key === nextKey) ||
                   (neighborType === 'prev' && key === prevKey);
 
+                // Mode statique (pas de swipe en cours)
                 if (showAsStatic) {
                   return (
                     <div
@@ -576,6 +535,7 @@ export function GamePage({
                   );
                 }
 
+                // Mode interaction (swipe) : animer actif + voisin
                 const display = isActive || isNeighbor ? 'block' : 'none';
                 let transform = 'translate3d(0,0,0)';
                 if (isActive) transform = currentTransform;
@@ -609,7 +569,7 @@ export function GamePage({
       <div className="w-full max-w-md mx-auto mt-6 px-4">
         <button
           onClick={handleBackToSelection}
-            className="w-full btn-secondary px-4 py-2 rounded-lg flex items-center justify-center gap-2"
+          className="w-full btn-secondary px-4 py-2 rounded-lg flex items-center justify-center gap-2"
         >
           <LogOut size={20} />
           Retour aux personnages
