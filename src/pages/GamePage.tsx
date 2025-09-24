@@ -128,6 +128,7 @@ export function GamePage({
   const [animating, setAnimating] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
   const [containerH, setContainerH] = useState<number | undefined>(undefined);
+  const [heightLocking, setHeightLocking] = useState(false);
 
   // Lock de hauteur pendant switch par clic
   const [heightLocking, setHeightLocking] = useState(false);
