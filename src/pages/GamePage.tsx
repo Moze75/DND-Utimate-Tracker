@@ -40,9 +40,9 @@ type GamePageProps = {
 };
 
 /* ===========================================================
-   Helpers Scroll
+   Helpers Scroll (sécurisés)
    =========================================================== */
-function freezeScroll(): number {
+function reallyFreezeScroll(): number {
   const y = window.scrollY || window.pageYOffset || 0;
   const body = document.body;
   (body as any).__scrollY = y;
@@ -54,7 +54,7 @@ function freezeScroll(): number {
   body.style.overflowY = 'scroll';
   return y;
 }
-function unfreezeScroll() {
+function reallyUnfreezeScroll() {
   const body = document.body;
   const y = (body as any).__scrollY || 0;
   body.style.position = '';
@@ -103,7 +103,7 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // PRE-MONTAGE COMPLET : tous les onglets montés dès le début
+  // PRE-MONTAGE COMPLET
   const [visitedTabs] = useState<Set<TabKey>>(
     () => new Set<TabKey>(['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'])
   );
@@ -113,14 +113,18 @@ export function GamePage({
   const widthRef = useRef<number>(0);
   const paneRefs = useRef<Record<TabKey, HTMLDivElement | null>>({} as any);
 
-  // Swipe tactile
+  // Geste
   const startXRef = useRef<number | null>(null);
   const startYRef = useRef<number | null>(null);
   const dragStartScrollYRef = useRef<number>(0);
 
-  // Décision d'orientation: 'undetermined' | 'horizontal' | 'vertical'
+  // Décision de direction
   const gestureDirRef = useRef<'undetermined' | 'horizontal' | 'vertical'>('undetermined');
-  const hasFrozenRef = useRef(false);
+
+  // Indique si le scroll est réellement gelé
+  const freezeActiveRef = useRef(false);
+  const freezeWatchdogRef = useRef<number | null>(null);
+  const hasStabilizedRef = useRef(false);
 
   const [dragX, setDragX] = useState(0);
   const [animating, setAnimating] = useState(false);
@@ -130,25 +134,60 @@ export function GamePage({
 
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
+  /* ---------------- Scroll Freeze Safe API ---------------- */
+  const safeFreeze = useCallback(() => {
+    if (freezeActiveRef.current) return;
+    freezeActiveRef.current = true;
+    dragStartScrollYRef.current = reallyFreezeScroll();
+    // Watchdog : force unfreeze si rien ne libère après 1.2s
+    freezeWatchdogRef.current = window.setTimeout(() => {
+      if (freezeActiveRef.current) {
+        safeUnfreeze(true);
+      }
+    }, 1200);
+  }, []);
+
+  const safeUnfreeze = useCallback((forced = false) => {
+    if (!freezeActiveRef.current) return;
+    freezeActiveRef.current = false;
+    if (freezeWatchdogRef.current) {
+      clearTimeout(freezeWatchdogRef.current);
+      freezeWatchdogRef.current = null;
+    }
+    reallyUnfreezeScroll();
+    if (!forced) {
+      stabilizeScroll(dragStartScrollYRef.current, 320);
+    }
+  }, []);
+
+  const resetGestureState = useCallback(() => {
+    startXRef.current = null;
+    startYRef.current = null;
+    gestureDirRef.current = 'undetermined';
+    hasStabilizedRef.current = false;
+  }, []);
+
+  const fullAbortInteraction = useCallback(() => {
+    setIsInteracting(false);
+    setAnimating(false);
+    setDragX(0);
+    if (freezeActiveRef.current) safeUnfreeze();
+    resetGestureState();
+  }, [resetGestureState, safeUnfreeze]);
+
   /* ---------------- Update player ---------------- */
   const applyPlayerUpdate = useCallback(
     (updated: Player) => {
       setCurrentPlayer(updated);
-      try {
-        onUpdateCharacter?.(updated);
-      } catch {}
-      try {
-        localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(updated));
-      } catch {}
+      try { onUpdateCharacter?.(updated); } catch {}
+      try { localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(updated)); } catch {}
     },
     [onUpdateCharacter]
   );
 
   useEffect(() => {
     if (currentPlayer) {
-      try {
-        localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(currentPlayer));
-      } catch {}
+      try { localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(currentPlayer)); } catch {}
     }
   }, [currentPlayer]);
 
@@ -170,9 +209,7 @@ export function GamePage({
   }, [currentPlayer, activeTab, selectedCharacter.id]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(lastTabKeyFor(selectedCharacter.id), activeTab);
-    } catch {}
+    try { localStorage.setItem(lastTabKeyFor(selectedCharacter.id), activeTab); } catch {}
   }, [activeTab, selectedCharacter.id]);
 
   useEffect(() => {
@@ -271,64 +308,57 @@ export function GamePage({
     return () => window.cancelAnimationFrame(id);
   }, [activeTab, isInteracting, animating, measureActiveHeight]);
 
-  /* ---------------- Swipe tactile (amélioré) ---------------- */
+  /* ---------------- Swipe tactile amélioré + sûreté ---------------- */
+  const HORIZONTAL_DECIDE_THRESHOLD = 12;
+  const HORIZONTAL_DOMINANCE_RATIO = 1.15;
+
   const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
     startXRef.current = t.clientX;
     startYRef.current = t.clientY;
     gestureDirRef.current = 'undetermined';
-    hasFrozenRef.current = false;
     setAnimating(false);
-    // On ne touche pas au dragX tant qu'on n'a pas confirmé horizontal
   };
-
-  const HORIZONTAL_DECIDE_THRESHOLD = 12; // px
-  const HORIZONTAL_DOMINANCE_RATIO = 1.15; // dx > dy * 1.15
 
   const onTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (startXRef.current == null || startYRef.current == null) return;
+
     const t = e.touches[0];
     const dx = t.clientX - startXRef.current;
     const dy = t.clientY - startYRef.current;
+    const adx = Math.abs(dx);
+    const ady = Math.abs(dy);
 
-    // Décision de direction si encore indéterminée
+    // Décision
     if (gestureDirRef.current === 'undetermined') {
-      const adx = Math.abs(dx);
-      const ady = Math.abs(dy);
       if (adx >= HORIZONTAL_DECIDE_THRESHOLD || ady >= HORIZONTAL_DECIDE_THRESHOLD) {
         if (adx > ady * HORIZONTAL_DOMINANCE_RATIO) {
           gestureDirRef.current = 'horizontal';
-          // On initialise le contexte horizontal maintenant
-          widthRef.current = stageRef.current?.clientWidth ?? widthRef.current;
           setIsInteracting(true);
           setContainerH(measurePaneHeight(activeTab));
-          dragStartScrollYRef.current = freezeScroll();
-          hasFrozenRef.current = true;
+          safeFreeze();
         } else {
           gestureDirRef.current = 'vertical';
-          // On laisse le scroll se faire, on ABORT le swipe
+          return; // Laisse le scroll natif
         }
+      } else {
+        return; // Pas encore décidé, ne rien faire
       }
     }
 
     if (gestureDirRef.current !== 'horizontal') {
-      // vertical ou pas encore décidé → ne surtout pas empêcher le scroll
-      return;
+      return; // Vertical : ne pas empêcher le scroll
     }
 
-    // A partir d'ici on est certain d'être en horizontal → empêcher le scroll natif
+    // Horizontal confirmé
     e.preventDefault();
 
-    // Calcul + clamp
     let clamped = dx;
     if (!prevKey && clamped > 0) clamped = 0;
     if (!nextKey && clamped < 0) clamped = 0;
 
-    // Appliquer la translation
     setDragX(clamped);
-
-    // Mesures dynamiques (hauteur max)
     const id = window.requestAnimationFrame(measureDuringSwipe);
     return () => window.cancelAnimationFrame(id);
   };
@@ -349,20 +379,20 @@ export function GamePage({
   };
 
   const onTouchEnd = () => {
+    // Geste non démarré
     if (startXRef.current == null || startYRef.current == null) {
-      gestureDirRef.current = 'undetermined';
+      resetGestureState();
       return;
     }
 
-    // Si la direction a été jugée verticale → rien à faire
     if (gestureDirRef.current !== 'horizontal') {
-      startXRef.current = null;
-      startYRef.current = null;
-      gestureDirRef.current = 'undetermined';
+      // Si on avait gelé par erreur (théoriquement non), on libère
+      if (freezeActiveRef.current) safeUnfreeze();
+      resetGestureState();
       return;
     }
 
-    // Geste horizontal terminé: décider du changement d’onglet
+    // Horizontal
     const width = widthRef.current || (stageRef.current?.clientWidth ?? 0);
     const threshold = Math.max(48, width * 0.25);
 
@@ -374,37 +404,59 @@ export function GamePage({
           setActiveTab(next);
           try { localStorage.setItem(lastTabKeyFor(selectedCharacter.id), next); } catch {}
         }
-        if (hasFrozenRef.current) {
-          unfreezeScroll();
-          stabilizeScroll(dragStartScrollYRef.current, 400);
-        }
+        if (freezeActiveRef.current) safeUnfreeze();
         finishInteract();
+        resetGestureState();
       });
     };
 
     const cancel = () => {
       animateTo(0, () => {
-        if (hasFrozenRef.current) {
-          unfreezeScroll();
-          stabilizeScroll(dragStartScrollYRef.current, 300);
-        }
+        if (freezeActiveRef.current) safeUnfreeze();
         finishInteract();
+        resetGestureState();
       });
     };
 
     if (dragX <= -threshold && nextKey) commit(1);
     else if (dragX >= threshold && prevKey) commit(-1);
     else cancel();
-
-    startXRef.current = null;
-    startYRef.current = null;
-    gestureDirRef.current = 'undetermined';
-    hasFrozenRef.current = false;
   };
+
+  // Sécurité: événements globaux qui doivent TOUJOURS libérer le scroll si gelé
+  useEffect(() => {
+    const safetyRelease = () => {
+      if (freezeActiveRef.current) safeUnfreeze(true);
+      fullAbortInteraction();
+    };
+    window.addEventListener('blur', safetyRelease);
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') safetyRelease();
+    });
+    window.addEventListener('orientationchange', safetyRelease);
+    window.addEventListener('resize', safetyRelease);
+    window.addEventListener('pagehide', safetyRelease);
+    return () => {
+      safetyRelease();
+      window.removeEventListener('blur', safetyRelease);
+      window.removeEventListener('visibilitychange', safetyRelease);
+      window.removeEventListener('orientationchange', safetyRelease);
+      window.removeEventListener('resize', safetyRelease);
+      window.removeEventListener('pagehide', safetyRelease);
+    };
+  }, [fullAbortInteraction, safeUnfreeze]);
 
   /* ---------------- Changement via clic nav ---------------- */
   const handleTabClickChange = useCallback((tab: string) => {
     if (!isValidTab(tab)) return;
+
+    // Si pour une raison quelconque l'UI était "bloquée", reset
+    if (freezeActiveRef.current) safeUnfreeze(true);
+    resetGestureState();
+    setIsInteracting(false);
+    setAnimating(false);
+    setDragX(0);
+
     const fromH = measurePaneHeight(activeTab);
     if (fromH > 0) {
       setContainerH(fromH);
@@ -424,10 +476,11 @@ export function GamePage({
     });
 
     try { localStorage.setItem(lastTabKeyFor(selectedCharacter.id), tab); } catch {}
-  }, [activeTab, selectedCharacter.id, measureActiveHeight, measurePaneHeight]);
+  }, [activeTab, selectedCharacter.id, measureActiveHeight, measurePaneHeight, resetGestureState, safeUnfreeze]);
 
   /* ---------------- Bouton retour ---------------- */
   const handleBackToSelection = () => {
+    if (freezeActiveRef.current) safeUnfreeze(true);
     try { sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1'); } catch {}
     onBackToSelection?.();
     toast.success('Retour à la sélection des personnages');
@@ -547,9 +600,12 @@ export function GamePage({
               onTouchStart={onTouchStart}
               onTouchMove={onTouchMove}
               onTouchEnd={onTouchEnd}
-              onTouchCancel={onTouchEnd}
+              onTouchCancel={() => {
+                // En cas de cancel, on abort proprement
+                fullAbortInteraction();
+              }}
               style={{
-                touchAction: 'pan-y', // permet au scroll vertical de rester naturel tant qu'on n'a pas "lock" horizontal
+                touchAction: 'pan-y',
                 height: (isInteracting || animating || heightLocking) ? containerH : undefined,
                 transition: heightLocking ? 'height 280ms ease' : undefined,
               }}
