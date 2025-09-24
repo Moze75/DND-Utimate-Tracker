@@ -20,15 +20,17 @@ import { loadAbilitySections } from '../services/classesContent';
 
 import '../styles/swipe.css';
 
+// Types d'onglets
 type TabKey = 'combat' | 'abilities' | 'stats' | 'equipment' | 'class' | 'profile';
 
+// Constantes de persistance
 const LAST_SELECTED_CHARACTER_SNAPSHOT = 'selectedCharacter';
 const SKIP_AUTO_RESUME_ONCE = 'ut:skipAutoResumeOnce';
 const lastTabKeyFor = (playerId: string) => `ut:lastActiveTab:${playerId}`;
 const isValidTab = (t: string | null): t is TabKey =>
   t === 'combat' || t === 'abilities' || t === 'stats' || t === 'equipment' || t === 'class' || t === 'profile';
 
-// IMPORTANT: ordre visuel de gauche à droite (PV/actions -> Classe -> Sorts -> Stats -> Sac -> Profil)
+// Ordre visuel
 const TAB_ORDER: TabKey[] = ['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'];
 
 type GamePageProps = {
@@ -38,7 +40,9 @@ type GamePageProps = {
   onUpdateCharacter?: (p: Player) => void;
 };
 
-// Gèle le scroll (préserve la position) pendant un drag swipe
+/* =====================
+   Helpers Scroll
+   ===================== */
 function freezeScroll(): number {
   const y = window.scrollY || window.pageYOffset || 0;
   const body = document.body;
@@ -78,16 +82,17 @@ export function GamePage({
   onBackToSelection,
   onUpdateCharacter,
 }: GamePageProps) {
+  /* =====================
+     States principaux
+     ===================== */
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(selectedCharacter);
   const [inventory, setInventory] = useState<any[]>([]);
-
-  // Préchargement sections de classe (markdown)
   const [classSections, setClassSections] = useState<any[] | null>(null);
 
-  // Onglet initial depuis localStorage
+  // Onglet initial
   const initialTab: TabKey = (() => {
     try {
       const saved = localStorage.getItem(lastTabKeyFor(selectedCharacter.id));
@@ -98,9 +103,9 @@ export function GamePage({
   })();
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // Onglets visités (garder montés pour persistance et éviter “premiers rendus”)
+  // Persistance des onglets montés
   const [visitedTabs, setVisitedTabs] = useState<Set<TabKey>>(
-    () => new Set<TabKey>(['combat', 'class', 'abilities']) // pré-monte les plus lourds
+    () => new Set<TabKey>(['combat', 'class', 'abilities'])
   );
   useEffect(() => {
     setVisitedTabs((prev) => {
@@ -111,14 +116,14 @@ export function GamePage({
     });
   }, [activeTab]);
 
-  // Conteneur et mesures
+  /* =====================
+     Refs layout & swipe
+     ===================== */
   const stageRef = useRef<HTMLDivElement | null>(null);
   const widthRef = useRef<number>(0);
-
-  // Références des wrappers pour mesurer leur hauteur
   const paneRefs = useRef<Record<TabKey, HTMLDivElement | null>>({} as any);
 
-  // Swipe state
+  // Swipe tactile
   const startXRef = useRef<number | null>(null);
   const startYRef = useRef<number | null>(null);
   const swipingRef = useRef<boolean>(false);
@@ -129,11 +134,14 @@ export function GamePage({
   const [isInteracting, setIsInteracting] = useState(false);
   const [containerH, setContainerH] = useState<number | undefined>(undefined);
 
-  // Lock de hauteur pendant switch par clic
+  // Lock hauteur lors de switch par clic
   const [heightLocking, setHeightLocking] = useState(false);
 
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
+  /* =====================
+     Player update
+     ===================== */
   const applyPlayerUpdate = useCallback(
     (updated: Player) => {
       setCurrentPlayer(updated);
@@ -155,13 +163,14 @@ export function GamePage({
     }
   }, [currentPlayer]);
 
+  /* =====================
+     Persistance snapshot
+     ===================== */
   useEffect(() => {
     const persist = () => {
       if (!currentPlayer) return;
       try {
         localStorage.setItem(LAST_SELECTED_CHARACTER_SNAPSHOT, JSON.stringify(currentPlayer));
-      } catch {}
-      try {
         localStorage.setItem(lastTabKeyFor(selectedCharacter.id), activeTab);
       } catch {}
     };
@@ -191,17 +200,16 @@ export function GamePage({
     setActiveTab(saved);
   }, [selectedCharacter.id]);
 
-  // Initialisation: connexion + player + inventaire
+  /* =====================
+     Initialisation
+     ===================== */
   useEffect(() => {
     const initialize = async () => {
       try {
         setLoading(true);
         setConnectionError(null);
-
         const isConnected = await testConnection();
-        if (!isConnected.success) {
-          throw new Error('Impossible de se connecter à la base de données');
-        }
+        if (!isConnected.success) throw new Error('Impossible de se connecter à la base de données');
 
         setCurrentPlayer((prev) =>
           prev && prev.id === selectedCharacter.id ? prev : selectedCharacter
@@ -209,10 +217,9 @@ export function GamePage({
 
         const inventoryData = await inventoryService.getPlayerInventory(selectedCharacter.id);
         setInventory(inventoryData);
-
         setLoading(false);
       } catch (error: any) {
-        console.error("Erreur d'initialisation:", error);
+        console.error('Erreur d\'initialisation:', error);
         setConnectionError(error?.message ?? 'Erreur inconnue');
         setLoading(false);
       }
@@ -221,18 +228,22 @@ export function GamePage({
     if (prevPlayerId.current !== selectedCharacter.id) {
       prevPlayerId.current = selectedCharacter.id;
       initialize();
-    } else {
-      if (loading) initialize();
+    } else if (loading) {
+      initialize();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCharacter.id]);
 
-  // Détermination des voisins dans l’ordre visuel
+  /* =====================
+     Voisins d'onglet
+     ===================== */
   const activeIndex = TAB_ORDER.indexOf(activeTab);
   const prevKey = activeIndex > 0 ? TAB_ORDER[activeIndex - 1] : null;
   const nextKey = activeIndex < TAB_ORDER.length - 1 ? TAB_ORDER[activeIndex + 1] : null;
 
-  // Mesures
+  /* =====================
+     Mesures
+     ===================== */
   const measurePaneHeight = useCallback((key: TabKey | null | undefined) => {
     if (!key) return 0;
     const el = paneRefs.current[key];
@@ -258,40 +269,40 @@ export function GamePage({
     return () => window.cancelAnimationFrame(id);
   }, [activeTab, isInteracting, animating, measureActiveHeight]);
 
-  // Pointeurs (tactile/souris) pour swipe — transforme les wrappers persistants
-  const onPointerDown: React.PointerEventHandler<HTMLDivElement> = (e) => {
-    if (e.pointerType === 'mouse' && e.buttons !== 1) return;
-    startXRef.current = e.clientX;
-    startYRef.current = e.clientY;
+  /* =====================
+     Swipe tactile (TouchEvents uniquement)
+     ===================== */
+  const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    startXRef.current = t.clientX;
+    startYRef.current = t.clientY;
     swipingRef.current = false;
     setAnimating(false);
-    stageRef.current?.setPointerCapture?.(e.pointerId); 
   };
 
-  const onPointerMove: React.PointerEventHandler<HTMLDivElement> = (e) => {
+  const onTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (startXRef.current == null || startYRef.current == null) return;
-    const dx = e.clientX - startXRef.current;
-    const dy = e.clientY - startYRef.current;
+    const t = e.touches[0];
+    const dx = t.clientX - startXRef.current;
+    const dy = t.clientY - startYRef.current;
 
-    // Déclenche si horizontal prédomine
     if (!swipingRef.current && Math.abs(dx) > 10 && Math.abs(Math.abs(dx) - Math.abs(dy)) > 4) {
       swipingRef.current = true;
-
       widthRef.current = stageRef.current?.clientWidth ?? widthRef.current;
       setIsInteracting(true);
-      setContainerH(measurePaneHeight(activeTab)); // lock hauteur de départ
+      setContainerH(measurePaneHeight(activeTab));
       dragStartScrollYRef.current = freezeScroll();
     }
     if (!swipingRef.current) return;
 
-    e.preventDefault();
+    e.preventDefault(); // stop scroll vertical pendant le drag horizontal
 
     let clamped = dx;
-    if (!prevKey && clamped > 0) clamped = 0; // pas de page à gauche
-    if (!nextKey && clamped < 0) clamped = 0; // pas de page à droite
+    if (!prevKey && clamped > 0) clamped = 0;
+    if (!nextKey && clamped < 0) clamped = 0;
 
     setDragX(clamped);
-
     const id = window.requestAnimationFrame(measureDuringSwipe);
     return () => window.cancelAnimationFrame(id);
   };
@@ -311,7 +322,7 @@ export function GamePage({
     requestAnimationFrame(measureActiveHeight);
   };
 
-  const onPointerUp: React.PointerEventHandler<HTMLDivElement> = () => {
+  const onTouchEnd = () => {
     if (startXRef.current == null || startYRef.current == null) return;
 
     if (swipingRef.current) {
@@ -319,24 +330,18 @@ export function GamePage({
       const threshold = Math.max(48, width * 0.25);
 
       const commit = (dir: -1 | 1) => {
-        const toPx = dir === 1 ? -width : width; // le panneau courant sort
+        const toPx = dir === 1 ? -width : width;
         animateTo(toPx, () => {
-          const next =
-            dir === 1
-              ? nextKey // aller à la page de droite (suivante)
-              : prevKey; // aller à la page de gauche (précédente)
-          if (next) {
+          const next = dir === 1 ? nextKey : prevKey;
+            if (next) {
             setActiveTab(next);
-            try {
-              localStorage.setItem(lastTabKeyFor(selectedCharacter.id), next);
-            } catch {}
+            try { localStorage.setItem(lastTabKeyFor(selectedCharacter.id), next); } catch {}
           }
           unfreezeScroll();
           stabilizeScroll(dragStartScrollYRef.current, 400);
           finishInteract();
         });
       };
-
       const cancel = () => {
         animateTo(0, () => {
           unfreezeScroll();
@@ -345,13 +350,9 @@ export function GamePage({
         });
       };
 
-      if (dragX <= -threshold && nextKey) {
-        commit(1);
-      } else if (dragX >= threshold && prevKey) {
-        commit(-1);
-      } else {
-        cancel();
-      }
+      if (dragX <= -threshold && nextKey) commit(1);
+      else if (dragX >= threshold && prevKey) commit(-1);
+      else cancel();
     }
 
     startXRef.current = null;
@@ -359,27 +360,22 @@ export function GamePage({
     swipingRef.current = false;
   };
 
-  // Switch via clic: lock de hauteur (sans overlay/duplicat)
+  /* =====================
+     Switch onglet par clic
+     ===================== */
   const handleTabClickChange = useCallback((tab: string) => {
     if (!isValidTab(tab)) return;
-
-    // Mesure hauteur actuelle (fromH)
     const fromH = measurePaneHeight(activeTab);
     if (fromH > 0) {
       setContainerH(fromH);
       setHeightLocking(true);
     }
-
-    // Switch
     setActiveTab(tab as TabKey);
 
-    // Mesure hauteur cible (toH) après rendu (double RAF)
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const toH = measurePaneHeight(tab as TabKey) || fromH;
         if (toH > 0) setContainerH(toH);
-
-        // Relâche le lock après la transition
         setTimeout(() => {
           setHeightLocking(false);
           requestAnimationFrame(measureActiveHeight);
@@ -387,41 +383,41 @@ export function GamePage({
       });
     });
 
-    try {
-      localStorage.setItem(lastTabKeyFor(selectedCharacter.id), tab);
-    } catch {}
+    try { localStorage.setItem(lastTabKeyFor(selectedCharacter.id), tab); } catch {}
   }, [activeTab, selectedCharacter.id, measureActiveHeight, measurePaneHeight]);
 
+  /* =====================
+     Back button
+     ===================== */
   const handleBackToSelection = () => {
-    try {
-      sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1');
-    } catch {}
+    try { sessionStorage.setItem(SKIP_AUTO_RESUME_ONCE, '1'); } catch {}
     onBackToSelection?.();
     toast.success('Retour à la sélection des personnages');
   };
 
-  // Rechargement d’inventaire lors d’un changement d’id
+  /* =====================
+     Reload Inventaire sécu
+     ===================== */
   useEffect(() => {
     async function loadInventory() {
       if (!selectedCharacter) return;
       try {
         const items = await inventoryService.getPlayerInventory(selectedCharacter.id);
         setInventory(items);
-      } catch (e) {}
+      } catch {}
     }
     loadInventory();
   }, [selectedCharacter?.id]);
 
-  // Préchargement sections de classe dès que le personnage change
+  /* =====================
+     Préchargement sections de classe
+     ===================== */
   useEffect(() => {
     let cancelled = false;
     setClassSections(null);
     async function preloadClassContent() {
       const cls = selectedCharacter?.class;
-      if (!cls) {
-        setClassSections([]);
-        return;
-      }
+      if (!cls) { setClassSections([]); return; }
       try {
         const res = await loadAbilitySections({
           className: cls,
@@ -429,7 +425,7 @@ export function GamePage({
           characterLevel: selectedCharacter?.level ?? 1,
         });
         if (!cancelled) setClassSections(res?.sections ?? []);
-      } catch (e) {
+      } catch {
         if (!cancelled) setClassSections([]);
       }
     }
@@ -437,18 +433,16 @@ export function GamePage({
     return () => { cancelled = true; };
   }, [selectedCharacter?.id, selectedCharacter?.class, (selectedCharacter as any)?.subclass, selectedCharacter?.level]);
 
-  // Rendu d'un panneau selon la clé
+  /* =====================
+     Rendu d'un onglet
+     ===================== */
   const renderPane = (key: TabKey) => {
     if (!currentPlayer) return null;
     switch (key) {
-      case 'combat':
-        return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-      case 'class':
-        return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} sections={classSections} />;
-      case 'abilities':
-        return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
-      case 'stats':
-        return <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+      case 'combat': return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+      case 'class': return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} sections={classSections} />;
+      case 'abilities': return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+      case 'stats': return <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
       case 'equipment':
         return (
           <EquipmentTab
@@ -458,13 +452,14 @@ export function GamePage({
             onInventoryUpdate={setInventory}
           />
         );
-      case 'profile':
-        return <PlayerProfileProfileTab player={currentPlayer} />;
-      default:
-        return null;
+      case 'profile': return <PlayerProfileProfileTab player={currentPlayer} />;
+      default: return null;
     }
   };
 
+  /* =====================
+     Loading / Errors
+     ===================== */
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -515,40 +510,41 @@ export function GamePage({
     );
   }
 
-  // Styles de déplacement pendant swipe: on applique transform sur les wrappers persistants
+  /* =====================
+     Swipe transforms
+     ===================== */
   const neighborType: 'prev' | 'next' | null = (() => {
     if (dragX > 0 && prevKey) return 'prev';
     if (dragX < 0 && nextKey) return 'next';
     return null;
   })();
-
   const currentTransform = `translate3d(${dragX}px, 0, 0)`;
   const neighborTransform =
     neighborType === 'next'
       ? `translate3d(calc(100% + ${dragX}px), 0, 0)`
       : neighborType === 'prev'
-      ? `translate3d(calc(-100% + ${dragX}px), 0, 0)`
-      : undefined;
-
+        ? `translate3d(calc(-100% + ${dragX}px), 0, 0)`
+        : undefined;
   const showAsStatic = !isInteracting && !animating;
 
+  /* =====================
+     Rendu principal
+     ===================== */
   return (
     <div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor">
       <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6">
         {currentPlayer && (
           <PlayerContext.Provider value={currentPlayer}>
             <PlayerProfile player={currentPlayer} onUpdate={applyPlayerUpdate} />
-
             <TabNavigation activeTab={activeTab} onTabChange={handleTabClickChange} />
 
-            {/* Stage: conteneur RELATIF, un seul arbre par onglet, persistant */}
             <div
               ref={stageRef}
               className="relative"
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={onPointerUp}
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
+              onTouchCancel={onTouchEnd}
               style={{
                 touchAction: 'pan-y',
                 height: (isInteracting || animating || heightLocking) ? containerH : undefined,
@@ -561,7 +557,6 @@ export function GamePage({
                   (neighborType === 'next' && key === nextKey) ||
                   (neighborType === 'prev' && key === prevKey);
 
-                // Mode statique: seul l'actif est affiché, en flux normal
                 if (showAsStatic) {
                   return (
                     <div
@@ -570,20 +565,17 @@ export function GamePage({
                       data-tab={key}
                       style={{
                         display: isActive ? 'block' : 'none',
-                        position: 'relative', // en flux
-                        transform: 'none',
+                        position: 'relative',
+                        transform: 'none'
                       }}
                     >
-                      {key === 'class' && classSections === null ? (
-                        <div className="py-12 text-center text-white/70">Chargement des aptitudes…</div>
-                      ) : (
-                        renderPane(key)
-                      )}
+                      {key === 'class' && classSections === null
+                        ? <div className="py-12 text-center text-white/70">Chargement des aptitudes…</div>
+                        : renderPane(key)}
                     </div>
                   );
                 }
 
-                // Mode interaction: activer l'actif et son voisin en absolute + transforms
                 const display = isActive || isNeighbor ? 'block' : 'none';
                 let transform = 'translate3d(0,0,0)';
                 if (isActive) transform = currentTransform;
@@ -600,14 +592,12 @@ export function GamePage({
                       inset: 0,
                       display,
                       transform,
-                      willChange: isActive || isNeighbor ? 'transform' : undefined,
+                      willChange: isActive || isNeighbor ? 'transform' : undefined
                     }}
                   >
-                    {key === 'class' && classSections === null ? (
-                      <div className="py-12 text-center text-white/70">Chargement des aptitudes…</div>
-                    ) : (
-                      renderPane(key)
-                    )}
+                    {key === 'class' && classSections === null
+                      ? <div className="py-12 text-center text-white/70">Chargement des aptitudes…</div>
+                      : renderPane(key)}
                   </div>
                 );
               })}
@@ -619,7 +609,7 @@ export function GamePage({
       <div className="w-full max-w-md mx-auto mt-6 px-4">
         <button
           onClick={handleBackToSelection}
-          className="w-full btn-secondary px-4 py-2 rounded-lg flex items-center justify-center gap-2"
+            className="w-full btn-secondary px-4 py-2 rounded-lg flex items-center justify-center gap-2"
         >
           <LogOut size={20} />
           Retour aux personnages
