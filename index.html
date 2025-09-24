@@ -2,51 +2,62 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
+
+    <!-- Viewport unique (fusion des deux versions précédentes) -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1.0, user-scalable=no"
     />
-    <title>D&D Ultimate Tracker</title>
-    <meta name="description" content="D&D Ultimate Tracker - Gérez vos parties, personnages et combats." />
 
-    <!-- Manifest PWA -->
+    <title>D&D Ultimate Tracker</title>
+    <meta name="description" content="D&D Ultimate Tracker - Gérez vos parties, personnages et combats efficacement." />
+
+    <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.webmanifest" />
 
     <!-- Icônes -->
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- (Optionnel) versions supplémentaires maskable / splash si dispo -->
+    <!-- <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" /> -->
+    <!-- <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" /> -->
 
-    <!-- Couleurs -->
+    <!-- Couleurs / thèmes -->
     <meta name="theme-color" content="#111827" />
     <meta name="color-scheme" content="dark light" />
+
+    <!-- iOS / iPadOS PWA hints -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="D&D Tracker" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
-    <!-- (Optionnel) Préconnect Supabase -->
+    <!-- Windows / Android -->
+    <meta name="msapplication-TileColor" content="#111827" />
+
+    <!-- Pré-connexion (optimise handshake réseau) -->
+    <link rel="preconnect" href="https://api.supabase.io" />
+    <!-- Mets la vraie URL de ton instance Supabase (ex: https://xyzcompany.supabase.co) -->
     <!-- <link rel="preconnect" href="https://<TON-PROJET>.supabase.co" /> -->
 
+    <!-- (Optionnel) Pré-chargement de la police si tu as une font critique -->
+    <!-- <link rel="preload" as="font" type="font/woff2" href="/fonts/xxx.woff2" crossorigin /> -->
+
+    <!-- Safe area CSS (iOS notch) -->
     <style>
       html, body, #root {
         height: 100%;
         margin: 0;
+        padding: 0;
         background: #0f172a;
+        color-scheme: dark light;
       }
       body {
+        -webkit-font-smoothing: antialiased;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
           Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", Arial, sans-serif;
-        -webkit-font-smoothing: antialiased;
         padding: env(safe-area-inset-top) env(safe-area-inset-right)
                  env(safe-area-inset-bottom) env(safe-area-inset-left);
-      }
-      #root > .boot-fallback {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        color: #cbd5e1;
-        font-size: 15px;
       }
       .no-js {
         font: 14px system-ui, sans-serif;
@@ -65,28 +76,73 @@
     </noscript>
 
     <div id="root">
-      <div class="boot-fallback">Chargement…</div>
+      <!-- Un léger fallback visuel si le JS met du temps -->
+      <div style="
+        display:flex;
+        height:100%;
+        align-items:center;
+        justify-content:center;
+        font:16px system-ui, sans-serif;
+        color:#cbd5e1;
+      ">
+        Chargement...
+      </div>
     </div>
 
-    <!-- Handlers d'erreurs précoces -->
+    <!-- Point d'entrée Vite -->
     <script type="module">
-      console.log('[BOOT] index.html pre-scripts');
+      console.log('[BOOT] Pré-main');
+      // Handlers globaux d'erreurs (diagnostic)
       window.addEventListener('error', (e) => {
         console.log('[GLOBAL ERROR]', e.error || e.message, e);
       });
       window.addEventListener('unhandledrejection', (e) => {
         console.log('[GLOBAL UNHANDLED REJECTION]', e.reason);
       });
-      window.__APP_ENV__ = {
-        mode: import.meta?.env?.MODE || 'unknown',
-        startedAt: Date.now()
+
+      // Expose un flag pour debug rapide depuis la console remote
+      window.__APP_DIAGNOSTIC__ = {
+        ts: Date.now(),
+        mode: import.meta.env.MODE,
+        standalone: window.matchMedia?.('(display-mode: standalone)')?.matches
       };
     </script>
-
-    <!-- PWA registration & update logic -->
-    <script type="module" src="/src/pwa.ts"></script>
-
-    <!-- Entrée principale React -->
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Enregistrement du Service Worker (optionnel, si tu en as un) -->
+    <script>
+      // N'enregistre le SW que si le fichier /sw.js existe réellement.
+      // Si tu utilises vite-plugin-pwa, tu peux retirer ce bloc et laisser le plugin injecter.
+      if ('serviceWorker' in navigator) {
+        // Évite l'enregistrement en mode dev pour ne pas polluer (adaptable)
+        const isDev = /localhost|127\.0\.0\.1/.test(location.hostname);
+        if (!isDev) {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker
+              .register('/sw.js')
+              .then(reg => {
+                console.log('[SW] enregistré', reg.scope);
+              })
+              .catch(err => {
+                console.log('[SW] échec enregistrement', err);
+              });
+          });
+        } else {
+          console.log('[SW] ignoré en mode dev');
+        }
+      }
+    </script>
+
+    <!-- (Optionnel) Script pour détecter/display-mode vs add to home screen -->
+    <script>
+      // Démo: log l'état display-mode
+      const checkDisplayMode = () => {
+        const standalone = window.matchMedia('(display-mode: standalone)').matches
+          || window.navigator.standalone === true;
+        console.log('[DISPLAY MODE]', standalone ? 'standalone' : 'browser');
+      };
+      checkDisplayMode();
+      window.matchMedia('(display-mode: standalone)').addEventListener('change', checkDisplayMode);
+    </script>
   </body>
 </html>
