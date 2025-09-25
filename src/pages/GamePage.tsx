@@ -112,7 +112,8 @@ export function GamePage({
 
   // Etat modal Paramètres
   const [settingsOpen, setSettingsOpen] = useState(false);
-
+  const [settingsSlideFrom, setSettingsSlideFrom] = useState<'left' | 'right'>('left');
+  
   /* ---------------- Refs layout & swipe ---------------- */
   const stageRef = useRef<HTMLDivElement | null>(null);
   const widthRef = useRef<number>(0);
