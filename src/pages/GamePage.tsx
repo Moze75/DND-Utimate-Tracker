@@ -17,7 +17,7 @@ import { PlayerContext } from '../contexts/PlayerContext';
 import { inventoryService } from '../services/inventoryService';
 import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab';
 import { loadAbilitySections } from '../services/classesContent';
- 
+
 import { PlayerProfileSettingsModal } from '../components/PlayerProfileSettingsModal';
 
 import '../styles/swipe.css';
@@ -110,12 +110,10 @@ export function GamePage({
     () => new Set<TabKey>(['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'])
   );
 
-   
-
-  // Etat modal Paramètres
+  // État modal Paramètres
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSlideFrom, setSettingsSlideFrom] = useState<'left' | 'right'>('left');
-  
+
   /* ---------------- Refs layout & swipe ---------------- */
   const stageRef = useRef<HTMLDivElement | null>(null);
   const widthRef = useRef<number>(0);
@@ -155,7 +153,6 @@ export function GamePage({
     }, 1200);
   }, []);
 
-  
   const safeUnfreeze = useCallback((forced = false) => {
     if (!freezeActiveRef.current) return;
     freezeActiveRef.current = false;
@@ -175,7 +172,6 @@ export function GamePage({
     gestureDirRef.current = 'undetermined';
     hasStabilizedRef.current = false;
   }, []);
-   
 
   const fullAbortInteraction = useCallback(() => {
     setIsInteracting(false);
@@ -184,6 +180,21 @@ export function GamePage({
     if (freezeActiveRef.current) safeUnfreeze();
     resetGestureState();
   }, [resetGestureState, safeUnfreeze]);
+
+  // Ouvrir/fermer la modale Paramètres
+  const openSettings = useCallback(
+    (dir: 'left' | 'right' = 'left') => {
+      if (freezeActiveRef.current) safeUnfreeze(true); // si le scroll a été gelé par le swipe de tabs
+      fullAbortInteraction(); // reset gestuelle des tabs en cours
+      setSettingsSlideFrom(dir);
+      setSettingsOpen(true);
+    },
+    [fullAbortInteraction, safeUnfreeze]
+  );
+
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
+  }, []);
 
   /* ---------------- Update player ---------------- */
   const applyPlayerUpdate = useCallback(
@@ -508,17 +519,6 @@ export function GamePage({
     loadInventory();
   }, [selectedCharacter?.id]);
 
-  /* ---------------- Ouverture Paramètres: helpers ---------------- */
-  const openSettings = useCallback(() => {
-    if (freezeActiveRef.current) safeUnfreeze(true);
-    fullAbortInteraction();
-    setSettingsOpen(true);
-  }, [fullAbortInteraction, safeUnfreeze]);
-
-  const closeSettings = useCallback(() => {
-    setSettingsOpen(false);
-  }, []);
-
   /* ---------------- Rendu d'un pane ---------------- */
   const renderPane = (key: TabKey) => {
     if (!currentPlayer) return null;
@@ -528,7 +528,6 @@ export function GamePage({
         return (
           <div
             onTouchStart={(e) => {
-              // stocke départ sur l'élément combat
               const t = e.touches[0];
               (e.currentTarget as any).__sx = t.clientX;
               (e.currentTarget as any).__sy = t.clientY;
@@ -540,13 +539,17 @@ export function GamePage({
               const t = e.touches[0];
               const dx = t.clientX - sx;
               const dy = t.clientY - sy;
+              // Seuils: dominance horizontale et mouvement vers la GAUCHE
               if (Math.abs(dx) < 14) return;
-              // Horizontal dominant et vers la GAUCHE
-              if (Math.abs(dx) > Math.abs(dy) * 1.15 && dx < -48) {
-                e.stopPropagation();
-                e.preventDefault();
-                openSettings();
+              if (Math.abs(dx) > Math.abs(dy) * 1.15 && dx < -64) {
+                e.stopPropagation(); // n’envoie pas le swipe au conteneur d’onglets
+                e.preventDefault();  // empêche le scroll/gestes par défaut
+                openSettings('right'); // ouverture depuis la droite
               }
+            }}
+            onTouchEnd={(e) => {
+              (e.currentTarget as any).__sx = null;
+              (e.currentTarget as any).__sy = null;
             }}
           >
             <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
@@ -638,7 +641,7 @@ export function GamePage({
   /* ---------------- Rendu principal ---------------- */
   return (
     <div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor">
-      {/* Zone de capture de SWIPE au bord gauche (ouvre la modale) */}
+      {/* Zone de capture de SWIPE au bord gauche (ouvre la modale depuis la gauche) */}
       {!settingsOpen && (
         <div
           className="fixed inset-y-0 left-0 w-4 sm:w-5 z-50"
@@ -660,7 +663,7 @@ export function GamePage({
             if (Math.abs(dx) > Math.abs(dy) * 1.15 && dx > 48) {
               e.stopPropagation();
               e.preventDefault();
-              openSettings();
+              openSettings('left'); // ouverture depuis la gauche
             }
           }}
           onTouchEnd={(e) => {
@@ -767,6 +770,7 @@ export function GamePage({
           onClose={closeSettings}
           player={currentPlayer}
           onUpdate={applyPlayerUpdate}
+          slideFrom={settingsSlideFrom}
         />
       )}
     </div>
