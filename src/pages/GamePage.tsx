@@ -17,8 +17,7 @@ import { PlayerContext } from '../contexts/PlayerContext';
 import { inventoryService } from '../services/inventoryService';
 import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab';
 import { loadAbilitySections } from '../services/classesContent';
-import { PlayerProfileSettingsModal } from '../components/PlayerProfileSettingsModal';
-
+ 
 import { PlayerProfileSettingsModal } from '../components/PlayerProfileSettingsModal';
 
 import '../styles/swipe.css';
