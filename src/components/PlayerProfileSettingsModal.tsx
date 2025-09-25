@@ -520,7 +520,7 @@ const gestureRef = useRef<'undetermined' | 'horizontal' | 'vertical'>('undetermi
 const smoothClose = useCallback(() => {
   setEnter(false);
   window.setTimeout(() => onClose(), 300);
-}, [onClose]);
+}, [onClose]); 
   };
 
 
