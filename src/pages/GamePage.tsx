@@ -336,7 +336,13 @@ export function GamePage({
   /* ---------------- Swipe tactile amélioré + sûreté ---------------- */
 const HORIZONTAL_DECIDE_THRESHOLD = 10;   // déclenche un peu plus tôt
 const HORIZONTAL_DOMINANCE_RATIO = 1.10;  // dominance horizontale légèrement moins stricte
+// Nouveaux seuils "plus faciles"
+const SWIPE_THRESHOLD_RATIO = 0.18;       // 18% de la largeur au lieu de 25%
+const SWIPE_THRESHOLD_MIN_PX = 36;        // min 36px au lieu de 48px
 
+// Flick: vitesse au-dessus de laquelle on valide même si la distance < seuil
+// 0.35 px/ms = 350 px/s (ajuste si besoin entre 0.3 et 0.45)
+const FLICK_VELOCITY_PX_PER_MS = 0.35;
   const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
