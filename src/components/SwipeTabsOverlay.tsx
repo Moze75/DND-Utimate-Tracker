@@ -6,8 +6,11 @@ type Props<Key extends string> = {
   activeKey: Key;
   prevKey: Key | null;
   nextKey: Key | null;
+  // Rendu d'un panneau selon sa key
   renderPane: (key: Key) => React.ReactNode;
+  // Seuil de déclenchement (fraction de la largeur), défaut 0.25
   thresholdRatio?: number;
+  // Callback lorsqu'on valide un changement d'onglet
   onCommit: (nextKey: Key) => void;
 };
 
@@ -66,7 +69,7 @@ export function SwipeTabsOverlay<Key extends string>({
   const widthRef = useRef(0);
   const dragStartScrollYRef = useRef(0);
 
-  // Nouveau: on “verrouille” le voisin visible pendant l’animation
+  // Nouveau: “latch” pour garder le voisin monté pendant l’animation
   const [latchedNeighbor, setLatchedNeighbor] = useState<'prev' | 'next' | null>(null);
 
   const measureCurrentHeight = () => {
@@ -125,7 +128,7 @@ export function SwipeTabsOverlay<Key extends string>({
     if (!prevKey && clamped > 0) clamped = 0;
     if (!nextKey && clamped < 0) clamped = 0;
 
-    // Mémorise le voisin en vue pour l’animation
+    // Mémorise le voisin visible pour le garder monté pendant l’anim
     if (clamped > 0 && prevKey) {
       if (latchedNeighbor !== 'prev') setLatchedNeighbor('prev');
     } else if (clamped < 0 && nextKey) {
@@ -135,14 +138,17 @@ export function SwipeTabsOverlay<Key extends string>({
     setDragX(clamped);
   };
 
+  // Important: active d’abord l’anim, puis change le transform dans le frame suivant
   const animateTo = (toPx: number, cb?: () => void) => {
-    setAnimating(true);      // activer l’anim AVANT de changer dragX
-    setDragX(toPx);
-    window.setTimeout(() => {
-      setAnimating(false);
-      cb?.();
-      setLatchedNeighbor(null); // libérer le voisin après l’anim
-    }, 310);
+    setAnimating(true);
+    requestAnimationFrame(() => {
+      setDragX(toPx);
+      window.setTimeout(() => {
+        setAnimating(false);
+        cb?.();
+        setLatchedNeighbor(null);
+      }, 310);
+    });
   };
 
   const onPointerUp: React.PointerEventHandler<HTMLDivElement> = () => {
@@ -184,7 +190,7 @@ export function SwipeTabsOverlay<Key extends string>({
     swipingRef.current = false;
   };
 
-  // Pendant le drag: selon dragX ; pendant l’animation: garder latchedNeighbor
+  // Pendant le drag: basé sur dragX ; pendant l’animation: garder latchedNeighbor
   const neighborType: 'prev' | 'next' | null = useMemo(() => {
     if (dragX > 0 && prevKey) return 'prev';
     if (dragX < 0 && nextKey) return 'next';
