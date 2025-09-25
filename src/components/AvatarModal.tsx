@@ -52,15 +52,13 @@ export function AvatarModal({ url, onClose }: AvatarModalProps) {
         <X size={24} />
       </button>
 
-      <div className="w-screen h-screen flex items-center justify-center p-4 sm:p-6 md:p-8" onClick={onClose}>
+      <div className="w-screen h-screen flex items-center justify-center" onClick={onClose}>
         <img
           src={url}
           alt="Avatar"
           className="
-            w-auto h-auto object-contain select-none
-            max-w-[92vw] max-h-[80vh]
-            md:max-w-[min(80vw,560px)] md:max-h-[min(70vh,560px)]
-            lg:max-w-[min(80vw,720px)] lg:max-h-[min(70vh,720px)]
+            max-w-[95vw] max-h-[95vh] w-auto h-auto object-contain select-none
+            md:max-w-[22rem] md:max-h-[22rem]
           "
           draggable={false}
         />
