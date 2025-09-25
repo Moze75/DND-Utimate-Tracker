@@ -152,7 +152,7 @@ export function GamePage({
       }
     }, 1200);
   }, []);
-
+ 
   const safeUnfreeze = useCallback((forced = false) => {
     if (!freezeActiveRef.current) return;
     freezeActiveRef.current = false;
