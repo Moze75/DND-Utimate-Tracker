@@ -511,18 +511,6 @@ export function PlayerProfileSettingsModal({
       console.error('Erreur lors de la mise à jour du profil:', error);
       toast.error('Erreur lors de la mise à jour');
     }
-    
-// Swipe-to-close (right -> left)
-const startXRef = useRef<number | null>(null);
-const startYRef = useRef<number | null>(null);
-const gestureRef = useRef<'undetermined' | 'horizontal' | 'vertical'>('undetermined');
-
-// Fermer en animant la sortie (utilise déjà enter/initialTranslate)
-const smoothClose = useCallback(() => {
-  setEnter(false);
-  window.setTimeout(() => onClose(), 300);
-}, [onClose]);
-    
   };
 
 
@@ -540,6 +528,16 @@ const smoothClose = useCallback(() => {
       setEnter(false);
       document.body.style.overflow = prev || '';
     };
+    // Swipe-to-close (right -> left)
+const startXRef = useRef<number | null>(null);
+const startYRef = useRef<number | null>(null);
+const gestureRef = useRef<'undetermined' | 'horizontal' | 'vertical'>('undetermined');
+
+// Fermer en animant la sortie (utilise déjà enter/initialTranslate)
+const smoothClose = useCallback(() => {
+  setEnter(false);
+  window.setTimeout(() => onClose(), 300);
+}, [onClose]);
   }, [open]);
 
   if (!open) return null;
