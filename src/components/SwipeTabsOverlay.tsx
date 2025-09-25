@@ -6,11 +6,8 @@ type Props<Key extends string> = {
   activeKey: Key;
   prevKey: Key | null;
   nextKey: Key | null;
-  // Rendu d'un panneau selon sa key
   renderPane: (key: Key) => React.ReactNode;
-  // Seuil de déclenchement (fraction de la largeur), défaut 0.25
   thresholdRatio?: number;
-  // Callback lorsqu'on valide un changement d'onglet
   onCommit: (nextKey: Key) => void;
 };
 
@@ -18,7 +15,6 @@ function freezeScroll(): number {
   const y = window.scrollY || window.pageYOffset || 0;
   const body = document.body;
   (body as any).__scrollY = y;
-  // Stratégie compatible mobile (pas de 100vw/100vh)
   body.style.position = 'fixed';
   body.style.top = `-${y}px`;
   body.style.left = '0';
@@ -70,17 +66,15 @@ export function SwipeTabsOverlay<Key extends string>({
   const widthRef = useRef(0);
   const dragStartScrollYRef = useRef(0);
 
-  // Mémorise la direction du voisin pour le garder monté pendant l'animation
+  // Nouveau: on “verrouille” le voisin visible pendant l’animation
   const [latchedNeighbor, setLatchedNeighbor] = useState<'prev' | 'next' | null>(null);
 
-  // Mesure hauteur courante pour éviter que le conteneur s’effondre (panneaux absolus)
   const measureCurrentHeight = () => {
     const h = currentRef.current?.offsetHeight ?? 0;
     if (h) setContainerH(h);
   };
 
   useEffect(() => {
-    // mesurer à l'affichage et sur resize
     measureCurrentHeight();
     const onRz = () => {
       widthRef.current = viewportRef.current?.clientWidth ?? widthRef.current;
@@ -94,7 +88,6 @@ export function SwipeTabsOverlay<Key extends string>({
     };
   }, [activeKey]);
 
-  // Quand un voisin est affiché (drag), on peut élargir la hauteur au max des deux pour éviter le "jump"
   useEffect(() => {
     if (!neighborRef.current || !currentRef.current) return;
     const ch = currentRef.current.offsetHeight ?? 0;
@@ -129,11 +122,10 @@ export function SwipeTabsOverlay<Key extends string>({
     e.preventDefault();
 
     let clamped = dx;
-    // Empêcher de tirer dans le vide
     if (!prevKey && clamped > 0) clamped = 0;
     if (!nextKey && clamped < 0) clamped = 0;
 
-    // Mémoriser le voisin en vue, pour le garder monté pendant l'animation
+    // Mémorise le voisin en vue pour l’animation
     if (clamped > 0 && prevKey) {
       if (latchedNeighbor !== 'prev') setLatchedNeighbor('prev');
     } else if (clamped < 0 && nextKey) {
@@ -144,14 +136,12 @@ export function SwipeTabsOverlay<Key extends string>({
   };
 
   const animateTo = (toPx: number, cb?: () => void) => {
-    // Important: activer l'animation AVANT de changer dragX
-    setAnimating(true);
+    setAnimating(true);      // activer l’anim AVANT de changer dragX
     setDragX(toPx);
     window.setTimeout(() => {
       setAnimating(false);
       cb?.();
-      // Une fois l'animation terminée, on peut libérer le voisin mémorisé
-      setLatchedNeighbor(null);
+      setLatchedNeighbor(null); // libérer le voisin après l’anim
     }, 310);
   };
 
@@ -163,8 +153,7 @@ export function SwipeTabsOverlay<Key extends string>({
       const threshold = Math.max(48, width * thresholdRatio);
 
       const commit = (dir: Direction) => {
-        const toPx = dir === 1 ? -width : width; // pour le panneau courant, on sort à gauche si dir=1 (vers page de droite)
-        // le voisin est déjà mémorisé par onPointerMove; on garde latchedNeighbor jusqu'à la fin
+        const toPx = dir === 1 ? -width : width;
         animateTo(toPx, () => {
           const next = dir === 1 ? nextKey : prevKey;
           if (next) onCommit(next);
@@ -175,7 +164,6 @@ export function SwipeTabsOverlay<Key extends string>({
       };
 
       const cancel = () => {
-        // garde latchedNeighbor pendant l'anim retour
         animateTo(0, () => {
           unfreezeScroll();
           stabilizeScroll(dragStartScrollYRef.current, 300);
@@ -183,10 +171,8 @@ export function SwipeTabsOverlay<Key extends string>({
       };
 
       if (dragX <= -threshold && nextKey) {
-        // glisse vers la gauche => aller à la page de droite (suivante)
         commit(1);
       } else if (dragX >= threshold && prevKey) {
-        // glisse vers la droite => aller à la page de gauche (précédente)
         commit(-1);
       } else {
         cancel();
@@ -198,9 +184,7 @@ export function SwipeTabsOverlay<Key extends string>({
     swipingRef.current = false;
   };
 
-  // Détermine quel voisin afficher.
-  // - Pendant le drag: selon le signe de dragX
-  // - Pendant l'animation (dragX peut repasser à 0): on garde latchedNeighbor
+  // Pendant le drag: selon dragX ; pendant l’animation: garder latchedNeighbor
   const neighborType: 'prev' | 'next' | null = useMemo(() => {
     if (dragX > 0 && prevKey) return 'prev';
     if (dragX < 0 && nextKey) return 'next';
@@ -208,7 +192,6 @@ export function SwipeTabsOverlay<Key extends string>({
     return null;
   }, [dragX, prevKey, nextKey, animating, latchedNeighbor]);
 
-  // Transforms
   const currentTransform = `translate3d(${dragX}px, 0, 0)`;
   const neighborTransform =
     neighborType === 'next'
@@ -217,7 +200,6 @@ export function SwipeTabsOverlay<Key extends string>({
       ? `translate3d(calc(-100% + ${dragX}px), 0, 0)`
       : undefined;
 
-  // Aide accessibilité: si animations réduites, on coupe les transitions
   const classAnim = animating ? 'sv-anim' : '';
 
   return (
@@ -230,7 +212,6 @@ export function SwipeTabsOverlay<Key extends string>({
       onPointerCancel={onPointerUp}
       style={{ height: containerH }}
     >
-      {/* Panneau courant */}
       <div
         ref={currentRef}
         className={`sv-pane ${classAnim}`}
@@ -239,7 +220,6 @@ export function SwipeTabsOverlay<Key extends string>({
         {renderPane(activeKey)}
       </div>
 
-      {/* Panneau voisin (uniquement si nécessaire) */}
       {neighborType && (
         <div
           ref={neighborRef}
