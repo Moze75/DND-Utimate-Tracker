@@ -137,7 +137,8 @@ export function GamePage({
   const [isInteracting, setIsInteracting] = useState(false);
   const [containerH, setContainerH] = useState<number | undefined>(undefined);
   const [heightLocking, setHeightLocking] = useState(false);
-
+// Nouveau: historique récent des mouvements pour calculer la vitesse (flick)
+const recentMovesRef = useRef<Array<{ x: number; t: number }>>([]);
   // Nouveau: mémorise la direction du voisin affiché pendant le drag pour le garder monté pendant l’animation
   const [latchedNeighbor, setLatchedNeighbor] = useState<'prev' | 'next' | null>(null);
 
