@@ -52,11 +52,11 @@ export function AvatarModal({ url, onClose }: AvatarModalProps) {
         <X size={24} />
       </button>
 
-      <div className="w-screen h-screen flex items-center justify-center" onClick={onClose}>
+      <div className="w-screen h-screen flex items-center justify-center p-4 md:p-8" onClick={onClose}>
         <img
           src={url}
           alt="Avatar"
-          className="max-w-[95vw] max-h-[95vh] w-auto h-auto object-contain select-none"
+          className="w-auto h-auto object-contain select-none max-w-[min(92vw,900px)] max-h-[min(85vh,900px)]"
           draggable={false}
         />
       </div>
@@ -65,4 +65,4 @@ export function AvatarModal({ url, onClose }: AvatarModalProps) {
 
   // Utilise un portail pour monter le modal directement sous body
   return createPortal(modalContent, document.body);
-} 
+}
