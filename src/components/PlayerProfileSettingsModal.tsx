@@ -538,14 +538,14 @@ export function PlayerProfileSettingsModal({
   const initialTranslate = slideFrom === 'right' ? 'translate-x-full' : '-translate-x-full';
 
   /* ============================ Swipe-to-close (gestuelle) ============================ */
-  const startXRef = useRef<number | null>(null);
-  const startYRef = useRef<number | null>(null);
-  const gestureRef = useRef<'undetermined' | 'horizontal' | 'vertical'>('undetermined');
+const startXRef = useRef<number | null>(null);
+const startYRef = useRef<number | null>(null);
+const gestureRef = useRef<'undetermined' | 'horizontal' | 'vertical'>('undetermined');
 
-  const smoothClose = useCallback(() => {
-    setEnter(false);
-    window.setTimeout(() => onClose(), 300);
-  }, [onClose]);
+const smoothClose = useCallback(() => {
+  setEnter(false);
+  window.setTimeout(() => onClose(), 300);
+}, [onClose]);
 
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches.length !== 1) return;
