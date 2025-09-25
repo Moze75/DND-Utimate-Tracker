@@ -577,8 +577,7 @@ export function PlayerProfileSettingsModal({
 
             <button
               onClick={() => setShowLevelUp(true)}
-              className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg f[...]
-            >
+              className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg" 
               <TrendingUp size={20} />
               Passer au niveau {level + 1}
             </button>
