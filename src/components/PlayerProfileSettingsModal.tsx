@@ -189,6 +189,7 @@ export interface PlayerProfileSettingsModalProps {
   onClose: () => void;
   player: Player;
   onUpdate: (player: Player) => void;
+  slideFrom?: 'left' | 'right';
 }
 
 /* ============================ Carte repliable ============================ */
@@ -226,6 +227,7 @@ export function PlayerProfileSettingsModal({
   onClose,
   player,
   onUpdate,
+  slideFrom = 'left',
 }: PlayerProfileSettingsModalProps) {
   const [showLevelUp, setShowLevelUp] = useState(false);
 
@@ -529,6 +531,9 @@ export function PlayerProfileSettingsModal({
   if (!open) return null;
 
   /* ============================ Rendu (modale) ============================ */
+  
+  const initialTranslate = slideFrom === 'right' ? 'translate-x-full' : '-translate-x-full';
+  
   return (
     // Enveloppe fixe plein écran, fond OPAQUE pour couvrir totalement l'interface
     <div className="fixed inset-0 z-50 bg-gray-900">
