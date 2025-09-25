@@ -5,7 +5,6 @@ import toast from 'react-hot-toast';
 import { Avatar } from './Avatar';
 import { LevelUpModal } from './LevelUpModal';
 import type { DndClass, Player, PlayerBackground, PlayerStats } from '../types/dnd';
-// Ajout: parseur Markdown (gère <!-- BOX --> ... <!-- /BOX --> et || ... ||)
 import MarkdownLite from './MarkdownLite';
 
 /* ============================ Helpers ============================ */
@@ -28,7 +27,7 @@ const getDexModFromPlayer = (player: Player): number => {
   return 0;
 };
 
-// Canonicalisation minimale pour compat RPC (backend encore sur "Sorcier")
+// Canonicalisation minimale pour compat RPC
 function mapClassForRpc(pClass: DndClass | null | undefined): string | null | undefined {
   if (pClass === 'Occultiste') return 'Occultiste';
   return pClass;
@@ -75,7 +74,6 @@ const DND_BACKGROUNDS: PlayerBackground[] = [
   'Voyageur',
 ];
 
-/* Classes (inchangées) */
 const DND_CLASSES: DndClass[] = [
   '',
   'Barbare',
@@ -92,7 +90,7 @@ const DND_CLASSES: DndClass[] = [
   'Occultiste',
 ];
 
-/* Dons d'origine (sélection par listes accumulées) */
+/* Dons d'origine */
 const ORIGIN_FEATS: string[] = [
   'Bagarreur de tavernes',
   'Chanceux',
@@ -107,7 +105,7 @@ const ORIGIN_FEATS: string[] = [
   'Vigilant',
 ];
 
-/* Dons généraux (sélection par listes accumulées) */
+/* Dons généraux */
 const GENERAL_FEATS: string[] = [
   'Adepte élémentaire',
   'Affinité féerique',
@@ -153,7 +151,7 @@ const GENERAL_FEATS: string[] = [
   'Tueur de mages',
 ];
 
-/* Styles de combat (sélection par listes accumulées) */
+/* Styles de combat */
 const FIGHTING_STYLES: string[] = [
   'Archerie',
   'Armes à deux mains',
@@ -439,7 +437,7 @@ export function PlayerProfileSettingsModal({
         .filter((v, i, arr) => arr.indexOf(v) === i);
 
       const featsData: any = {
-        // Rétrocompat: garde "origin" (premier) et ajoute "origins" (nouveau canon)
+        // Rétrocompat: garde "origin" (premier) et ajoute "origins"
         origin: normOrigins.length > 0 ? normOrigins[0] : null,
         origins: normOrigins,
         generals: normGenerals,
@@ -511,7 +509,7 @@ export function PlayerProfileSettingsModal({
           </button>
         </div>
 
-        {/* Discret: active le parseur (remplacer ce placeholder par tout contenu Markdown à rendre dans la modale) */}
+        {/* Discret: active le parseur */}
         <div className="hidden">
           <MarkdownLite content="" />
         </div>
@@ -577,7 +575,8 @@ export function PlayerProfileSettingsModal({
 
             <button
               onClick={() => setShowLevelUp(true)}
-              className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg" 
+              className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg shadow-green-900/30 hover:shadow-green-900/50 flex items-center justify-center gap-2"
+            >
               <TrendingUp size={20} />
               Passer au niveau {level + 1}
             </button>
@@ -646,7 +645,7 @@ export function PlayerProfileSettingsModal({
           <div className="stat-header">
             <h3 className="text-lg font-semibold text-gray-100">Dons</h3>
           </div>
-          <div className="p-4 space-y-8">
+        <div className="p-4 space-y-8">
             {/* Dons d'origine */}
             <div>
               <label className="block text-sm font-medium text-gray-300">Dons d'origine</label>
@@ -1004,7 +1003,7 @@ export function PlayerProfileSettingsModal({
           </div>
         </div>
 
-        {/* Bandeau fixe bas: Retour toujours visible, Sauvegarder seulement si modifié */}
+        {/* Bandeau fixe bas */}
         <div className="flex gap-3 fixed bottom-0 left-0 right-0 bg-gray-900/95 p-4 border-t border-gray-700/50 z-10">
           <div className="max-w-4xl mx-auto w-full flex gap-3 justify-end">
             {isDirty && (
