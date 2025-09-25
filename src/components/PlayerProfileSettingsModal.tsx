@@ -548,10 +548,14 @@ const smoothClose = useCallback(() => {
   
   return (
     // Enveloppe fixe plein écran, fond OPAQUE pour couvrir totalement l'interface
+    <div className="fixed inset-0 z-50 bg-gray-900">
+      {/* Panneau qui glisse depuis la gauche */}
+<div
+  className={`
     absolute inset-0 overflow-y-auto
     transform transition-transform duration-300 ease-out
     ${enter ? 'translate-x-0' : initialTranslate}
-  }
+  `}
   role="dialog"
   aria-modal="true"
   aria-label="Paramètres du personnage"
