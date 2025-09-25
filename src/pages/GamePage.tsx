@@ -110,6 +110,10 @@ export function GamePage({
     () => new Set<TabKey>(['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'])
   );
 
+  // État modal Paramètres
+const [settingsOpen, setSettingsOpen] = useState(false);
+const [settingsSlideFrom, setSettingsSlideFrom] = useState<'left' | 'right'>('left');
+
   // Etat modal Paramètres
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSlideFrom, setSettingsSlideFrom] = useState<'left' | 'right'>('left');
