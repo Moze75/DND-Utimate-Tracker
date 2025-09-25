@@ -511,16 +511,6 @@ export function PlayerProfileSettingsModal({
       console.error('Erreur lors de la mise à jour du profil:', error);
       toast.error('Erreur lors de la mise à jour');
     }
-    // Swipe-to-close (right -> left)
-const startXRef = useRef<number | null>(null);
-const startYRef = useRef<number | null>(null);
-const gestureRef = useRef<'undetermined' | 'horizontal' | 'vertical'>('undetermined');
-
-// Fermer en animant la sortie (utilise déjà enter/initialTranslate)
-const smoothClose = useCallback(() => {
-  setEnter(false);
-  window.setTimeout(() => onClose(), 300);
-}, [onClose]);  
   };
 
 
@@ -550,55 +540,16 @@ const smoothClose = useCallback(() => {
     // Enveloppe fixe plein écran, fond OPAQUE pour couvrir totalement l'interface
     <div className="fixed inset-0 z-50 bg-gray-900">
       {/* Panneau qui glisse depuis la gauche */}
-<div
-  className={`
-    absolute inset-0 overflow-y-auto
-    transform transition-transform duration-300 ease-out
-    ${enter ? 'translate-x-0' : initialTranslate}
-  `}
-  role="dialog"
-  aria-modal="true"
-  aria-label="Paramètres du personnage"
-  // NEW:
-  style={{ touchAction: 'pan-y' }}
-  onTouchStart={(e) => {
-    if (e.touches.length !== 1) return;
-    const t = e.touches[0];
-    startXRef.current = t.clientX;
-    startYRef.current = t.clientY;
-    gestureRef.current = 'undetermined';
-  }}
-  onTouchMove={(e) => {
-    if (startXRef.current == null || startYRef.current == null) return;
-    const t = e.touches[0];
-    const dx = t.clientX - startXRef.current;
-    const dy = t.clientY - startYRef.current;
-    const adx = Math.abs(dx);
-    const ady = Math.abs(dy);
-
-    // Décider l'axe
-    if (gestureRef.current === 'undetermined') {
-      if (adx >= 14 || ady >= 14) {
-        gestureRef.current = adx > ady * 1.15 ? 'horizontal' : 'vertical';
-      } else {
-        return;
-      }
-    }
-
-    if (gestureRef.current !== 'horizontal') return;
-
-    // Swipe droite -> gauche pour fermer
-    if (dx < -64) {
-      e.preventDefault();
-      smoothClose();
-    }
-  }}
-  onTouchEnd={() => {
-    startXRef.current = null;
-    startYRef.current = null;
-    gestureRef.current = 'undetermined';
-  }}
->
+      <div
+        className={`
+          absolute inset-0 overflow-y-auto
+          transform transition-transform duration-300 ease-out
+          ${enter ? 'translate-x-0' : '-translate-x-full'}
+        `}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Paramètres du personnage"
+      >
         <div className="max-w-4xl mx-auto p-4 py-8 space-y-6">
           {/* Titre + bouton fermer */}
           <div className="flex items-center justify-between mb-2">
