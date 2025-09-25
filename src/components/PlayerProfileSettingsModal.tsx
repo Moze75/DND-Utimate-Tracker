@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Save, TrendingUp, Triangle, Plus } from 'lucide-react';
+import { X, Save, TrendingUp, Triangle, Plus, ChevronDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { Avatar } from './Avatar';
@@ -191,6 +191,36 @@ export interface PlayerProfileSettingsModalProps {
   onUpdate: (player: Player) => void;
 }
 
+/* ============================ Carte repliable ============================ */
+function CollapsibleCard({
+  title,
+  defaultCollapsed = false,
+  children,
+}: {
+  title: string;
+  defaultCollapsed?: boolean;
+  children: React.ReactNode;
+}) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  return (
+    <div className="stat-card">
+      <div className="stat-header">
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          className="w-full flex items-center justify-between"
+        >
+          <h3 className="text-lg font-semibold text-gray-100">{title}</h3>
+          <ChevronDown
+            className={`w-5 h-5 text-gray-300 transition-transform ${collapsed ? '-rotate-90' : 'rotate-0'}`}
+          />
+        </button>
+      </div>
+      {!collapsed && <div className="p-4">{children}</div>}
+    </div>
+  );
+}
+
 export function PlayerProfileSettingsModal({
   open,
   onClose,
@@ -305,7 +335,7 @@ export function PlayerProfileSettingsModal({
     // Dons: lecture depuis stats.feats
     const feats: any = (player.stats as any)?.feats || {};
 
-    // Origins
+    // Origins: support rétrocompat (origin: string) et nouveau (origins: string[])
     let origins: string[] = [];
     if (Array.isArray(feats.origins)) {
       origins = feats.origins.filter((f: string) => ALLOWED_ORIGIN_FEATS.has(f));
@@ -354,15 +384,15 @@ export function PlayerProfileSettingsModal({
     loadSubclasses();
   }, [open, selectedClass]);
 
-  /* ============================ Données utilitaires ============================ */
+  /* ============================ Données/Options utilitaires ============================ */
   const buildOptions = (all: string[], selected: string[], idx: number) => {
     const current = selected[idx] || '';
     const used = new Set(selected.filter(Boolean));
+    // Autorise la valeur actuelle même si déjà "utilisée"
     return all.filter((opt) => !used.has(opt) || opt === current);
   };
 
-  /* ============================ Handlers Dons ============================ */
-
+  /* ============================ Handlers Dons (sélecteurs empilés) ============================ */
   const addOriginSelect = () => {
     if (remainingOriginOptions.length === 0) return;
     setOriginFeats((prev) => [...prev, '']);
@@ -406,7 +436,6 @@ export function PlayerProfileSettingsModal({
   };
 
   /* ============================ Sauvegarde ============================ */
-
   const handleSave = async () => {
     try {
       const dexMod = getDexModFromPlayer(player);
@@ -501,9 +530,9 @@ export function PlayerProfileSettingsModal({
 
   /* ============================ Rendu (modale) ============================ */
   return (
-    // Enveloppe fixe plein écran, fond OPAQUE
+    // Enveloppe fixe plein écran, fond OPAQUE pour couvrir totalement l'interface
     <div className="fixed inset-0 z-50 bg-gray-900">
-      {/* Panneau qui glisse depuis la gauche et couvre tout */}
+      {/* Panneau qui glisse depuis la gauche */}
       <div
         className={`
           absolute inset-0 overflow-y-auto
@@ -515,6 +544,7 @@ export function PlayerProfileSettingsModal({
         aria-label="Paramètres du personnage"
       >
         <div className="max-w-4xl mx-auto p-4 py-8 space-y-6">
+          {/* Titre + bouton fermer */}
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-2xl font-bold text-gray-100">Paramètres du personnage</h2>
             <button
@@ -530,7 +560,7 @@ export function PlayerProfileSettingsModal({
             <MarkdownLite content="" />
           </div>
 
-          {/* Identité */}
+          {/* Identité (non repliée) */}
           <div className="stat-card">
             <div className="stat-header">
               <h3 className="text-lg font-semibold text-gray-100">Identité</h3>
@@ -543,7 +573,10 @@ export function PlayerProfileSettingsModal({
                     <Avatar
                       url={avatarUrl}
                       playerId={player.id}
-                      onAvatarUpdate={(url) => { setAvatarUrl(url); setDirty(true); }}
+                      onAvatarUpdate={(url) => {
+                        setAvatarUrl(url);
+                        setDirty(true);
+                      }}
                       size="lg"
                       editable
                     />
@@ -554,7 +587,10 @@ export function PlayerProfileSettingsModal({
                   <input
                     type="text"
                     value={adventurerName}
-                    onChange={(e) => { setAdventurerName(e.target.value); setDirty(true); }}
+                    onChange={(e) => {
+                      setAdventurerName(e.target.value);
+                      setDirty(true);
+                    }}
                     className="input-dark w-full px-3 py-2 rounded-md"
                     placeholder="Nom d'aventurier"
                   />
@@ -563,7 +599,7 @@ export function PlayerProfileSettingsModal({
             </div>
           </div>
 
-          {/* Niveau */}
+          {/* Niveau (non replié) */}
           <div className="stat-card">
             <div className="stat-header">
               <h3 className="text-lg font-semibold text-gray-100">Niveau</h3>
@@ -599,69 +635,70 @@ export function PlayerProfileSettingsModal({
             </div>
           </div>
 
-          {/* Classe et Espèce */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <h3 className="text-lg font-semibold text-gray-100">Classe et Espèce</h3>
-            </div>
-            <div className="p-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Espèce</label>
-                  <select
-                    value={selectedRace}
-                    onChange={(e) => { setSelectedRace(e.target.value); setDirty(true); }}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                  >
-                    {DND_RACES.map((race) => (
-                      <option key={race} value={race}>
-                        {race || 'Sélectionnez une espèce'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+          {/* Classe et Espèce (replié par défaut) */}
+          <CollapsibleCard title="Classe et Espèce" defaultCollapsed>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Espèce</label>
+                <select
+                  value={selectedRace}
+                  onChange={(e) => {
+                    setSelectedRace(e.target.value);
+                    setDirty(true);
+                  }}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                >
+                  {DND_RACES.map((race) => (
+                    <option key={race} value={race}>
+                      {race || 'Sélectionnez une espèce'}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Classe</label>
-                  <select
-                    value={selectedClass || ''}
-                    onChange={(e) => { setSelectedClass(e.target.value as DndClass); setDirty(true); }}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                  >
-                    {DND_CLASSES.map((dndClass) => (
-                      <option key={dndClass} value={dndClass}>
-                        {dndClass || 'Sélectionnez une classe'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Classe</label>
+                <select
+                  value={selectedClass || ''}
+                  onChange={(e) => {
+                    setSelectedClass(e.target.value as DndClass);
+                    setDirty(true);
+                  }}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                >
+                  {DND_CLASSES.map((dndClass) => (
+                    <option key={dndClass} value={dndClass}>
+                      {dndClass || 'Sélectionnez une classe'}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Sous-classe</label>
-                  <select
-                    value={selectedSubclass}
-                    onChange={(e) => { setSelectedSubclass(e.target.value); setDirty(true); }}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                    disabled={!selectedClass || availableSubclasses.length === 0}
-                  >
-                    <option value="">Sélectionnez une sous-classe</option>
-                    {availableSubclasses.map((subclass) => (
-                      <option key={subclass} value={subclass}>
-                        {subclass}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Sous-classe</label>
+                <select
+                  value={selectedSubclass}
+                  onChange={(e) => {
+                    setSelectedSubclass(e.target.value);
+                    setDirty(true);
+                  }}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                  disabled={!selectedClass || availableSubclasses.length === 0}
+                >
+                  <option value="">Sélectionnez une sous-classe</option>
+                  {availableSubclasses.map((subclass) => (
+                    <option key={subclass} value={subclass}>
+                      {subclass}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-          </div>
+          </CollapsibleCard>
 
-          {/* Dons */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <h3 className="text-lg font-semibold text-gray-100">Dons</h3>
-            </div>
-            <div className="p-4 space-y-8">
+          {/* Dons (replié par défaut) */}
+          <CollapsibleCard title="Dons" defaultCollapsed>
+            <div className="space-y-8">
               {/* Dons d'origine */}
               <div>
                 <label className="block text-sm font-medium text-gray-300">Dons d'origine</label>
@@ -812,23 +849,21 @@ export function PlayerProfileSettingsModal({
                 </button>
               </div>
             </div>
-          </div>
+          </CollapsibleCard>
 
-          {/* Statistiques */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <h3 className="text-lg font-semibold text-gray-100">Statistiques</h3>
-            </div>
-            <div className="p-4 space-y-4">
+          {/* Statistiques (replié par défaut) */}
+          <CollapsibleCard title="Statistiques" defaultCollapsed>
+            <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Classe d'armure (CA)
-                  </label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Classe d'armure (CA)</label>
                   <input
                     type="number"
                     value={acField}
-                    onChange={(e) => { setAcField(e.target.value); setDirty(true); }}
+                    onChange={(e) => {
+                      setAcField(e.target.value);
+                      setDirty(true);
+                    }}
                     onBlur={() => {
                       if (acField === '' || parseInt(acField, 10) <= 0) {
                         const dm = getDexModFromPlayer(player);
@@ -845,13 +880,14 @@ export function PlayerProfileSettingsModal({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Initiative
-                  </label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Initiative</label>
                   <input
                     type="number"
                     value={initField}
-                    onChange={(e) => { setInitField(e.target.value); setDirty(true); }}
+                    onChange={(e) => {
+                      setInitField(e.target.value);
+                      setDirty(true);
+                    }}
                     onBlur={() => {
                       if (initField === '') {
                         const dm = getDexModFromPlayer(player);
@@ -868,13 +904,14 @@ export function PlayerProfileSettingsModal({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Vitesse (m)
-                  </label>
+                  <label className="block text sm font-medium text-gray-300 mb-2">Vitesse (m)</label>
                   <input
                     type="number"
                     value={speedField}
-                    onChange={(e) => { setSpeedField(e.target.value); setDirty(true); }}
+                    onChange={(e) => {
+                      setSpeedField(e.target.value);
+                      setDirty(true);
+                    }}
                     onBlur={() => {
                       if (speedField === '' || parseInt(speedField, 10) <= 0) {
                         const next = '9';
@@ -890,13 +927,14 @@ export function PlayerProfileSettingsModal({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Bonus de maîtrise
-                  </label>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Bonus de maîtrise</label>
                   <input
                     type="number"
                     value={profField}
-                    onChange={(e) => { setProfField(e.target.value); setDirty(true); }}
+                    onChange={(e) => {
+                      setProfField(e.target.value);
+                      setDirty(true);
+                    }}
                     onBlur={() => {
                       if (profField === '' || parseInt(profField, 10) <= 0) {
                         const next = String(getProficiencyBonusForLevel(level));
@@ -912,20 +950,20 @@ export function PlayerProfileSettingsModal({
                 </div>
               </div>
             </div>
-          </div>
+          </CollapsibleCard>
 
-          {/* Historique */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <h3 className="text-lg font-semibold text-gray-100">Historique</h3>
-            </div>
-            <div className="p-4 space-y-6">
+          {/* Historique (replié par défaut) */}
+          <CollapsibleCard title="Historique" defaultCollapsed>
+            <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">Historique</label>
                   <select
                     value={selectedBackground || ''}
-                    onChange={(e) => { setSelectedBackground(e.target.value as PlayerBackground); setDirty(true); }}
+                    onChange={(e) => {
+                      setSelectedBackground(e.target.value as PlayerBackground);
+                      setDirty(true);
+                    }}
                     className="input-dark w-full px-3 py-2 rounded-md"
                   >
                     {DND_BACKGROUNDS.map((b) => (
@@ -941,7 +979,10 @@ export function PlayerProfileSettingsModal({
                   <input
                     type="text"
                     value={selectedAlignment}
-                    onChange={(e) => { setSelectedAlignment(e.target.value); setDirty(true); }}
+                    onChange={(e) => {
+                      setSelectedAlignment(e.target.value);
+                      setDirty(true);
+                    }}
                     className="input-dark w-full px-3 py-2 rounded-md"
                     placeholder="Alignement (optionnel)"
                   />
@@ -952,7 +993,10 @@ export function PlayerProfileSettingsModal({
                   <input
                     type="text"
                     value={age}
-                    onChange={(e) => { setAge(e.target.value); setDirty(true); }}
+                    onChange={(e) => {
+                      setAge(e.target.value);
+                      setDirty(true);
+                    }}
                     className="input-dark w-full px-3 py-2 rounded-md"
                     placeholder="Âge du personnage"
                   />
@@ -963,63 +1007,59 @@ export function PlayerProfileSettingsModal({
                   <input
                     type="text"
                     value={gender}
-                    onChange={(e) => { setGender(e.target.value); setDirty(true); }}
+                    onChange={(e) => {
+                      setGender(e.target.value);
+                      setDirty(true);
+                    }}
                     className="input-dark w-full px-3 py-2 rounded-md"
                     placeholder="Genre du personnage"
                   />
                 </div>
               </div>
             </div>
-          </div>
+          </CollapsibleCard>
 
-          {/* Langues */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <h3 className="text-lg font-semibold text-gray-100">Langues</h3>
-            </div>
-            <div className="p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                {DND_LANGUAGES.map((language) => {
-                  const selected = selectedLanguages.includes(language);
-                  return (
-                    <label
-                      key={language}
-                      className="flex items-center cursor-pointer hover:bg-gray-800/30 p-2 rounded transition-colors select-none"
+          {/* Langues (replié par défaut) */}
+          <CollapsibleCard title="Langues" defaultCollapsed>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {DND_LANGUAGES.map((language) => {
+                const selected = selectedLanguages.includes(language);
+                return (
+                  <label
+                    key={language}
+                    className="flex items-center cursor-pointer hover:bg-gray-800/30 p-2 rounded transition-colors select-none"
+                  >
+                    <div
+                      className={`mr-2 h-4 w-4 rounded border-2 flex items-center justify-center transition-all duration-200 ${
+                        selected ? 'bg-red-500 border-red-500' : 'border-gray-600 hover:border-gray-500'
+                      }`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setSelectedLanguages((prev) => {
+                          const next = selected ? prev.filter((lang) => lang !== language) : [...prev, language];
+                          return next;
+                        });
+                        setDirty(true);
+                      }}
                     >
-                      <div
-                        className={`mr-2 h-4 w-4 rounded border-2 flex items-center justify-center transition-all duration-200 ${
-                          selected ? 'bg-red-500 border-red-500' : 'border-gray-600 hover:border-gray-500'
-                        }`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setSelectedLanguages((prev) => {
-                            const next = selected
-                              ? prev.filter((lang) => lang !== language)
-                              : [...prev, language];
-                            return next;
-                          });
-                          setDirty(true);
-                        }}
-                      >
-                        {selected && (
-                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path
-                              fillRule="evenodd"
-                              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                        )}
-                      </div>
-                      <span className="text-sm text-gray-300">{language}</span>
-                    </label>
-                  );
-                })}
-              </div>
+                      {selected && (
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path
+                            fillRule="evenodd"
+                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <span className="text-sm text-gray-300">{language}</span>
+                  </label>
+                );
+              })}
             </div>
-          </div>
+          </CollapsibleCard>
 
-          {/* Bandeau d’actions en bas du flux (ancré sous Langues) */}
+          {/* Bandeau d’actions ANCRÉ sous Langues */}
           <div className="mt-4">
             <div className="flex gap-3 justify-end border-t border-gray-700/50 pt-4">
               {isDirty && (
