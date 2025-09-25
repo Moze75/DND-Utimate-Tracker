@@ -138,6 +138,9 @@ export function GamePage({
   const [containerH, setContainerH] = useState<number | undefined>(undefined);
   const [heightLocking, setHeightLocking] = useState(false);
 
+  // Nouveau: mémorise la direction du voisin affiché pendant le drag pour le garder monté pendant l’animation
+  const [latchedNeighbor, setLatchedNeighbor] = useState<'prev' | 'next' | null>(null);
+
   const prevPlayerId = useRef<string | null>(selectedCharacter?.id ?? null);
 
   /* ---------------- Scroll Freeze Safe API ---------------- */
@@ -177,6 +180,7 @@ export function GamePage({
     setIsInteracting(false);
     setAnimating(false);
     setDragX(0);
+    setLatchedNeighbor(null);
     if (freezeActiveRef.current) safeUnfreeze();
     resetGestureState();
   }, [resetGestureState, safeUnfreeze]);
@@ -340,6 +344,7 @@ export function GamePage({
     startYRef.current = t.clientY;
     gestureDirRef.current = 'undetermined';
     setAnimating(false);
+    setLatchedNeighbor(null);
   };
 
   const onTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -379,18 +384,29 @@ export function GamePage({
     if (!prevKey && clamped > 0) clamped = 0;
     if (!nextKey && clamped < 0) clamped = 0;
 
+    // Mémorise le voisin en vue pour le garder monté pendant l’animation
+    if (clamped > 0 && prevKey) {
+      if (latchedNeighbor !== 'prev') setLatchedNeighbor('prev');
+    } else if (clamped < 0 && nextKey) {
+      if (latchedNeighbor !== 'next') setLatchedNeighbor('next');
+    }
+
     setDragX(clamped);
-    const id = window.requestAnimationFrame(measureDuringSwipe);
-    return () => window.cancelAnimationFrame(id);
+    // Note: ce return n’annule pas le rAF (dans un handler React), on garde simple ici
+    requestAnimationFrame(measureDuringSwipe);
   };
 
+  // Déclenche la transition proprement: active d’abord l’anim, puis change le transform dans le frame suivant
   const animateTo = (toPx: number, cb?: () => void) => {
     setAnimating(true);
-    setDragX(toPx);
-    window.setTimeout(() => {
-      setAnimating(false);
-      cb?.();
-    }, 310);
+    requestAnimationFrame(() => {
+      setDragX(toPx);
+      window.setTimeout(() => {
+        setAnimating(false);
+        cb?.();
+        setLatchedNeighbor(null); // libère le voisin verrouillé à la fin
+      }, 310);
+    });
   };
 
   const finishInteract = () => {
@@ -477,6 +493,7 @@ export function GamePage({
     setIsInteracting(false);
     setAnimating(false);
     setDragX(0);
+    setLatchedNeighbor(null);
 
     const fromH = measurePaneHeight(activeTab);
     if (fromH > 0) {
@@ -539,12 +556,12 @@ export function GamePage({
               const t = e.touches[0];
               const dx = t.clientX - sx;
               const dy = t.clientY - sy;
-            // Seuils: dominance horizontale et mouvement vers la DROITE
-            if (Math.abs(dx) > Math.abs(dy) * 1.15 && dx > 64) {
-              e.stopPropagation();
-              e.preventDefault();
-              openSettings('left'); // au lieu de 'right' -> la modale entre depuis la GAUCHE
-            }
+              // Seuils: dominance horizontale et mouvement vers la DROITE
+              if (Math.abs(dx) > Math.abs(dy) * 1.15 && dx > 64) {
+                e.stopPropagation();
+                e.preventDefault();
+                openSettings('left'); // au lieu de 'right' -> la modale entre depuis la GAUCHE
+              }
             }}
             onTouchEnd={(e) => {
               (e.currentTarget as any).__sx = null;
@@ -623,11 +640,15 @@ export function GamePage({
   }
 
   /* ---------------- Swipe transforms ---------------- */
-  const neighborType: 'prev' | 'next' | null = (() => {
+  const neighborTypeRaw: 'prev' | 'next' | null = (() => {
     if (dragX > 0 && prevKey) return 'prev';
     if (dragX < 0 && nextKey) return 'next';
     return null;
   })();
+  // Pendant l’animation, garde le voisin verrouillé si dragX est revenu à 0
+  const neighborType: 'prev' | 'next' | null =
+    neighborTypeRaw ?? (animating ? latchedNeighbor : null);
+
   const currentTransform = `translate3d(${dragX}px, 0, 0)`;
   const neighborTransform =
     neighborType === 'next'
@@ -700,7 +721,7 @@ export function GamePage({
               {Array.from(visitedTabs).map((key) => {
                 const isActive = key === activeTab;
                 const isNeighbor =
-                  (neighborType === 'next' && key === nextKey) || 
+                  (neighborType === 'next' && key === nextKey) ||
                   (neighborType === 'prev' && key === prevKey);
 
                 if (showAsStatic) {
