@@ -334,8 +334,8 @@ export function GamePage({
   }, [activeTab, isInteracting, animating, measureActiveHeight]);
 
   /* ---------------- Swipe tactile amélioré + sûreté ---------------- */
-  const HORIZONTAL_DECIDE_THRESHOLD = 12;
-  const HORIZONTAL_DOMINANCE_RATIO = 1.15;
+const HORIZONTAL_DECIDE_THRESHOLD = 10;   // déclenche un peu plus tôt
+const HORIZONTAL_DOMINANCE_RATIO = 1.10;  // dominance horizontale légèrement moins stricte
 
   const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches.length !== 1) return;
