@@ -352,6 +352,8 @@ const FLICK_VELOCITY_PX_PER_MS = 0.35;
     gestureDirRef.current = 'undetermined';
     setAnimating(false);
     setLatchedNeighbor(null);
+      // seed de l’historique pour le flick
+  recentMovesRef.current = [{ x: t.clientX, t: performance.now() }];
   };
 
   const onTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
