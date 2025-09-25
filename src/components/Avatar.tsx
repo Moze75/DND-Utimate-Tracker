@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
 interface AvatarProps {
-  url: string | null;
+  url: string | null; 
   playerId: string;
   onAvatarUpdate: (url: string) => void;
   size?: 'sm' | 'md' | 'lg';
@@ -84,12 +84,7 @@ export function Avatar({ url, playerId, onAvatarUpdate, size = 'md', editable = 
   };
 
   return (
-    <div
-      className="
-        relative w-full h-full rounded-lg overflow-hidden bg-gray-800/50
-        md:max-w-[22rem] md:max-h-[22rem] md:mx-auto
-      "
-    >
+    <div className="relative w-full h-full rounded-lg overflow-hidden bg-gray-800/50">
       {isUploading ? (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-900/50">
           <div className="animate-spin rounded-full h-6 w-6 border-2 border-red-500 border-t-transparent" />
@@ -111,7 +106,7 @@ export function Avatar({ url, playerId, onAvatarUpdate, size = 'md', editable = 
           <img
             src={url}
             alt="Avatar" 
-            className="w-full h-full object-cover select-none md:object-contain"
+            className="w-full h-full object-cover select-none"
           />
           {editable && (
             <div 
@@ -150,5 +145,5 @@ export function Avatar({ url, playerId, onAvatarUpdate, size = 'md', editable = 
         <AvatarModal url={url} onClose={() => setShowModal(false)} />
       )}
     </div>
-  ); 
+  );
 }
