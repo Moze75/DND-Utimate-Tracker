@@ -540,11 +540,10 @@ export function GamePage({
               const dx = t.clientX - sx;
               const dy = t.clientY - sy;
             // Seuils: dominance horizontale et mouvement vers la DROITE
-            if (Math.abs(dx) < 14) return;
             if (Math.abs(dx) > Math.abs(dy) * 1.15 && dx > 64) {
-              e.stopPropagation(); // n’envoie pas le swipe au conteneur d’onglets
-              e.preventDefault();  // empêche le scroll/gestes par défaut
-              openSettings('right'); // ouverture depuis la droite
+              e.stopPropagation();
+              e.preventDefault();
+              openSettings('left'); // au lieu de 'right' -> la modale entre depuis la GAUCHE
             }
             }}
             onTouchEnd={(e) => {
