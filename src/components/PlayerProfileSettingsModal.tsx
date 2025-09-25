@@ -200,20 +200,6 @@ export function PlayerProfileSettingsModal({
 }: PlayerProfileSettingsModalProps) {
   const [showLevelUp, setShowLevelUp] = useState(false);
 
- // 1) Ajout: état d’animation d’entrée
-  const [enter, setEnter] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    // petit délai pour laisser React peindre le DOM avant d’appliquer la classe de transition
-    const id = window.setTimeout(() => setEnter(true), 20);
-    return () => {
-      window.clearTimeout(id);
-      setEnter(false); // réinitialise pour la prochaine ouverture
-    };
-  }, [open]);
-
-  if (!open) return null;
-  
   // Dirty tracking
   const [isDirty, setDirty] = useState(false);
 
@@ -505,548 +491,579 @@ export function PlayerProfileSettingsModal({
       toast.error('Erreur lors de la mise à jour');
     }
   };
-  
+
+  // Animation d’entrée “slide-from-left”
+  const [enter, setEnter] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const id = window.setTimeout(() => setEnter(true), 20);
+    return () => {
+      window.clearTimeout(id);
+      setEnter(false);
+    };
+  }, [open]);
+
   if (!open) return null;
 
-
   /* ============================ Rendu (modale) ============================ */
-
   return (
-    <div className="fixed inset-0 bg-gray-900/95 z-50 overflow-y-auto">
-      <div className="max-w-4xl mx-auto p-4 py-8 space-y-6 pb-32">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-100">Paramètres du personnage</h2>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:bg-gray-800/50 rounded-lg transition-colors"
-          >
-            <X size={24} />
-          </button> 
-        </div>
+    // Enveloppe fixe plein écran
+    <div className="fixed inset-0 z-50">
+      {/* Backdrop avec fade-in */}
+      <div
+        className={`absolute inset-0 bg-gray-900/80 backdrop-blur-[2px] transition-opacity duration-300 ${
+          enter ? 'opacity-100' : 'opacity-0'
+        }`}
+        // Si tu veux fermer au clic sur le backdrop, dé-commente:
+        // onClick={onClose}
+      />
 
-        {/* Discret: active le parseur */}
-        <div className="hidden">
-          <MarkdownLite content="" />
-        </div>
-
-        {/* Identité */}
-        <div className="stat-card">
-          <div className="stat-header">
-            <h3 className="text-lg font-semibold text-gray-100">Identité</h3>
+      {/* Panneau qui glisse depuis la gauche */}
+      <div
+        className={`
+          absolute inset-0 overflow-y-auto
+          transform transition-transform duration-300 ease-out
+          ${enter ? 'translate-x-0' : '-translate-x-full'}
+        `}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Paramètres du personnage"
+      >
+        <div className="max-w-4xl mx-auto p-4 py-8 space-y-6 pb-32">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-gray-100">Paramètres du personnage</h2>
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-400 hover:bg-gray-800/50 rounded-lg transition-colors"
+            >
+              <X size={24} />
+            </button>
           </div>
-          <div className="p-4 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="flex flex-col">
-                <label className="block text-sm font-medium text-gray-300 mb-2">Avatar</label>
-                <div className="w-40 h-56 rounded-lg overflow-hidden bg-gray-800/50 mx-auto">
-                  <Avatar
-                    url={avatarUrl}
-                    playerId={player.id}
-                    onAvatarUpdate={(url) => { setAvatarUrl(url); setDirty(true); }}
-                    size="lg"
-                    editable
+
+          {/* Discret: active le parseur */}
+          <div className="hidden">
+            <MarkdownLite content="" />
+          </div>
+
+          {/* Identité */}
+          <div className="stat-card">
+            <div className="stat-header">
+              <h3 className="text-lg font-semibold text-gray-100">Identité</h3>
+            </div>
+            <div className="p-4 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex flex-col">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Avatar</label>
+                  <div className="w-40 h-56 rounded-lg overflow-hidden bg-gray-800/50 mx-auto">
+                    <Avatar
+                      url={avatarUrl}
+                      playerId={player.id}
+                      onAvatarUpdate={(url) => { setAvatarUrl(url); setDirty(true); }}
+                      size="lg"
+                      editable
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Nom d'aventurier</label>
+                  <input
+                    type="text"
+                    value={adventurerName}
+                    onChange={(e) => { setAdventurerName(e.target.value); setDirty(true); }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                    placeholder="Nom d'aventurier"
                   />
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Niveau */}
+          <div className="stat-card">
+            <div className="stat-header">
+              <h3 className="text-lg font-semibold text-gray-100">Niveau</h3>
+            </div>
+            <div className="p-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Nom d'aventurier</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Niveau</label>
                 <input
-                  type="text"
-                  value={adventurerName}
-                  onChange={(e) => { setAdventurerName(e.target.value); setDirty(true); }}
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={level}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value, 10);
+                    if (!isNaN(value)) {
+                      setLevel(Math.max(1, Math.min(20, value)));
+                      setDirty(true);
+                    }
+                  }}
                   className="input-dark w-full px-3 py-2 rounded-md"
-                  placeholder="Nom d'aventurier"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                 />
               </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Niveau */}
-        <div className="stat-card">
-          <div className="stat-header">
-            <h3 className="text-lg font-semibold text-gray-100">Niveau</h3>
-          </div>
-          <div className="p-4 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Niveau</label>
-              <input
-                type="number"
-                min={1}
-                max={20}
-                value={level}
-                onChange={(e) => {
-                  const value = parseInt(e.target.value, 10);
-                  if (!isNaN(value)) {
-                    setLevel(Math.max(1, Math.min(20, value)));
-                    setDirty(true);
-                  }
-                }}
-                className="input-dark w-full px-3 py-2 rounded-md"
-                inputMode="numeric"
-                pattern="[0-9]*"
-              />
-            </div>
-
-            <button
-              onClick={() => setShowLevelUp(true)}
-              className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg shadow-green-900/30 hover:shadow-green-900/50 flex items-center justify-center gap-2"
-            >
-              <TrendingUp size={20} />
-              Passer au niveau {level + 1}
-            </button>
-          </div>
-        </div>
-
-        {/* Classe et Espèce */}
-        <div className="stat-card">
-          <div className="stat-header">
-            <h3 className="text-lg font-semibold text-gray-100">Classe et Espèce</h3>
-          </div>
-          <div className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Espèce</label>
-                <select
-                  value={selectedRace}
-                  onChange={(e) => { setSelectedRace(e.target.value); setDirty(true); }}
-                  className="input-dark w-full px-3 py-2 rounded-md"
-                >
-                  {DND_RACES.map((race) => (
-                    <option key={race} value={race}>
-                      {race || 'Sélectionnez une espèce'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Classe</label>
-                <select
-                  value={selectedClass || ''}
-                  onChange={(e) => { setSelectedClass(e.target.value as DndClass); setDirty(true); }}
-                  className="input-dark w-full px-3 py-2 rounded-md"
-                >
-                  {DND_CLASSES.map((dndClass) => (
-                    <option key={dndClass} value={dndClass}>
-                      {dndClass || 'Sélectionnez une classe'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Sous-classe</label>
-                <select
-                  value={selectedSubclass}
-                  onChange={(e) => { setSelectedSubclass(e.target.value); setDirty(true); }}
-                  className="input-dark w-full px-3 py-2 rounded-md"
-                  disabled={!selectedClass || availableSubclasses.length === 0}
-                >
-                  <option value="">Sélectionnez une sous-classe</option>
-                  {availableSubclasses.map((subclass) => (
-                    <option key={subclass} value={subclass}>
-                      {subclass}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Dons */}
-        <div className="stat-card">
-          <div className="stat-header">
-            <h3 className="text-lg font-semibold text-gray-100">Dons</h3>
-          </div>
-        <div className="p-4 space-y-8">
-            {/* Dons d'origine */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300">Dons d'origine</label>
-              <div className="mt-2 space-y-2">
-                {originFeats.length === 0 ? (
-                  <select
-                    value=""
-                    onChange={(e) => changeOriginAt(0, e.target.value)}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                  >
-                    <option value="">Sélectionnez un don d’origine</option>
-                    {ORIGIN_FEATS.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  originFeats.map((val, idx) => {
-                    const options = buildOptions(ORIGIN_FEATS, originFeats, idx);
-                    return (
-                      <select
-                        key={`origin-${idx}`}
-                        value={val || ''}
-                        onChange={(e) => changeOriginAt(idx, e.target.value)}
-                        className="input-dark w-full px-3 py-2 rounded-md"
-                      >
-                        <option value="">{idx === 0 ? 'Sélectionnez un don d’origine' : 'Choisir un don'}</option>
-                        {options.map((f) => (
-                          <option key={f} value={f}>
-                            {f}
-                          </option>
-                        ))}
-                      </select>
-                    );
-                  })
-                )}
-              </div>
               <button
-                type="button"
-                onClick={addOriginSelect}
-                className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
-                disabled={remainingOriginOptions.length === 0}
-                title={remainingOriginOptions.length === 0 ? 'Aucun autre don disponible' : 'Ajouter un don d’origine'}
+                onClick={() => setShowLevelUp(true)}
+                className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg flex items-center justify-center gap-2"
               >
-                <Plus size={16} />
-                Ajouter
-              </button>
-            </div>
-
-            {/* Dons généraux */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300">Dons généraux</label>
-              <div className="mt-2 space-y-2">
-                {generalFeats.length === 0 ? (
-                  <select
-                    value=""
-                    onChange={(e) => changeGeneralAt(0, e.target.value)}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                  >
-                    <option value="">Sélectionnez un don général</option>
-                    {GENERAL_FEATS.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  generalFeats.map((val, idx) => {
-                    const options = buildOptions(GENERAL_FEATS, generalFeats, idx);
-                    return (
-                      <select
-                        key={`general-${idx}`}
-                        value={val || ''}
-                        onChange={(e) => changeGeneralAt(idx, e.target.value)}
-                        className="input-dark w-full px-3 py-2 rounded-md"
-                      >
-                        <option value="">{idx === 0 ? 'Sélectionnez un don général' : 'Choisir un don'}</option>
-                        {options.map((f) => (
-                          <option key={f} value={f}>
-                            {f}
-                          </option>
-                        ))}
-                      </select>
-                    );
-                  })
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={addGeneralSelect}
-                className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
-                disabled={remainingGeneralOptions.length === 0}
-                title={remainingGeneralOptions.length === 0 ? 'Aucun autre don disponible' : 'Ajouter un don général'}
-              >
-                <Plus size={16} />
-                Ajouter
-              </button>
-            </div>
-
-            {/* Styles de combat */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300">Styles de combat</label>
-              <div className="mt-2 space-y-2">
-                {fightingStyles.length === 0 ? (
-                  <select
-                    value=""
-                    onChange={(e) => changeStyleAt(0, e.target.value)}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                  >
-                    <option value="">Sélectionnez un style</option>
-                    {FIGHTING_STYLES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  fightingStyles.map((val, idx) => {
-                    const options = buildOptions(FIGHTING_STYLES, fightingStyles, idx);
-                    return (
-                      <select
-                        key={`style-${idx}`}
-                        value={val || ''}
-                        onChange={(e) => changeStyleAt(idx, e.target.value)}
-                        className="input-dark w-full px-3 py-2 rounded-md"
-                      >
-                        <option value="">{idx === 0 ? 'Sélectionnez un style' : 'Choisir un style'}</option>
-                        {options.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                    );
-                  })
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={addStyleSelect}
-                className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
-                disabled={remainingStyleOptions.length === 0}
-                title={remainingStyleOptions.length === 0 ? 'Aucun autre style disponible' : 'Ajouter un style de combat'}
-              >
-                <Plus size={16} />
-                Ajouter
+                <TrendingUp size={20} />
+                Passer au niveau {level + 1}
               </button>
             </div>
           </div>
-        </div>
 
-        {/* Statistiques */}
-        <div className="stat-card">
-          <div className="stat-header">
-            <h3 className="text-lg font-semibold text-gray-100">Statistiques</h3>
-          </div>
-          <div className="p-4 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Classe d'armure (CA)
-                </label>
-                <input
-                  type="number"
-                  value={acField}
-                  onChange={(e) => { setAcField(e.target.value); setDirty(true); }}
-                  onBlur={() => {
-                    if (acField === '' || parseInt(acField, 10) <= 0) {
-                      const dm = getDexModFromPlayer(player);
-                      const next = String(10 + dm);
-                      if (next !== acField) {
-                        setAcField(next);
-                        setDirty(true);
-                      }
-                    }
-                  }}
-                  className="input-dark w-full px-3 py-2 rounded-md"
-                  placeholder="Auto si vide: 10 + mod DEX"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Initiative
-                </label>
-                <input
-                  type="number"
-                  value={initField}
-                  onChange={(e) => { setInitField(e.target.value); setDirty(true); }}
-                  onBlur={() => {
-                    if (initField === '') {
-                      const dm = getDexModFromPlayer(player);
-                      const next = String(dm);
-                      if (next !== initField) {
-                        setInitField(next);
-                        setDirty(true);
-                      }
-                    }
-                  }}
-                  className="input-dark w-full px-3 py-2 rounded-md"
-                  placeholder="Auto si vide: mod DEX"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Vitesse (m)
-                </label>
-                <input
-                  type="number"
-                  value={speedField}
-                  onChange={(e) => { setSpeedField(e.target.value); setDirty(true); }}
-                  onBlur={() => {
-                    if (speedField === '' || parseInt(speedField, 10) <= 0) {
-                      const next = '9';
-                      if (next !== speedField) {
-                        setSpeedField(next);
-                        setDirty(true);
-                      }
-                    }
-                  }}
-                  className="input-dark w-full px-3 py-2 rounded-md"
-                  placeholder="Auto si vide: 9 m"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Bonus de maîtrise
-                </label>
-                <input
-                  type="number"
-                  value={profField}
-                  onChange={(e) => { setProfField(e.target.value); setDirty(true); }}
-                  onBlur={() => {
-                    if (profField === '' || parseInt(profField, 10) <= 0) {
-                      const next = String(getProficiencyBonusForLevel(level));
-                      if (next !== profField) {
-                        setProfField(next);
-                        setDirty(true);
-                      }
-                    }
-                  }}
-                  className="input-dark w-full px-3 py-2 rounded-md"
-                  placeholder="Auto si vide: selon niveau"
-                />
-              </div>
+          {/* Classe et Espèce */}
+          <div className="stat-card">
+            <div className="stat-header">
+              <h3 className="text-lg font-semibold text-gray-100">Classe et Espèce</h3>
             </div>
-          </div>
-        </div>
-
-        {/* Historique / Alignement / Infos */}
-        <div className="stat-card">
-          <div className="stat-header">
-            <h3 className="text-lg font-semibold text-gray-100">Historique</h3>
-          </div>
-          <div className="p-4 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Historique</label>
-                <select
-                  value={selectedBackground || ''}
-                  onChange={(e) => { setSelectedBackground(e.target.value as PlayerBackground); setDirty(true); }}
-                  className="input-dark w-full px-3 py-2 rounded-md"
-                >
-                  {DND_BACKGROUNDS.map((b) => (
-                    <option key={b} value={b}>
-                      {b || 'Sélectionnez un historique'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Alignement</label>
-                <input
-                  type="text"
-                  value={selectedAlignment}
-                  onChange={(e) => { setSelectedAlignment(e.target.value); setDirty(true); }}
-                  className="input-dark w-full px-3 py-2 rounded-md"
-                  placeholder="Alignement (optionnel)"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Âge</label>
-                <input
-                  type="text"
-                  value={age}
-                  onChange={(e) => { setAge(e.target.value); setDirty(true); }}
-                  className="input-dark w-full px-3 py-2 rounded-md"
-                  placeholder="Âge du personnage"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Genre</label>
-                <input
-                  type="text"
-                  value={gender}
-                  onChange={(e) => { setGender(e.target.value); setDirty(true); }}
-                  className="input-dark w-full px-3 py-2 rounded-md"
-                  placeholder="Genre du personnage"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Langues (réintégré après Historique) */}
-        <div className="stat-card">
-          <div className="stat-header">
-            <h3 className="text-lg font-semibold text-gray-100">Langues</h3>
-          </div>
-          <div className="p-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {DND_LANGUAGES.map((language) => {
-                const selected = selectedLanguages.includes(language);
-                return (
-                  <label
-                    key={language}
-                    className="flex items-center cursor-pointer hover:bg-gray-800/30 p-2 rounded transition-colors select-none"
+            <div className="p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Espèce</label>
+                  <select
+                    value={selectedRace}
+                    onChange={(e) => { setSelectedRace(e.target.value); setDirty(true); }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
                   >
-                    <div
-                      className={`mr-2 h-4 w-4 rounded border-2 flex items-center justify-center transition-all duration-200 ${
-                        selected ? 'bg-red-500 border-red-500' : 'border-gray-600 hover:border-gray-500'
-                      }`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setSelectedLanguages((prev) => {
-                          const next = selected
-                            ? prev.filter((lang) => lang !== language)
-                            : [...prev, language];
-                          return next;
-                        });
-                        setDirty(true);
-                      }}
+                    {DND_RACES.map((race) => (
+                      <option key={race} value={race}>
+                        {race || 'Sélectionnez une espèce'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Classe</label>
+                  <select
+                    value={selectedClass || ''}
+                    onChange={(e) => { setSelectedClass(e.target.value as DndClass); setDirty(true); }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                  >
+                    {DND_CLASSES.map((dndClass) => (
+                      <option key={dndClass} value={dndClass}>
+                        {dndClass || 'Sélectionnez une classe'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Sous-classe</label>
+                  <select
+                    value={selectedSubclass}
+                    onChange={(e) => { setSelectedSubclass(e.target.value); setDirty(true); }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                    disabled={!selectedClass || availableSubclasses.length === 0}
+                  >
+                    <option value="">Sélectionnez une sous-classe</option>
+                    {availableSubclasses.map((subclass) => (
+                      <option key={subclass} value={subclass}>
+                        {subclass}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Dons */}
+          <div className="stat-card">
+            <div className="stat-header">
+              <h3 className="text-lg font-semibold text-gray-100">Dons</h3>
+            </div>
+            <div className="p-4 space-y-8">
+              {/* Dons d'origine */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300">Dons d'origine</label>
+                <div className="mt-2 space-y-2">
+                  {originFeats.length === 0 ? (
+                    <select
+                      value=""
+                      onChange={(e) => changeOriginAt(0, e.target.value)}
+                      className="input-dark w-full px-3 py-2 rounded-md"
                     >
-                      {selected && (
-                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path
-                            fillRule="evenodd"
-                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      )}
-                    </div>
-                    <span className="text-sm text-gray-300">{language}</span>
-                  </label>
-                );
-              })}
+                      <option value="">Sélectionnez un don d’origine</option>
+                      {ORIGIN_FEATS.map((f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    originFeats.map((val, idx) => {
+                      const options = buildOptions(ORIGIN_FEATS, originFeats, idx);
+                      return (
+                        <select
+                          key={`origin-${idx}`}
+                          value={val || ''}
+                          onChange={(e) => changeOriginAt(idx, e.target.value)}
+                          className="input-dark w-full px-3 py-2 rounded-md"
+                        >
+                          <option value="">{idx === 0 ? 'Sélectionnez un don d’origine' : 'Choisir un don'}</option>
+                          {options.map((f) => (
+                            <option key={f} value={f}>
+                              {f}
+                            </option>
+                          ))}
+                        </select>
+                      );
+                    })
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={addOriginSelect}
+                  className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
+                  disabled={remainingOriginOptions.length === 0}
+                  title={remainingOriginOptions.length === 0 ? 'Aucun autre don disponible' : 'Ajouter un don d’origine'}
+                >
+                  <Plus size={16} />
+                  Ajouter
+                </button>
+              </div>
+
+              {/* Dons généraux */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300">Dons généraux</label>
+                <div className="mt-2 space-y-2">
+                  {generalFeats.length === 0 ? (
+                    <select
+                      value=""
+                      onChange={(e) => changeGeneralAt(0, e.target.value)}
+                      className="input-dark w-full px-3 py-2 rounded-md"
+                    >
+                      <option value="">Sélectionnez un don général</option>
+                      {GENERAL_FEATS.map((f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    generalFeats.map((val, idx) => {
+                      const options = buildOptions(GENERAL_FEATS, generalFeats, idx);
+                      return (
+                        <select
+                          key={`general-${idx}`}
+                          value={val || ''}
+                          onChange={(e) => changeGeneralAt(idx, e.target.value)}
+                          className="input-dark w-full px-3 py-2 rounded-md"
+                        >
+                          <option value="">{idx === 0 ? 'Sélectionnez un don général' : 'Choisir un don'}</option>
+                          {options.map((f) => (
+                            <option key={f} value={f}>
+                              {f}
+                            </option>
+                          ))}
+                        </select>
+                      );
+                    })
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={addGeneralSelect}
+                  className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
+                  disabled={remainingGeneralOptions.length === 0}
+                  title={remainingGeneralOptions.length === 0 ? 'Aucun autre don disponible' : 'Ajouter un don général'}
+                >
+                  <Plus size={16} />
+                  Ajouter
+                </button>
+              </div>
+
+              {/* Styles de combat */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300">Styles de combat</label>
+                <div className="mt-2 space-y-2">
+                  {fightingStyles.length === 0 ? (
+                    <select
+                      value=""
+                      onChange={(e) => changeStyleAt(0, e.target.value)}
+                      className="input-dark w-full px-3 py-2 rounded-md"
+                    >
+                      <option value="">Sélectionnez un style</option>
+                      {FIGHTING_STYLES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    fightingStyles.map((val, idx) => {
+                      const options = buildOptions(FIGHTING_STYLES, fightingStyles, idx);
+                      return (
+                        <select
+                          key={`style-${idx}`}
+                          value={val || ''}
+                          onChange={(e) => changeStyleAt(idx, e.target.value)}
+                          className="input-dark w-full px-3 py-2 rounded-md"
+                        >
+                          <option value="">{idx === 0 ? 'Sélectionnez un style' : 'Choisir un style'}</option>
+                          {options.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      );
+                    })
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={addStyleSelect}
+                  className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
+                  disabled={remainingStyleOptions.length === 0}
+                  title={remainingStyleOptions.length === 0 ? 'Aucun autre style disponible' : 'Ajouter un style de combat'}
+                >
+                  <Plus size={16} />
+                  Ajouter
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Bandeau fixe bas */}
-        <div className="flex gap-3 fixed bottom-0 left-0 right-0 bg-gray-900/95 p-4 border-t border-gray-700/50 z-10">
-          <div className="max-w-4xl mx-auto w-full flex gap-3 justify-end">
-            {isDirty && (
-              <button
-                onClick={handleSave}
-                className="btn-primary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
-              >
-                <Save size={20} />
-                Sauvegarder
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className="btn-secondary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
-            >
-              <Triangle size={18} className="transform -rotate-90" />
-              Retour
-            </button>
+          {/* Statistiques */}
+          <div className="stat-card">
+            <div className="stat-header">
+              <h3 className="text-lg font-semibold text-gray-100">Statistiques</h3>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Classe d'armure (CA)
+                  </label>
+                  <input
+                    type="number"
+                    value={acField}
+                    onChange={(e) => { setAcField(e.target.value); setDirty(true); }}
+                    onBlur={() => {
+                      if (acField === '' || parseInt(acField, 10) <= 0) {
+                        const dm = getDexModFromPlayer(player);
+                        const next = String(10 + dm);
+                        if (next !== acField) {
+                          setAcField(next);
+                          setDirty(true);
+                        }
+                      }
+                    }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                    placeholder="Auto si vide: 10 + mod DEX"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Initiative
+                  </label>
+                  <input
+                    type="number"
+                    value={initField}
+                    onChange={(e) => { setInitField(e.target.value); setDirty(true); }}
+                    onBlur={() => {
+                      if (initField === '') {
+                        const dm = getDexModFromPlayer(player);
+                        const next = String(dm);
+                        if (next !== initField) {
+                          setInitField(next);
+                          setDirty(true);
+                        }
+                      }
+                    }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                    placeholder="Auto si vide: mod DEX"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Vitesse (m)
+                  </label>
+                  <input
+                    type="number"
+                    value={speedField}
+                    onChange={(e) => { setSpeedField(e.target.value); setDirty(true); }}
+                    onBlur={() => {
+                      if (speedField === '' || parseInt(speedField, 10) <= 0) {
+                        const next = '9';
+                        if (next !== speedField) {
+                          setSpeedField(next);
+                          setDirty(true);
+                        }
+                      }
+                    }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                    placeholder="Auto si vide: 9 m"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Bonus de maîtrise
+                  </label>
+                  <input
+                    type="number"
+                    value={profField}
+                    onChange={(e) => { setProfField(e.target.value); setDirty(true); }}
+                    onBlur={() => {
+                      if (profField === '' || parseInt(profField, 10) <= 0) {
+                        const next = String(getProficiencyBonusForLevel(level));
+                        if (next !== profField) {
+                          setProfField(next);
+                          setDirty(true);
+                        }
+                      }
+                    }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                    placeholder="Auto si vide: selon niveau"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Modal passage de niveau */}
-        <LevelUpModal
-          isOpen={showLevelUp}
-          onClose={() => setShowLevelUp(false)}
-          player={player}
-          onUpdate={onUpdate}
-        />
+          {/* Historique / Alignement / Infos */}
+          <div className="stat-card">
+            <div className="stat-header">
+              <h3 className="text-lg font-semibold text-gray-100">Historique</h3>
+            </div>
+            <div className="p-4 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Historique</label>
+                  <select
+                    value={selectedBackground || ''}
+                    onChange={(e) => { setSelectedBackground(e.target.value as PlayerBackground); setDirty(true); }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                  >
+                    {DND_BACKGROUNDS.map((b) => (
+                      <option key={b} value={b}>
+                        {b || 'Sélectionnez un historique'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Alignement</label>
+                  <input
+                    type="text"
+                    value={selectedAlignment}
+                    onChange={(e) => { setSelectedAlignment(e.target.value); setDirty(true); }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                    placeholder="Alignement (optionnel)"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Âge</label>
+                  <input
+                    type="text"
+                    value={age}
+                    onChange={(e) => { setAge(e.target.value); setDirty(true); }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                    placeholder="Âge du personnage"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Genre</label>
+                  <input
+                    type="text"
+                    value={gender}
+                    onChange={(e) => { setGender(e.target.value); setDirty(true); }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                    placeholder="Genre du personnage"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Langues (réintégré après Historique) */}
+          <div className="stat-card">
+            <div className="stat-header">
+              <h3 className="text-lg font-semibold text-gray-100">Langues</h3>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                {DND_LANGUAGES.map((language) => {
+                  const selected = selectedLanguages.includes(language);
+                  return (
+                    <label
+                      key={language}
+                      className="flex items-center cursor-pointer hover:bg-gray-800/30 p-2 rounded transition-colors select-none"
+                    >
+                      <div
+                        className={`mr-2 h-4 w-4 rounded border-2 flex items-center justify-center transition-all duration-200 ${
+                          selected ? 'bg-red-500 border-red-500' : 'border-gray-600 hover:border-gray-500'
+                        }`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setSelectedLanguages((prev) => {
+                            const next = selected
+                              ? prev.filter((lang) => lang !== language)
+                              : [...prev, language];
+                            return next;
+                          });
+                          setDirty(true);
+                        }}
+                      >
+                        {selected && (
+                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path
+                              fillRule="evenodd"
+                              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                      <span className="text-sm text-gray-300">{language}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Bandeau fixe bas */}
+          <div className="flex gap-3 fixed bottom-0 left-0 right-0 bg-gray-900/95 p-4 border-t border-gray-700/50 z-10">
+            <div className="max-w-4xl mx-auto w-full flex gap-3 justify-end">
+              {isDirty && (
+                <button
+                  onClick={handleSave}
+                  className="btn-primary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
+                >
+                  <Save size={20} />
+                  Sauvegarder
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="btn-secondary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
+              >
+                <Triangle size={18} className="transform -rotate-90" />
+                Retour
+              </button>
+            </div>
+          </div>
+
+          {/* Modal passage de niveau */}
+          <LevelUpModal
+            isOpen={showLevelUp}
+            onClose={() => setShowLevelUp(false)}
+            player={player}
+            onUpdate={onUpdate}
+          />
+        </div>
       </div>
     </div>
   );
