@@ -484,6 +484,8 @@ const FLICK_VELOCITY_PX_PER_MS = 0.35;
 
     if (dragX <= -threshold && nextKey) commit(1);
     else if (dragX >= threshold && prevKey) commit(-1);
+        else if (vx <= -FLICK_VELOCITY_PX_PER_MS && nextKey) commit(1);
+  else if (vx >= FLICK_VELOCITY_PX_PER_MS && prevKey) commit(-1);
     else cancel();
   };
 
