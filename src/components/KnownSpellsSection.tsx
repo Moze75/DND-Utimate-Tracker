@@ -649,7 +649,7 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
     return levels;
   }, [player.spell_slots, groupedSpells, allowedLevelsSet]);
 
-  // Dépliage global: bouton livre droite
+  // Dépliage global: bouton livre à droite
   const allExpanded = useMemo(() => {
     if (levelsToRender.length === 0) return false;
     return levelsToRender.every((name) => !collapsedLevels.has(name));
@@ -669,31 +669,31 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
   return (
     <div className="stats-card">
       <div className="stat-header flex items-center justify-between gap-3">
-        {/* Partie gauche: titre + indicateurs */}
+        {/* Partie gauche: titre + indicateurs (forcés sur lignes séparées) */}
         <div className="flex-1 min-w-0">
           <h3 className="text-base font-semibold text-gray-100 truncate">
             Sorts connus ({knownSpells.length})
           </h3>
-          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+          <div className="mt-1 space-y-1">
             {spellSaveDC !== null && (
-              <span className="text-sm text-purple-300">DD des sorts: {spellSaveDC}</span>
+              <div className="text-sm text-purple-300">DD des sorts: {spellSaveDC}</div>
             )}
             {spellAttackBonus !== null && (
-              <span className="text-sm text-purple-300">
+              <div className="text-sm text-purple-300">
                 Bonus d&apos;attaque : {spellAttackBonus >= 0 ? '+' : ''}
                 {spellAttackBonus}
-              </span>
+              </div>
             )}
             {preparedCount > 0 && (
-              <span className="text-sm text-green-400">
+              <div className="text-sm text-green-400">
                 {preparedCount} préparé{preparedCount > 1 ? 's' : ''}
-              </span>
+              </div>
             )}
           </div>
         </div>
 
-        {/* Partie droite: nouveau bouton Livre + bouton Ajouter */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Partie droite: bouton Livre (toggle all) + bouton Ajouter (plus d'espace) */}
+        <div className="flex items-center gap-4 shrink-0">
           <button
             type="button"
             onClick={toggleAllLevels}
