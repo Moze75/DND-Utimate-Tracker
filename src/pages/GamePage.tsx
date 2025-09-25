@@ -153,17 +153,6 @@ export function GamePage({
     }, 1200);
   }, []);
 
-const openSettingsFromRight = useCallback(() => {
-  if (freezeActiveRef.current) safeUnfreeze(true); // si le scroll a été gelé par le swipe de tabs
-  fullAbortInteraction(); // reset gestuelle des tabs en cours
-  setSettingsSlideFrom('right');
-  setSettingsOpen(true);
-}, [fullAbortInteraction, safeUnfreeze]);
-
-const closeSettings = useCallback(() => {
-  setSettingsOpen(false);
-}, []);
-
   
   const safeUnfreeze = useCallback((forced = false) => {
     if (!freezeActiveRef.current) return;
@@ -184,6 +173,17 @@ const closeSettings = useCallback(() => {
     gestureDirRef.current = 'undetermined';
     hasStabilizedRef.current = false;
   }, []);
+
+  const openSettingsFromRight = useCallback(() => {
+  if (freezeActiveRef.current) safeUnfreeze(true); // si le scroll a été gelé par le swipe de tabs
+  fullAbortInteraction(); // reset gestuelle des tabs en cours
+  setSettingsSlideFrom('right');
+  setSettingsOpen(true);
+}, [fullAbortInteraction, safeUnfreeze]);
+
+const closeSettings = useCallback(() => {
+  setSettingsOpen(false);
+}, []);
 
   const fullAbortInteraction = useCallback(() => {
     setIsInteracting(false);
