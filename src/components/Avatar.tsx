@@ -1,72 +1,149 @@
-import React, { useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { User, Upload } from 'lucide-react';
+import { AvatarModal } from './AvatarModal';
+import { supabase } from '../lib/supabase';
+import toast from 'react-hot-toast';
 
-interface AvatarModalProps {
-  url: string;
-  onClose: () => void;
+interface AvatarProps {
+  url: string | null;
+  playerId: string;
+  onAvatarUpdate: (url: string) => void;
+  size?: 'sm' | 'md' | 'lg';
+  editable?: boolean;
 }
 
-export function AvatarModal({ url, onClose }: AvatarModalProps) {
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onClose();
+export function Avatar({ url, playerId, onAvatarUpdate, size = 'md', editable = false }: AvatarProps) {
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showModal, setShowModal] = useState(false);
+
+  const sizeClasses = {
+    sm: 'w-16 h-16',
+    md: 'w-40 h-40',
+    lg: 'w-56 h-56'
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Veuillez sélectionner une image');
+      return;
     }
-  }, [onClose]);
 
-  useEffect(() => {
-    // Empêche le défilement et le zoom sur mobile
-    const originalStyle = window.getComputedStyle(document.body).overflow;
-    document.body.style.overflow = 'hidden';
-    
-    // Désactive le zoom sur mobile
-    const meta = document.createElement('meta');
-    meta.name = 'viewport';
-    meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
-    document.head.appendChild(meta);
-    
-    // Ajoute l'écouteur d'événement pour la touche Escape
-    document.addEventListener('keydown', handleKeyDown);
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('L\'image ne doit pas dépasser 5MB');
+      return;
+    }
 
-    return () => {
-      // Restaure les paramètres originaux
-      document.body.style.overflow = originalStyle;
-      document.head.removeChild(meta);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [handleKeyDown]);
+    setIsUploading(true);
+    try {
+      if (url) {
+        const oldPath = url.split('/').slice(-2).join('/');
+        await supabase.storage
+          .from('avatars')
+          .remove([oldPath]);
+      }
 
-  const modalContent = (
-    <div 
-      className="fixed inset-0 z-[9999] bg-black touch-none cursor-pointer"
-      onClick={onClose}
-    >
-      <button 
-        onClick={(e) => {
-          e.stopPropagation();
-          onClose();
-        }}
-        className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full hover:bg-black/80 transition-colors z-[9999]"
-        aria-label="Fermer"
-      >
-        <X size={24} />
-      </button>
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${playerId}/${fileName}`;
 
-      <div className="w-screen h-screen flex items-center justify-center p-4" onClick={onClose}>
-        <img
-          src={url}
-          alt="Avatar"
-          className="
-            w-auto h-auto object-contain select-none
-            max-w-[95vw] max-h-[95vh]
-            md:!w-16 md:!h-16 md:max-w-none md:max-h-none md:ring-4 md:ring-fuchsia-500
-          "
-          draggable={false}
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      const { error: updateError } = await supabase
+        .from('players')
+        .update({ avatar_url: publicUrl })
+        .eq('id', playerId);
+
+      if (updateError) throw updateError;
+
+      onAvatarUpdate(publicUrl);
+      toast.success('Avatar mis à jour');
+    } catch (error: any) {
+      console.error('Erreur lors de la mise à jour de l\'avatar:', error);
+      toast.error('Erreur lors de la mise à jour de l\'avatar');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  return (
+    <div className="relative w-full h-full rounded-lg overflow-hidden bg-gray-800/50">
+      {isUploading ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900/50">
+          <div className="animate-spin rounded-full h-6 w-6 border-2 border-red-500 border-t-transparent" />
+        </div>
+      ) : url ? (
+        <div 
+          className={`relative w-full h-full ${
+            url ? 'cursor-pointer hover:opacity-90 transition-opacity' : 
+            editable ? 'cursor-pointer hover:opacity-90 transition-opacity' : 'cursor-default'
+          }`}
+          onClick={() => {
+            if (editable) {
+              fileInputRef.current?.click();
+            } else if (url) {
+              setShowModal(true);
+            }
+          }}
+        >
+          <img
+            src={url}
+            alt="Avatar" 
+            className="w-full h-full object-cover select-none"
+          />
+          {editable && (
+            <div 
+              className="absolute inset-0 flex items-center justify-center bg-gray-900/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
+            >
+              <Upload className="w-6 h-6 text-white" />
+            </div>
+          )}
+        </div>
+      ) : (
+        <div 
+          className={`w-full h-full flex flex-col items-center justify-center ${
+            editable ? 'cursor-pointer hover:opacity-90 transition-opacity' : 'cursor-default'
+          }`}
+          onClick={() => {
+            if (editable) {
+              fileInputRef.current?.click();
+            }
+          }}
+        >
+          <User className="w-8 h-8 text-gray-400" />
+          {editable && <Upload className="w-4 h-4 text-gray-500 mt-1" />}
+        </div>
+      )}
+      {editable && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          accept="image/*"
+          onChange={handleFileSelect}
+          disabled={isUploading}
         />
-      </div>
+      )}
+      {showModal && url && (
+        <AvatarModal url={url} onClose={() => setShowModal(false)} />
+      )}
     </div>
-  );
-
-  // Utilise un portail pour monter le modal directement sous body
-  return createPortal(modalContent, document.body);
+  ); 
 }
