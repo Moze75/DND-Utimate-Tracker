@@ -217,40 +217,46 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
             )}
 
             {/* Carte avatar + actions */}
-            <div
-              className="grid items-start gap-3 sm:gap-4"
-              style={{ gridTemplateColumns: 'minmax(0,1fr) 8rem' }}
-            >
-              <div className="relative w-full min-w-0 aspect-[7/10] sm:aspect-[2/3] rounded-lg overflow-hidden bg-gray-800/50 flex items-center justify-center">
-                <button
-                  onClick={() => setEditing(true)}
-                  className="absolute top-2 right-2 w-9 h-9 rounded-full bg-gray-900/40 backdrop-blur-sm text-white hover:bg-gray-800/50 hover:text-white flex items-center justify-center z-10 transition-colors"
-                  title="Profil et caractéristiques"
-                >
-                  <User className="w-5 h-5" />
-                </button>
+<div
+  className="grid items-start gap-3 sm:gap-4"
+  style={{ gridTemplateColumns: 'minmax(0,1fr) 8rem' }}
+>
+  <div
+    className="
+      relative w-full min-w-0 aspect-[7/10] sm:aspect-[2/3]
+      rounded-lg overflow-hidden bg-gray-800/50 flex items-center justify-center
+      md:max-w-[22rem] md:mx-auto
+    "
+  >
+    <button
+      onClick={() => setEditing(true)}
+      className="absolute top-2 right-2 w-9 h-9 rounded-full bg-gray-900/40 backdrop-blur-sm text-white hover:bg-gray-800/50 hover:text-white flex items-center justify-center z-10 transition-colors"
+      title="Profil et caractéristiques"
+    >
+      <User className="w-5 h-5" />
+    </button>
 
-                <Avatar
-                  url={player.avatar_url || ''}
-                  playerId={player.id}
-                  size="lg" 
-                  editable={false}
-                  onAvatarUpdate={() => {}}
-                />
+    <Avatar
+      url={player.avatar_url || ''}
+      playerId={player.id}
+      size="lg"
+      editable={false}
+      onAvatarUpdate={() => {}}
+    />
 
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 pointer-events-none">
-                  <div className="text-white">
-                    <h3 className="text-lg font-bold text-white drop-shadow-lg">
-                      {player.adventurer_name || player.name}
-                    </h3>
-                    {player.class && (
-                      <p className="text-sm text-gray-200 drop-shadow-md">
-                        {player.class} niveau {player.level}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
+    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 pointer-events-none">
+      <div className="text-white">
+        <h3 className="text-lg font-bold text-white drop-shadow-lg">
+          {player.adventurer_name || player.name}
+        </h3>
+        {player.class && (
+          <p className="text-sm text-gray-200 drop-shadow-md">
+            {player.class} niveau {player.level}
+          </p>
+        )}
+      </div>
+    </div>
+  </div>
 
               {/* Colonne boutons (repos / inspirations / concentration) */}
               <div className="flex flex-col gap-3 sm:gap-4 items-stretch w-32 justify-start">
