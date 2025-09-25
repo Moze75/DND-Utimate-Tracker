@@ -699,8 +699,7 @@ export function GamePage({
             >
               {Array.from(visitedTabs).map((key) => {
                 const isActive = key === activeTab;
-                const isNeighbor =
-                const effectiveNeighborType = neighborType ?? (animating ? latchedNeighbor : null);
+                        const effectiveNeighborType = neighborType ?? (animating ? latchedNeighbor : null);
                 const isNeighbor =
                   (effectiveNeighborType === 'next' && key === nextKey) ||
                   (effectiveNeighborType === 'prev' && key === prevKey);
