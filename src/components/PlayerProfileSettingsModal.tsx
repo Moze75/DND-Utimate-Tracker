@@ -510,8 +510,30 @@ export function PlayerProfileSettingsModal({
 
   /* ============================ Rendu (modale) ============================ */
 
-  return (
-    <div className="fixed inset-0 bg-gray-900/95 z-50 overflow-y-auto">
+return (
+  // Enveloppe fixe plein écran
+  <div className="fixed inset-0 z-50">
+    {/* Backdrop avec fade-in */}
+    <div
+      className={`absolute inset-0 bg-gray-900/80 backdrop-blur-[2px] transition-opacity duration-300 ${
+        enter ? 'opacity-100' : 'opacity-0'
+      }`}
+      // Si tu veux fermer au clic sur le backdrop, décommente:
+      // onClick={onClose}
+    />
+
+    {/* Panneau qui glisse depuis la gauche */}
+    <div
+      className={`
+        absolute inset-0 overflow-y-auto
+        transform transition-transform duration-300 ease-out
+        ${enter ? 'translate-x-0' : '-translate-x-full'}
+      `}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Paramètres du personnage"
+    >
+      {/* TON CONTENU EXISTANT COMMENCE ICI, inchangé */}
       <div className="max-w-4xl mx-auto p-4 py-8 space-y-6 pb-32">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-100">Paramètres du personnage</h2>
