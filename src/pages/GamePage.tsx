@@ -18,6 +18,8 @@ import { inventoryService } from '../services/inventoryService';
 import PlayerProfileProfileTab from '../components/PlayerProfileProfileTab';
 import { loadAbilitySections } from '../services/classesContent';
 
+import { PlayerProfileSettingsModal } from '../components/PlayerProfileSettingsModal';
+
 import '../styles/swipe.css';
 
 /* ===========================================================
@@ -107,6 +109,9 @@ export function GamePage({
   const [visitedTabs] = useState<Set<TabKey>>(
     () => new Set<TabKey>(['combat', 'class', 'abilities', 'stats', 'equipment', 'profile'])
   );
+
+  // Etat modal Paramètres
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   /* ---------------- Refs layout & swipe ---------------- */
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -498,11 +503,51 @@ export function GamePage({
     loadInventory();
   }, [selectedCharacter?.id]);
 
+  /* ---------------- Ouverture Paramètres: helpers ---------------- */
+  const openSettings = useCallback(() => {
+    if (freezeActiveRef.current) safeUnfreeze(true);
+    fullAbortInteraction();
+    setSettingsOpen(true);
+  }, [fullAbortInteraction, safeUnfreeze]);
+
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
+  }, []);
+
   /* ---------------- Rendu d'un pane ---------------- */
   const renderPane = (key: TabKey) => {
     if (!currentPlayer) return null;
     switch (key) {
-      case 'combat': return <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
+      case 'combat': {
+        // Wrapper pour capturer swipe GAUCHE -> ouvrir paramètres (sans déclencher le swipe de tabs)
+        return (
+          <div
+            onTouchStart={(e) => {
+              // stocke départ sur l'élément combat
+              const t = e.touches[0];
+              (e.currentTarget as any).__sx = t.clientX;
+              (e.currentTarget as any).__sy = t.clientY;
+            }}
+            onTouchMove={(e) => {
+              const sx = (e.currentTarget as any).__sx ?? null;
+              const sy = (e.currentTarget as any).__sy ?? null;
+              if (sx == null || sy == null) return;
+              const t = e.touches[0];
+              const dx = t.clientX - sx;
+              const dy = t.clientY - sy;
+              if (Math.abs(dx) < 14) return;
+              // Horizontal dominant et vers la GAUCHE
+              if (Math.abs(dx) > Math.abs(dy) * 1.15 && dx < -48) {
+                e.stopPropagation();
+                e.preventDefault();
+                openSettings();
+              }
+            }}
+          >
+            <CombatTab player={currentPlayer} onUpdate={applyPlayerUpdate} />
+          </div>
+        );
+      }
       case 'class': return <ClassesTab player={currentPlayer} onUpdate={applyPlayerUpdate} sections={classSections} />;
       case 'abilities': return <AbilitiesTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
       case 'stats': return <StatsTab player={currentPlayer} onUpdate={applyPlayerUpdate} />;
@@ -588,6 +633,41 @@ export function GamePage({
   /* ---------------- Rendu principal ---------------- */
   return (
     <div className="min-h-screen p-2 sm:p-4 md:p-6 no-overflow-anchor">
+      {/* Zone de capture de SWIPE au bord gauche (ouvre la modale) */}
+      {!settingsOpen && (
+        <div
+          className="fixed inset-y-0 left-0 w-4 sm:w-5 z-50"
+          onTouchStart={(e) => {
+            const t = e.touches[0];
+            (e.currentTarget as any).__sx = t.clientX;
+            (e.currentTarget as any).__sy = t.clientY;
+            (e.currentTarget as any).__edge = t.clientX <= 16;
+          }}
+          onTouchMove={(e) => {
+            const sx = (e.currentTarget as any).__sx ?? null;
+            const sy = (e.currentTarget as any).__sy ?? null;
+            const edge = (e.currentTarget as any).__edge ?? false;
+            if (!edge || sx == null || sy == null) return;
+            const t = e.touches[0];
+            const dx = t.clientX - sx;
+            const dy = t.clientY - sy;
+            if (Math.abs(dx) < 14) return;
+            if (Math.abs(dx) > Math.abs(dy) * 1.15 && dx > 48) {
+              e.stopPropagation();
+              e.preventDefault();
+              openSettings();
+            }
+          }}
+          onTouchEnd={(e) => {
+            (e.currentTarget as any).__sx = null;
+            (e.currentTarget as any).__sy = null;
+            (e.currentTarget as any).__edge = false;
+          }}
+        >
+          <div className="w-full h-full" aria-hidden />
+        </div>
+      )}
+
       <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6">
         {currentPlayer && (
           <PlayerContext.Provider value={currentPlayer}>
@@ -674,6 +754,16 @@ export function GamePage({
           Retour aux personnages
         </button>
       </div>
+
+      {/* Modale Paramètres (fond opaque, couvre tout) */}
+      {currentPlayer && (
+        <PlayerProfileSettingsModal
+          open={settingsOpen}
+          onClose={closeSettings}
+          player={currentPlayer}
+          onUpdate={applyPlayerUpdate}
+        />
+      )}
     </div>
   );
 }
