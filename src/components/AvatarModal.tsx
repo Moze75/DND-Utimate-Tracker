@@ -70,4 +70,4 @@ export function AvatarModal({ url, onClose }: AvatarModalProps) {
 
   // Utilise un portail pour monter le modal directement sous body
   return createPortal(modalContent, document.body);
-}
+} 
