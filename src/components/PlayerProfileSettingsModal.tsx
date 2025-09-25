@@ -505,7 +505,16 @@ export function PlayerProfileSettingsModal({
       toast.error('Erreur lors de la mise à jour');
     }
   };
- 
+ // Animation d’entrée “slide-from-left”
+const [enter, setEnter] = useState(false);
+useEffect(() => {
+  if (!open) return;
+  const id = window.setTimeout(() => setEnter(true), 20);
+  return () => {
+    window.clearTimeout(id);
+    setEnter(false); // reset pour la prochaine ouverture
+  };
+}, [open]);
   if (!open) return null;
 
 
