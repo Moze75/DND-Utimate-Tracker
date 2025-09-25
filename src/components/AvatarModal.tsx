@@ -56,7 +56,7 @@ export function AvatarModal({ url, onClose }: AvatarModalProps) {
         <img
           src={url}
           alt="Avatar"
-          className="w-auto h-auto object-contain select-none max-w-[min(92vw,900px)] max-h-[min(85vh,900px)]"
+          className="w-auto h-auto object-contain select-none max-w-[min(92vw,500px)] max-h-[min(85vh,500px)]"
           draggable={false}
         />
       </div>
