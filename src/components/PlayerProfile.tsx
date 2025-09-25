@@ -18,6 +18,7 @@ import toast from 'react-hot-toast';
 import { Avatar } from './Avatar';
 import { CONDITIONS } from './ConditionsSection';
 import { PlayerProfileSettingsModal } from './PlayerProfileSettingsModal';
+import { SwipeNavigator } from './SwipeNavigator'; // <-- pour le geste en bord d'écran
 
 /* ============================ Helpers ============================ */
 
@@ -197,6 +198,16 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
 
   return (
     <>
+            {/* Zone de capture du swipe gauche->droite (bord d'écran) */}
+      {/* Masquée sur desktop pour éviter les conflits, active surtout sur mobile */}
+      <div className="fixed inset-y-0 left-0 w-4 sm:w-6 z-40 md:hidden">
+        <SwipeNavigator
+          threshold={45}
+          onSwipeRight={() => setEditing(true)}
+        >
+          <div className="w-full h-full" aria-hidden />
+        </SwipeNavigator>
+      </div>
       <div className="stat-card">
         <div className="stat-header flex items-start justify-between">
           <div className="flex flex-col gap-4 w-full">
@@ -218,24 +229,19 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
             )}
 
             {/* Carte avatar + actions */}
-<div
-  className="grid items-start gap-3 sm:gap-4"
-  style={{ gridTemplateColumns: 'minmax(0,1fr) 8rem' }}
->
-  <div
-    className="
-      relative w-full min-w-0 aspect-[7/10] sm:aspect-[2/3]
-      rounded-lg overflow-hidden bg-gray-800/50 flex items-center justify-center
-      md:max-w-[22rem] md:mx-auto
-    "
-  >
-    <button
-      onClick={() => setEditing(true)}
-      className="absolute top-2 right-2 w-9 h-9 rounded-full bg-gray-900/40 backdrop-blur-sm text-white hover:bg-gray-800/50 hover:text-white flex items-center justify-center z-10 transition-colors"
-      title="Profil et caractéristiques"
+    <div
+      className="grid items-start gap-3 sm:gap-4"
+      style={{ gridTemplateColumns: 'minmax(0,1fr) 8rem' }}
     >
-      <User className="w-5 h-5" />
-    </button>
+      <div className="relative w-full min-w-0 aspect-[7/10] sm:aspect-[2/3] rounded-lg overflow-hidden bg-gray-800/50 flex items-center justify-center">
+        {/* Bouton paramètres en haut-gauche (icône hamburger) */}
+        <button
+          onClick={() => setEditing(true)}
+          className="absolute top-2 left-2 w-9 h-9 rounded-full bg-gray-900/40 backdrop-blur-sm text-white hover:bg-gray-800/50 hover:text-white flex items-center justify-center z-10 transition-colors"
+          title="Profil et caractéristiques"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
 
     <Avatar
       url={player.avatar_url || ''}
