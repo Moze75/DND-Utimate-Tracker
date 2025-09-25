@@ -1,5 +1,15 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Trash2, BookOpen, Search, Check, ChevronDown, ChevronRight, Zap } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  BookOpen,
+  Book,
+  Search,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Zap,
+} from 'lucide-react';
 import { Player } from '../types/dnd';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -67,7 +77,9 @@ const getProficiencyBonusForLevel = (level: number): number => {
   if (level >= 5) return 3;
   return 2;
 };
-const getSpellcastingAbilityName = (cls?: string): 'Charisme' | 'Sagesse' | 'Intelligence' | null => {
+const getSpellcastingAbilityName = (
+  cls?: string
+): 'Charisme' | 'Sagesse' | 'Intelligence' | null => {
   if (!cls) return null;
   const c = cls.toLowerCase();
   if (c.includes('barde') || c.includes('bard')) return 'Charisme';
@@ -80,8 +92,11 @@ const getSpellcastingAbilityName = (cls?: string): 'Charisme' | 'Sagesse' | 'Int
   if (c.includes('occultiste') || c.includes('warlock')) return 'Charisme';
   return null;
 };
-const getAbilityModFromPlayer = (player: Player, abilityNameFr: 'Charisme' | 'Sagesse' | 'Intelligence'): number => {
-  const ability = player.abilities?.find(a => a.name === abilityNameFr);
+const getAbilityModFromPlayer = (
+  player: Player,
+  abilityNameFr: 'Charisme' | 'Sagesse' | 'Intelligence'
+): number => {
+  const ability = player.abilities?.find((a) => a.name === abilityNameFr);
   if (!ability) return 0;
   if (typeof (ability as any).modifier === 'number') return (ability as any).modifier;
   if (typeof (ability as any).score === 'number') return getModifier((ability as any).score);
@@ -103,15 +118,15 @@ const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u03
 const getCasterType = (cls?: string): CasterType => {
   if (!cls) return 'none';
   const c = normalize(cls);
-  if (['wizard','magicien','mage'].some(k => c.includes(k))) return 'full';
-  if (['sorcerer','ensorceleur'].some(k => c.includes(k))) return 'full';
-  if (['cleric','clerc'].some(k => c.includes(k))) return 'full';
-  if (['druid','druide'].some(k => c.includes(k))) return 'full';
-  if (['bard','barde'].some(k => c.includes(k))) return 'full';
-  if (['paladin'].some(k => c.includes(k))) return 'half';
-  if (['ranger','rodeur','rôdeur'].some(k => c.includes(k))) return 'half';
-  if (['artificer','artificier'].some(k => c.includes(k))) return 'half';
-  if (['warlock','occultiste'].some(k => c.includes(k))) return 'warlock';
+  if (['wizard', 'magicien', 'mage'].some((k) => c.includes(k))) return 'full';
+  if (['sorcerer', 'ensorceleur'].some((k) => c.includes(k))) return 'full';
+  if (['cleric', 'clerc'].some((k) => c.includes(k))) return 'full';
+  if (['druid', 'druide'].some((k) => c.includes(k))) return 'full';
+  if (['bard', 'barde'].some((k) => c.includes(k))) return 'full';
+  if (['paladin'].some((k) => c.includes(k))) return 'half';
+  if (['ranger', 'rodeur', 'rôdeur'].some((k) => c.includes(k))) return 'half';
+  if (['artificer', 'artificier'].some((k) => c.includes(k))) return 'half';
+  if (['warlock', 'occultiste'].some((k) => c.includes(k))) return 'warlock';
   return 'none';
 };
 const getWarlockPactSlotLevel = (level: number): number => {
@@ -134,105 +149,123 @@ const getCharacterLevel = (player: Player): number => Number((player as any).lev
 
 /* ====== Composants ====== */
 
-const SpellLevelStats = React.memo(({ 
-  levelName, 
-  player, 
-  onUpdate, 
-  usedSlots, 
-  maxSlots 
-}: {
-  levelName: string;
-  player: Player;
-  onUpdate: (player: Player) => void;
-  usedSlots: number;
-  maxSlots: number;
-}) => {
-  const level = parseInt(levelName.split(' ')[1]);
-  const remainingSlots = Math.max(0, maxSlots - usedSlots);
+const SpellLevelStats = React.memo(
+  ({
+    levelName,
+    player,
+    onUpdate,
+    usedSlots,
+    maxSlots,
+  }: {
+    levelName: string;
+    player: Player;
+    onUpdate: (player: Player) => void;
+    usedSlots: number;
+    maxSlots: number;
+  }) => {
+    const level = parseInt(levelName.split(' ')[1]);
+    const remainingSlots = Math.max(0, maxSlots - usedSlots);
 
-  const handleSlotUse = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (remainingSlots <= 0) return;
+    const handleSlotUse = useCallback(
+      async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (remainingSlots <= 0) return;
 
-    // Effet visuel rapide
-    const button = e.currentTarget as HTMLButtonElement;
-    const rect = button.getBoundingClientRect();
-    const container = document.createElement('div');
-    container.style.position = 'fixed';
-    container.style.left = `${rect.left}px`;
-    container.style.top = `${rect.top}px`;
-    container.style.width = `${rect.width}px`;
-    container.style.height = `${rect.height}px`;
-    container.style.pointerEvents = 'none';
-    container.style.zIndex = '9999';
-    const anim = document.createElement('div');
-    anim.style.position = 'absolute';
-    anim.style.left = '50%';
-    anim.style.top = '50%';
-    anim.style.width = '200px';
-    anim.style.height = '200px';
-    anim.style.animation = 'magical-explosion 0.6s ease-out forwards';
-    container.appendChild(anim);
-    document.body.appendChild(container);
-    setTimeout(() => container.remove(), 600);
+        // Effet visuel rapide
+        const button = e.currentTarget as HTMLButtonElement;
+        const rect = button.getBoundingClientRect();
+        const container = document.createElement('div');
+        container.style.position = 'fixed';
+        container.style.left = `${rect.left}px`;
+        container.style.top = `${rect.top}px`;
+        container.style.width = `${rect.width}px`;
+        container.style.height = `${rect.height}px`;
+        container.style.pointerEvents = 'none';
+        container.style.zIndex = '9999';
+        const anim = document.createElement('div');
+        anim.style.position = 'absolute';
+        anim.style.left = '50%';
+        anim.style.top = '50%';
+        anim.style.width = '200px';
+        anim.style.height = '200px';
+        anim.style.animation = 'magical-explosion 0.6s ease-out forwards';
+        container.appendChild(anim);
+        document.body.appendChild(container);
+        setTimeout(() => container.remove(), 600);
 
-    try {
-      const usedKey = `used${level}` as keyof typeof player.spell_slots;
-      const newSpellSlots = {
-        ...player.spell_slots,
-        [usedKey]: usedSlots + 1
-      };
-      const { error } = await supabase.from('players').update({ spell_slots: newSpellSlots }).eq('id', player.id);
-      if (error) throw error;
+        try {
+          const usedKey = `used${level}` as keyof typeof player.spell_slots;
+          const newSpellSlots = {
+            ...player.spell_slots,
+            [usedKey]: usedSlots + 1,
+          };
+          const { error } = await supabase
+            .from('players')
+            .update({ spell_slots: newSpellSlots })
+            .eq('id', player.id);
+          if (error) throw error;
 
-      onUpdate({ ...player, spell_slots: newSpellSlots });
-      toast.success(`✨ Emplacement de niveau ${level} utilisé`);
-    } catch (err) {
-      console.error('Erreur slots:', err);
-      toast.error('Erreur lors de la mise à jour');
-    }
-  }, [level, remainingSlots, usedSlots, player, onUpdate]);
+          onUpdate({ ...player, spell_slots: newSpellSlots });
+          toast.success(`✨ Emplacement de niveau ${level} utilisé`);
+        } catch (err) {
+          console.error('Erreur slots:', err);
+          toast.error('Erreur lors de la mise à jour');
+        }
+      },
+      [level, remainingSlots, usedSlots, player, onUpdate]
+    );
 
-  if (maxSlots === 0) return null;
+    if (maxSlots === 0) return null;
 
-  return (
-    <div className="flex items-center gap-2 ml-auto">
-      <div className="flex gap-0.5">
-        {Array.from({ length: maxSlots }, (_, i) => (
-          <div
-            key={i}
-            className={`w-3 h-3 rounded-sm border transition-all duration-300 ${
-              i < usedSlots ? 'bg-gray-600 border-gray-500 opacity-50' : 'bg-purple-500 border-purple-400 shadow-sm'
-            }`}
-          />
-        ))}
+    return (
+      <div className="flex items-center gap-2 ml-auto">
+        <div className="flex gap-0.5">
+          {Array.from({ length: maxSlots }, (_, i) => (
+            <div
+              key={i}
+              className={`w-3 h-3 rounded-sm border transition-all duration-300 ${
+                i < usedSlots
+                  ? 'bg-gray-600 border-gray-500 opacity-50'
+                  : 'bg-purple-500 border-purple-400 shadow-sm'
+              }`}
+            />
+          ))}
+        </div>
+        <span
+          className={`text-xs ${
+            remainingSlots === 0
+              ? 'text-red-400'
+              : remainingSlots <= 2
+              ? 'text-yellow-400'
+              : 'text-gray-400'
+          }`}
+        >
+          {remainingSlots}/{maxSlots}
+        </span>
+        <button
+          onClick={handleSlotUse}
+          className={`w-12 h-12 rounded border flex items-center justify-center text-xs font-bold transition-all duration-200 ${
+            remainingSlots > 0
+              ? 'bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30 hover:border-red-500/60'
+              : 'bg-gray-700/50 border-gray-600/50 text-gray-500 cursor-not-allowed'
+          }`}
+          disabled={remainingSlots <= 0}
+          title={`Consommer un emplacement de niveau ${level}`}
+        >
+          <Zap size={20} />
+        </button>
       </div>
-      <span className={`text-xs ${remainingSlots === 0 ? 'text-red-400' : remainingSlots <= 2 ? 'text-yellow-400' : 'text-gray-400'}`}>
-        {remainingSlots}/{maxSlots}
-      </span>
-      <button
-        onClick={handleSlotUse}
-        className={`w-12 h-12 rounded border flex items-center justify-center text-xs font-bold transition-all duration-200 ${
-          remainingSlots > 0
-            ? 'bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30 hover:border-red-500/60'
-            : 'bg-gray-700/50 border-gray-600/50 text-gray-500 cursor-not-allowed'
-        }`}
-        disabled={remainingSlots <= 0}
-        title={`Consommer un emplacement de niveau ${level}`}
-      >
-        <Zap size={20} />
-      </button>
-    </div>
-  );
-});
+    );
+  }
+);
 SpellLevelStats.displayName = 'SpellLevelStats';
 
-function SpellCard({ 
-  spell, 
-  expandedSpell, 
+function SpellCard({
+  spell,
+  expandedSpell,
   setExpandedSpell,
   onTogglePrepared,
-  onRemoveSpell
+  onRemoveSpell,
 }: {
   spell: KnownSpell;
   expandedSpell: string | null;
@@ -258,7 +291,7 @@ function SpellCard({
   };
 
   return (
-    <div 
+    <div
       className={`bg-gray-800/50 border border-gray-700/50 rounded-lg overflow-hidden transition-all duration-300 relative ${
         isExpanded ? 'ring-2 ring-purple-500/30 shadow-lg shadow-purple-900/20' : 'hover:bg-gray-700/50'
       } ${spell.is_prepared ? 'border-green-500/30 bg-green-900/10' : ''}`}
@@ -275,7 +308,11 @@ function SpellCard({
             {spell.is_prepared && <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className={`text-xs px-2 py-1 rounded-full ${spell.spell_level === 0 ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
+            <div
+              className={`text-xs px-2 py-1 rounded-full ${
+                spell.spell_level === 0 ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'
+              }`}
+            >
               {spell.spell_level === 0 ? 'Tour' : `Niv. ${spell.spell_level}`}
             </div>
             {spell.is_prepared && (
@@ -295,19 +332,23 @@ function SpellCard({
           <span>{spell.spell_range}</span>
         </div>
       </button>
-      
+
       <div className="px-2 pb-2 flex items-center justify-end gap-3">
         <button
           onClick={(e) => {
             e.stopPropagation();
             onTogglePrepared(spell.id, spell.is_prepared);
           }}
-          className={`w-6 h-6 rounded-lg ${spell.is_prepared ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-gray-700/50 text-gray-400 hover:bg-gray-600/50'} flex items-center justify-center transition-colors`}
+          className={`w-6 h-6 rounded-lg ${
+            spell.is_prepared
+              ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+              : 'bg-gray-700/50 text-gray-400 hover:bg-gray-600/50'
+          } flex items-center justify-center`}
           title={spell.is_prepared ? 'Dépréparer' : 'Préparer'}
         >
           <Check size={16} />
         </button>
-        
+
         <button
           onClick={handleRemoveSpell}
           className="w-6 h-6 text-gray-400 hover:text-red-400 hover:bg-red-900/30 rounded-lg flex items-center justify-center"
@@ -324,8 +365,18 @@ function SpellCard({
               Supprimer <span className="font-medium text-red-400">"{spell.spell_name}"</span> ?
             </div>
             <div className="flex gap-3 justify-center">
-              <button onClick={cancelDelete} className="px-3 py-2 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded">Annuler</button>
-              <button onClick={confirmDelete} className="px-3 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded">Supprimer</button>
+              <button
+                onClick={cancelDelete}
+                className="px-3 py-2 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-3 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded"
+              >
+                Supprimer
+              </button>
             </div>
           </div>
         </div>
@@ -392,7 +443,7 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
   }, []);
 
   const toggleLevelCollapse = useCallback((levelName: string) => {
-    setCollapsedLevels(prev => {
+    setCollapsedLevels((prev) => {
       const next = new Set(prev);
       if (next.has(levelName)) next.delete(levelName);
       else next.add(levelName);
@@ -402,6 +453,7 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
 
   useEffect(() => {
     fetchKnownSpells();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player.id]);
 
   const fetchKnownSpells = async () => {
@@ -409,19 +461,21 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
       setLoading(true);
       const { data, error } = await supabase
         .from('player_spells')
-        .select(`
+        .select(
+          `
           id,
           player_id,
           spell_id,
           is_prepared,
           created_at,
           spells ( id, name, level, school, casting_time, range, components, duration, description, higher_levels )
-        `)
+        `
+        )
         .eq('player_id', player.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
 
-      const transformed: KnownSpell[] = (data || []).map(item => ({
+      const transformed: KnownSpell[] = (data || []).map((item: any) => ({
         id: item.id,
         player_id: item.player_id,
         spell_id: item.spell_id,
@@ -435,7 +489,7 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
         spell_components: item.spells.components,
         spell_higher_levels: item.spells.higher_levels,
         is_prepared: item.is_prepared,
-        created_at: item.created_at
+        created_at: item.created_at,
       }));
       setKnownSpells(transformed);
     } catch (err) {
@@ -448,12 +502,12 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
 
   const handleSpellsSelected = async (spells: Spell[]) => {
     try {
-      const spellIds = spells.map(s => s.id);
+      const spellIds = spells.map((s) => s.id);
       const { data: existing } = await supabase.from('spells').select('id').in('id', spellIds);
-      const existIds = new Set(existing?.map(s => s.id) || []);
+      const existIds = new Set((existing || []).map((s: any) => s.id));
       const toInsert = spells
-        .filter(spell => !existIds.has(spell.id))
-        .map(spell => ({
+        .filter((spell) => !existIds.has(spell.id))
+        .map((spell) => ({
           id: spell.id,
           name: spell.name,
           level: spell.level,
@@ -463,13 +517,19 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
           components: spell.components,
           duration: spell.duration,
           description: spell.description,
-          higher_levels: spell.higher_levels || null
+          higher_levels: spell.higher_levels || null,
         }));
       if (toInsert.length > 0) {
         await supabase.from('spells').upsert(toInsert, { onConflict: 'id', ignoreDuplicates: true });
       }
-      const links = spells.map(spell => ({ player_id: player.id, spell_id: spell.id, is_prepared: false }));
-      const { error: linkErr } = await supabase.from('player_spells').upsert(links, { onConflict: 'player_id,spell_id', ignoreDuplicates: true });
+      const links = spells.map((spell) => ({
+        player_id: player.id,
+        spell_id: spell.id,
+        is_prepared: false,
+      }));
+      const { error: linkErr } = await supabase
+        .from('player_spells')
+        .upsert(links, { onConflict: 'player_id,spell_id', ignoreDuplicates: true });
       if (linkErr) throw linkErr;
 
       await fetchKnownSpells();
@@ -484,7 +544,7 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
     try {
       const { error } = await supabase.from('player_spells').delete().eq('id', spellId);
       if (error) throw error;
-      setKnownSpells(prev => prev.filter(s => s.id !== spellId));
+      setKnownSpells((prev) => prev.filter((s) => s.id !== spellId));
       toast.success('Sort retiré de vos sorts connus');
     } catch (err) {
       console.error('Erreur suppression sort:', err);
@@ -496,7 +556,7 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
     try {
       const { error } = await supabase.from('player_spells').update({ is_prepared: !isPrepared }).eq('id', spellId);
       if (error) throw error;
-      setKnownSpells(prev => prev.map(s => s.id === spellId ? { ...s, is_prepared: !isPrepared } : s));
+      setKnownSpells((prev) => prev.map((s) => (s.id === spellId ? { ...s, is_prepared: !isPrepared } : s)));
       toast.success(`✨ Sort ${isPrepared ? 'dépréparé' : 'préparé'}`);
     } catch (err) {
       console.error('Erreur MAJ préparation:', err);
@@ -509,15 +569,19 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
     let filtered = knownSpells;
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
-      filtered = filtered.filter(s =>
-        s.spell_name.toLowerCase().includes(q) ||
-        s.spell_school.toLowerCase().includes(q)
+      filtered = filtered.filter(
+        (s) => s.spell_name.toLowerCase().includes(q) || s.spell_school.toLowerCase().includes(q)
       );
     }
     if (filterPrepared !== 'all') {
-      filtered = filtered.filter(s => (filterPrepared === 'prepared' ? s.is_prepared : !s.is_prepared));
+      filtered = filtered.filter((s) =>
+        filterPrepared === 'prepared' ? s.is_prepared : !s.is_prepared
+      );
     }
-    return { filteredSpells: filtered, preparedCount: knownSpells.filter(s => s.is_prepared).length };
+    return {
+      filteredSpells: filtered,
+      preparedCount: knownSpells.filter((s) => s.is_prepared).length,
+    };
   }, [knownSpells, searchTerm, filterPrepared]);
 
   const groupedSpells = useMemo(() => {
@@ -525,7 +589,7 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
       const level = spell.spell_level;
       const key = level === 0 ? 'Tours de magie' : `Niveau ${level}`;
       if (!groups[key]) groups[key] = [];
-      groups[key].push(spell);
+      (groups[key] as KnownSpell[]).push(spell);
       return groups;
     }, {} as Record<string, KnownSpell[]>);
   }, [filteredSpells]);
@@ -540,9 +604,10 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
     [player, spellcastingAbilityName]
   );
   const proficiencyBonus = useMemo(
-    () => (player.stats?.proficiency_bonus && player.stats.proficiency_bonus > 0)
-      ? player.stats.proficiency_bonus
-      : getProficiencyBonusForLevel(player.level || 1),
+    () =>
+      player.stats?.proficiency_bonus && player.stats.proficiency_bonus > 0
+        ? player.stats.proficiency_bonus
+        : getProficiencyBonusForLevel(player.level || 1),
     [player.stats?.proficiency_bonus, player.level]
   );
   const spellSaveDC = useMemo(
@@ -584,41 +649,71 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
     return levels;
   }, [player.spell_slots, groupedSpells, allowedLevelsSet]);
 
+  // Dépliage global: bouton livre droite
+  const allExpanded = useMemo(() => {
+    if (levelsToRender.length === 0) return false;
+    return levelsToRender.every((name) => !collapsedLevels.has(name));
+  }, [levelsToRender, collapsedLevels]);
+
+  const toggleAllLevels = useCallback(() => {
+    setCollapsedLevels((prev) => {
+      if (levelsToRender.length === 0) return prev;
+      // Si tout est déplié actuellement -> replier tout. Sinon -> déplier tout.
+      if (levelsToRender.every((name) => !prev.has(name))) {
+        return new Set(levelsToRender);
+      }
+      return new Set();
+    });
+  }, [levelsToRender]);
+
   return (
     <div className="stats-card">
-      <div className="stat-header flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <BookOpen className="w-5 h-5 text-blue-500" />
-          <div>
-            <h3 className="text-base font-semibold text-gray-100">
-              Sorts connus ({knownSpells.length})
-            </h3>
+      <div className="stat-header flex items-center justify-between gap-3">
+        {/* Partie gauche: titre + indicateurs */}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-base font-semibold text-gray-100 truncate">
+            Sorts connus ({knownSpells.length})
+          </h3>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
             {spellSaveDC !== null && (
-              <p className="text-sm text-purple-300">
-                DD des sorts: {spellSaveDC}
-              </p>
+              <span className="text-sm text-purple-300">DD des sorts: {spellSaveDC}</span>
             )}
             {spellAttackBonus !== null && (
-              <p className="text-sm text-purple-300">
-                Bonus d'attaque : {spellAttackBonus >= 0 ? '+' : ''}{spellAttackBonus}
-              </p>
+              <span className="text-sm text-purple-300">
+                Bonus d&apos;attaque : {spellAttackBonus >= 0 ? '+' : ''}
+                {spellAttackBonus}
+              </span>
             )}
             {preparedCount > 0 && (
-              <p className="text-sm text-green-400">
+              <span className="text-sm text-green-400">
                 {preparedCount} préparé{preparedCount > 1 ? 's' : ''}
-              </p>
+              </span>
             )}
           </div>
         </div>
-        <button
-          onClick={() => setShowSpellbook(true)}
-          className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-3 py-1.5 rounded-lg font-medium transition-all duration-200 shadow-lg shadow-blue-900/20 flex items-center gap-2"
-        >
-          <Plus size={16} />
-          Ajouter
-        </button>
+
+        {/* Partie droite: nouveau bouton Livre + bouton Ajouter */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={toggleAllLevels}
+            title={allExpanded ? 'Replier tous les niveaux' : 'Déplier tous les niveaux'}
+            aria-label={allExpanded ? 'Replier tous les niveaux' : 'Déplier tous les niveaux'}
+            className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-gray-800/60 hover:bg-gray-700/60 text-blue-400 hover:text-blue-300 border border-gray-700/50 transition-colors"
+          >
+            {allExpanded ? <BookOpen className="w-5 h-5" /> : <Book className="w-5 h-5" />}
+          </button>
+
+          <button
+            onClick={() => setShowSpellbook(true)}
+            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-3 py-2 rounded-lg font-medium transition-all duration-200 shadow-lg shadow-blue-900/20 inline-flex items-center gap-2"
+          >
+            <Plus size={16} />
+            Ajouter
+          </button>
+        </div>
       </div>
-      
+
       <div className="p-3">
         {/* Recherche / filtres */}
         {knownSpells.length > 0 && (
@@ -636,7 +731,9 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
               </div>
               <select
                 value={filterPrepared}
-                onChange={(e) => setFilterPrepared(e.target.value as 'all' | 'prepared' | 'unprepared')}
+                onChange={(e) =>
+                  setFilterPrepared(e.target.value as 'all' | 'prepared' | 'unprepared')
+                }
                 className="bg-gray-800/50 border border-gray-700/50 rounded-lg px-2 py-1.5 text-gray-100 focus:outline-none focus:border-blue-500/50"
               >
                 <option value="all">Tous les sorts</option>
@@ -674,42 +771,38 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
               const usedSlots = level === 0 ? 0 : (player.spell_slots?.[usedKey] || 0);
 
               return (
-                <div key={levelName} className="space-y-2" data-spell-level={level} id={`spell-level-${level}`}>
-                     <div
-        role="button"
-        tabIndex={0}
-        aria-expanded={!collapsedLevels.has(levelName)}
-        onClick={() => toggleLevelCollapse(levelName)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            toggleLevelCollapse(levelName);
-          }
-        }}
-        className="w-full flex items-center justify-between text-left hover:bg-gray-800/30 rounded-lg p-2 transition-all duration-200 group"
-      >
-        <div className="flex items-center gap-3 flex-1 pr-2">
-          <h4 className="text-sm font-semibold text-purple-300 group-hover:text-purple-200">
-            {levelName} ({spells.length})
-          </h4>
-          {levelName !== 'Tours de magie' && (
-            <SpellLevelStats
-              levelName={levelName}
-              player={player}
-              onUpdate={onUpdate}
-              usedSlots={usedSlots}
-              maxSlots={maxSlots}
-            />
-          )}
-        </div>
-        <div className="flex items-center pl-1">
-          {collapsedLevels.has(levelName) ? (
-            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-300" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-gray-300" />
-          )}
-        </div>
-      </div>   
+                <div
+                  key={levelName}
+                  className="space-y-2"
+                  data-spell-level={level}
+                  id={`spell-level-${level}`}
+                >
+                  <button
+                    onClick={() => toggleLevelCollapse(levelName)}
+                    className="w-full flex items-center justify-between text-left hover:bg-gray-800/30 rounded-lg p-2 transition-all duration-200 group"
+                  >
+                    <div className="flex items-center gap-3 flex-1 pr-2">
+                      <h4 className="text-sm font-semibold text-purple-300 group-hover:text-purple-200">
+                        {levelName} ({spells.length})
+                      </h4>
+                      {levelName !== 'Tours de magie' && (
+                        <SpellLevelStats
+                          levelName={levelName}
+                          player={player}
+                          onUpdate={onUpdate}
+                          usedSlots={usedSlots}
+                          maxSlots={maxSlots}
+                        />
+                      )}
+                    </div>
+                    <div className="flex items-center pl-1">
+                      {collapsedLevels.has(levelName) ? (
+                        <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-300" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-gray-300" />
+                      )}
+                    </div>
+                  </button>
 
                   {!collapsedLevels.has(levelName) && (
                     <div className="space-y-2 ml-2">
@@ -742,9 +835,9 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
           playerClass={player.class}
           selectionMode={true}
           onSpellSelect={(spell) => {
-            setSelectedSpells(prev => {
-              const exists = prev.find(s => s.id === spell.id);
-              return exists ? prev.filter(s => s.id !== spell.id) : [...prev, spell];
+            setSelectedSpells((prev) => {
+              const exists = prev.find((s) => s.id === spell.id);
+              return exists ? prev.filter((s) => s.id !== spell.id) : [...prev, spell];
             });
           }}
           selectedSpells={selectedSpells}
