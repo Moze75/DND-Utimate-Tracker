@@ -539,13 +539,13 @@ export function GamePage({
               const t = e.touches[0];
               const dx = t.clientX - sx;
               const dy = t.clientY - sy;
-              // Seuils: dominance horizontale et mouvement vers la GAUCHE
-              if (Math.abs(dx) < 14) return;
-              if (Math.abs(dx) > Math.abs(dy) * 1.15 && dx < -64) {
-                e.stopPropagation(); // n’envoie pas le swipe au conteneur d’onglets
-                e.preventDefault();  // empêche le scroll/gestes par défaut
-                openSettings('right'); // ouverture depuis la droite
-              }
+            // Seuils: dominance horizontale et mouvement vers la DROITE
+            if (Math.abs(dx) < 14) return;
+            if (Math.abs(dx) > Math.abs(dy) * 1.15 && dx > 64) {
+              e.stopPropagation(); // n’envoie pas le swipe au conteneur d’onglets
+              e.preventDefault();  // empêche le scroll/gestes par défaut
+              openSettings('right'); // ouverture depuis la droite
+            }
             }}
             onTouchEnd={(e) => {
               (e.currentTarget as any).__sx = null;
