@@ -200,6 +200,20 @@ export function PlayerProfileSettingsModal({
 }: PlayerProfileSettingsModalProps) {
   const [showLevelUp, setShowLevelUp] = useState(false);
 
+ // 1) Ajout: état d’animation d’entrée
+  const [enter, setEnter] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    // petit délai pour laisser React peindre le DOM avant d’appliquer la classe de transition
+    const id = window.setTimeout(() => setEnter(true), 20);
+    return () => {
+      window.clearTimeout(id);
+      setEnter(false); // réinitialise pour la prochaine ouverture
+    };
+  }, [open]);
+
+  if (!open) return null;
+  
   // Dirty tracking
   const [isDirty, setDirty] = useState(false);
 
