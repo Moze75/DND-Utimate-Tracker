@@ -167,6 +167,26 @@ const FIGHTING_STYLES: string[] = [
   'Protection',
 ];
 
+/* Langues (réintégrées depuis PP old) */
+const DND_LANGUAGES: string[] = [
+  'Commun',
+  'Elfique',
+  'Nain',
+  'Géant',
+  'Gnome',
+  'Gobelin',
+  'Halfelin',
+  'Orc',
+  'Abyssal',
+  'Céleste',
+  'Commun des profondeurs',
+  'Draconique',
+  'Infernal',
+  'Primordial',
+  'Sylvestre',
+  'Autre',
+];
+
 export interface PlayerProfileSettingsModalProps {
   open: boolean;
   onClose: () => void;
@@ -557,7 +577,7 @@ export function PlayerProfileSettingsModal({
 
             <button
               onClick={() => setShowLevelUp(true)}
-              className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg f[...]
             >
               <TrendingUp size={20} />
               Passer au niveau {level + 1}
@@ -907,7 +927,7 @@ export function PlayerProfileSettingsModal({
                 <input
                   type="text"
                   value={selectedAlignment}
-                  onChange={(e) => setSelectedAlignment(e.target.value)}
+                  onChange={(e) => { setSelectedAlignment(e.target.value); setDirty(true); }}
                   className="input-dark w-full px-3 py-2 rounded-md"
                   placeholder="Alignement (optionnel)"
                 />
@@ -934,6 +954,53 @@ export function PlayerProfileSettingsModal({
                   placeholder="Genre du personnage"
                 />
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Langues (réintégré après Historique) */}
+        <div className="stat-card">
+          <div className="stat-header">
+            <h3 className="text-lg font-semibold text-gray-100">Langues</h3>
+          </div>
+          <div className="p-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {DND_LANGUAGES.map((language) => {
+                const selected = selectedLanguages.includes(language);
+                return (
+                  <label
+                    key={language}
+                    className="flex items-center cursor-pointer hover:bg-gray-800/30 p-2 rounded transition-colors select-none"
+                  >
+                    <div
+                      className={`mr-2 h-4 w-4 rounded border-2 flex items-center justify-center transition-all duration-200 ${
+                        selected ? 'bg-red-500 border-red-500' : 'border-gray-600 hover:border-gray-500'
+                      }`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setSelectedLanguages((prev) => {
+                          const next = selected
+                            ? prev.filter((lang) => lang !== language)
+                            : [...prev, language];
+                          return next;
+                        });
+                        setDirty(true);
+                      }}
+                    >
+                      {selected && (
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path
+                            fillRule="evenodd"
+                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <span className="text-sm text-gray-300">{language}</span>
+                  </label>
+                );
+              })}
             </div>
           </div>
         </div>
