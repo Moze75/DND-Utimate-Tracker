@@ -403,6 +403,14 @@ const FLICK_VELOCITY_PX_PER_MS = 0.35;
     setDragX(clamped);
     // Note: ce return n’annule pas le rAF (dans un handler React), on garde simple ici
     requestAnimationFrame(measureDuringSwipe);
+  // Historique pour la vitesse (garde ~120ms de data)
+  const now = performance.now();
+  recentMovesRef.current.push({ x: t.clientX, t: now });
+  const cutoff = now - 120;
+  while (recentMovesRef.current.length > 2 && recentMovesRef.current[0].t < cutoff) {
+    recentMovesRef.current.shift();
+  }
+    
   };
 
   // Déclenche la transition proprement: active d’abord l’anim, puis change le transform dans le frame suivant
