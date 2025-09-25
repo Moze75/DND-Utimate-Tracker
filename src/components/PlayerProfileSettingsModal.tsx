@@ -513,6 +513,17 @@ export function PlayerProfileSettingsModal({
     }
   };
 
+// Swipe-to-close (right -> left)
+const startXRef = useRef<number | null>(null);
+const startYRef = useRef<number | null>(null);
+const gestureRef = useRef<'undetermined' | 'horizontal' | 'vertical'>('undetermined');
+
+// Fermer en animant la sortie (utilise déjà enter/initialTranslate)
+const smoothClose = useCallback(() => {
+  setEnter(false);
+  window.setTimeout(() => onClose(), 300);
+}, [onClose]);
+  
   /* ============================ Animation + Scroll lock ============================ */
   const [enter, setEnter] = useState(false);
   useEffect(() => {
