@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { X, Save, TrendingUp, Triangle, Plus, ChevronDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -189,6 +189,7 @@ export interface PlayerProfileSettingsModalProps {
   onClose: () => void;
   player: Player;
   onUpdate: (player: Player) => void;
+  // D’où vient l’animation: 'left' (défaut) ou 'right'
   slideFrom?: 'left' | 'right';
 }
 
@@ -438,6 +439,7 @@ export function PlayerProfileSettingsModal({
   };
 
   /* ============================ Sauvegarde ============================ */
+
   const handleSave = async () => {
     try {
       const dexMod = getDexModFromPlayer(player);
@@ -448,17 +450,21 @@ export function PlayerProfileSettingsModal({
       const speedVal = parseInt(speedField, 10);
       const profVal = parseInt(profField, 10);
 
+      // Normalise les dons (filtre vides + valeurs autorisées)
       const normOrigins = originFeats
         .filter((v) => v && ALLOWED_ORIGIN_FEATS.has(v))
         .filter((v, i, arr) => arr.indexOf(v) === i);
+
       const normGenerals = generalFeats
         .filter((v) => v && ALLOWED_GENERAL_FEATS.has(v))
         .filter((v, i, arr) => arr.indexOf(v) === i);
+
       const normStyles = fightingStyles
         .filter((v) => v && ALLOWED_FIGHTING_STYLES.has(v))
         .filter((v, i, arr) => arr.indexOf(v) === i);
 
       const featsData: any = {
+        // Rétrocompat: garde "origin" (premier) et ajoute "origins"
         origin: normOrigins.length > 0 ? normOrigins[0] : null,
         origins: normOrigins,
         generals: normGenerals,
@@ -506,17 +512,16 @@ export function PlayerProfileSettingsModal({
 
       toast.success('Profil mis à jour');
       setDirty(false);
-      onClose();
+      smoothClose();
     } catch (error) {
       console.error('Erreur lors de la mise à jour du profil:', error);
       toast.error('Erreur lors de la mise à jour');
     }
   };
 
-
-   
   /* ============================ Animation + Scroll lock ============================ */
   const [enter, setEnter] = useState(false);
+
   useEffect(() => {
     if (!open) return;
     const id = window.setTimeout(() => setEnter(true), 20);
@@ -530,32 +535,91 @@ export function PlayerProfileSettingsModal({
     };
   }, [open]);
 
+  // Calcul de la direction d’entrée/sortie
+  const initialTranslate = slideFrom === 'right' ? 'translate-x-full' : '-translate-x-full';
+
+  /* ============================ Swipe-to-close (gestuelle) ============================ */
+  const startXRef = useRef<number | null>(null);
+  const startYRef = useRef<number | null>(null);
+  const gestureRef = useRef<'undetermined' | 'horizontal' | 'vertical'>('undetermined');
+
+  const smoothClose = useCallback(() => {
+    setEnter(false);
+    window.setTimeout(() => onClose(), 300);
+  }, [onClose]);
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    startXRef.current = t.clientX;
+    startYRef.current = t.clientY;
+    gestureRef.current = 'undetermined';
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (startXRef.current == null || startYRef.current == null) return;
+    const t = e.touches[0];
+    const dx = t.clientX - startXRef.current;
+    const dy = t.clientY - startYRef.current;
+    const adx = Math.abs(dx);
+    const ady = Math.abs(dy);
+
+    // Décide l'axe
+    if (gestureRef.current === 'undetermined') {
+      if (adx >= 14 || ady >= 14) {
+        gestureRef.current = adx > ady * 1.15 ? 'horizontal' : 'vertical';
+      } else {
+        return;
+      }
+    }
+    if (gestureRef.current !== 'horizontal') return;
+
+    // Fermer selon le sens:
+    // - Si le panneau vient de la droite, on ferme sur swipe droite -> gauche (dx < -64)
+    // - S'il vient de la gauche, on ferme sur swipe gauche -> droite (dx > 64)
+    const threshold = 64;
+    if (slideFrom === 'right' && dx < -threshold) {
+      e.preventDefault();
+      smoothClose();
+    } else if (slideFrom === 'left' && dx > threshold) {
+      e.preventDefault();
+      smoothClose();
+    }
+  };
+
+  const handleTouchEnd = () => {
+    startXRef.current = null;
+    startYRef.current = null;
+    gestureRef.current = 'undetermined';
+  };
+
   if (!open) return null;
 
   /* ============================ Rendu (modale) ============================ */
-  
-  const initialTranslate = slideFrom === 'right' ? 'translate-x-full' : '-translate-x-full';
-  
   return (
     // Enveloppe fixe plein écran, fond OPAQUE pour couvrir totalement l'interface
     <div className="fixed inset-0 z-50 bg-gray-900">
-      {/* Panneau qui glisse depuis la gauche */}
+      {/* Panneau qui glisse depuis la gauche ou la droite */}
       <div
         className={`
           absolute inset-0 overflow-y-auto
           transform transition-transform duration-300 ease-out
-          ${enter ? 'translate-x-0' : '-translate-x-full'}
+          ${enter ? 'translate-x-0' : initialTranslate}
         `}
         role="dialog"
         aria-modal="true"
         aria-label="Paramètres du personnage"
+        style={{ touchAction: 'pan-y' }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         <div className="max-w-4xl mx-auto p-4 py-8 space-y-6">
           {/* Titre + bouton fermer */}
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-2xl font-bold text-gray-100">Paramètres du personnage</h2>
             <button
-              onClick={onClose}
+              onClick={smoothClose}
               className="p-2 text-gray-400 hover:bg-gray-800/50 rounded-lg transition-colors"
             >
               <X size={24} />
@@ -911,7 +975,7 @@ export function PlayerProfileSettingsModal({
                 </div>
 
                 <div>
-                  <label className="block text sm font-medium text-gray-300 mb-2">Vitesse (m)</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Vitesse (m)</label>
                   <input
                     type="number"
                     value={speedField}
@@ -1079,7 +1143,7 @@ export function PlayerProfileSettingsModal({
                 </button>
               )}
               <button
-                onClick={onClose}
+                onClick={smoothClose}
                 className="btn-secondary px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg"
               >
                 <Triangle size={18} className="transform -rotate-90" />
