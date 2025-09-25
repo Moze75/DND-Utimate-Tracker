@@ -448,16 +448,17 @@ const FLICK_VELOCITY_PX_PER_MS = 0.35;
 
     // Horizontal
     const width = widthRef.current || (stageRef.current?.clientWidth ?? 0);
-    const threshold = Math.max(48, width * 0.25);
+     const threshold = Math.max(SWIPE_THRESHOLD_MIN_PX, width * SWIPE_THRESHOLD_RATIO);
 
-    const commit = (dir: -1 | 1) => {
-      const toPx = dir === 1 ? -width : width;
-      animateTo(toPx, () => {
-        const next = dir === 1 ? nextKey : prevKey;
-        if (next) {
-          setActiveTab(next);
-          try { localStorage.setItem(lastTabKeyFor(selectedCharacter.id), next); } catch {}
-        }
+  // Vitesse pour flick (px/ms) sur la fenêtre ~120ms
+  let vx = 0;
+  const moves = recentMovesRef.current;
+  if (moves.length >= 2) {
+    const first = moves[0];
+    const last = moves[moves.length - 1];
+    const dt = Math.max(1, last.t - first.t);
+    vx = (last.x - first.x) / dt; // >0 vers la droite, <0 vers la gauche
+  }
         if (freezeActiveRef.current) safeUnfreeze();
         finishInteract();
         resetGestureState();
