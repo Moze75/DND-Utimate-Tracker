@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'; 
+import React, { useState, useRef } from 'react';
 import { User, Upload } from 'lucide-react';
 import { AvatarModal } from './AvatarModal';
 import { supabase } from '../lib/supabase';
@@ -84,7 +84,12 @@ export function Avatar({ url, playerId, onAvatarUpdate, size = 'md', editable = 
   };
 
   return (
-    <div className="relative w-full h-full rounded-lg overflow-hidden bg-gray-800/50">
+    <div
+      className="
+        relative w-full h-full rounded-lg overflow-hidden bg-gray-800/50
+        md:max-w-[22rem] md:max-h-[22rem] md:mx-auto
+      "
+    >
       {isUploading ? (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-900/50">
           <div className="animate-spin rounded-full h-6 w-6 border-2 border-red-500 border-t-transparent" />
@@ -106,7 +111,7 @@ export function Avatar({ url, playerId, onAvatarUpdate, size = 'md', editable = 
           <img
             src={url}
             alt="Avatar" 
-            className="w-full h-full object-cover select-none"
+            className="w-full h-full object-cover select-none md:object-contain"
           />
           {editable && (
             <div 
@@ -145,5 +150,5 @@ export function Avatar({ url, playerId, onAvatarUpdate, size = 'md', editable = 
         <AvatarModal url={url} onClose={() => setShowModal(false)} />
       )}
     </div>
-  );
+  ); 
 }
