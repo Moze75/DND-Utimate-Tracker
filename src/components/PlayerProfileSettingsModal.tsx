@@ -521,7 +521,6 @@ export function PlayerProfileSettingsModal({
 
   /* ============================ Animation + Scroll lock ============================ */
   const [enter, setEnter] = useState(false);
-
   useEffect(() => {
     if (!open) return;
     const id = window.setTimeout(() => setEnter(true), 20);
