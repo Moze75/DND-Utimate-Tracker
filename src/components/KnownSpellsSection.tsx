@@ -96,7 +96,7 @@ const getAbilityModFromPlayer = (
   player: Player,
   abilityNameFr: 'Charisme' | 'Sagesse' | 'Intelligence'
 ): number => {
-  const ability = player.abilities?.find((a) => a.name === abilityNameFr);
+  const abilities: any = (player as any).abilities;
   if (!ability) return 0;
   if (typeof (ability as any).modifier === 'number') return (ability as any).modifier;
   if (typeof (ability as any).score === 'number') return getModifier((ability as any).score);
