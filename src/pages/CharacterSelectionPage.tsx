@@ -12,19 +12,9 @@ import {
   AlertCircle,
   RefreshCw,
   Trash2,
-  X,
 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { authService } from '../services/authService';
-
-/**
- * URL de l'assistant Character Creator.
- * - Configure via VITE_CREATOR_URL dans ton .env
- * - Exemple: http(s)://localhost:5173 ou l’URL déployée de l’assistant
- */
-const CREATOR_URL =
-  (import.meta as any)?.env?.VITE_CREATOR_URL ||
-  'https://character-creator.example.com'; // TODO: remplace par l’URL réelle du Creator
 
 interface CharacterSelectionPageProps {
   session: any;
@@ -42,61 +32,11 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
   const [deletingCharacter, setDeletingCharacter] = useState<Player | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
 
-  // Nouvel état: afficher l’assistant en overlay (iframe)
-  const [showCreator, setShowCreator] = useState(false);
-
   useEffect(() => {
     fetchPlayers();
     runDiagnostic();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
-
-  // Écoute le postMessage émis par l’assistant après création
-  useEffect(() => {
-    const handler = async (e: MessageEvent) => {
-      const data = e.data;
-      if (!data || data.type !== 'creator:character_created') return;
-
-      try {
-        const playerId = data.payload?.playerId as string | undefined;
-        if (!playerId) return;
-
-        // 1) Récupérer le personnage créé (source de vérité = DB)
-        const { data: newPlayer, error } = await supabase
-          .from('players')
-          .select('*')
-          .eq('id', playerId)
-          .single();
-
-        if (error) {
-          throw error;
-        }
-
-        if (newPlayer) {
-          // 2) Mettre à jour la liste locale
-          setPlayers((prev) => {
-            const next = [...prev, newPlayer].sort((a, b) =>
-              (a.created_at || '').localeCompare(b.created_at || '')
-            );
-            return next;
-          });
-
-          // 3) Fermer l’overlay de l’assistant
-          setShowCreator(false);
-
-          // 4) Ouvrir directement le personnage dans l’app
-          onCharacterSelect(newPlayer);
-          toast.success('Personnage importé depuis l’assistant');
-        }
-      } catch (err: any) {
-        console.error(err);
-        toast.error('Impossible d’importer le personnage');
-      }
-    };
-
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
-  }, [onCharacterSelect]);
 
   const runDiagnostic = async () => {
     try {
@@ -572,10 +512,10 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                 );
               })}
 
-              {/* Create New Character Card (simple RPC) */}
+              {/* Create New Character Card */}
               <div
                 onClick={() => setShowCreateForm(true)}
-                className="w-full max-w-sm cursor-pointer hover:scale-[1.02] transition-all duration-200 bg-slate-800/40 backdrop-blur-sm border-dashed border-2 border-slate-600/50 hover:border-green-500/60 rounded-xl"
+                className="w-full max-w-sm cursor-pointer hover:scale-[1.02] transition-all duration-200 bg-slate-800/40 backdrop-blur-sm border-dashed border-2 border-slate-600/50 hover:border-green-500/50 rounded-xl p-6"
               >
                 <div className="p-6 flex items-center justify-center gap-6 min-h-[140px]">
                   <div className="w-16 h-16 bg-green-400/20 rounded-full flex items-center justify-center">
@@ -584,25 +524,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                   <div className="text-center">
                     <h3 className="text-lg font-bold text-gray-100 mb-2">Nouveau Personnage</h3>
                     <p className="text-sm text-slate-300">
-                      Création rapide (nom seulement)
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Carte: ouvrir l’assistant Character Creator (iframe) */}
-              <div
-                onClick={() => setShowCreator(true)}
-                className="w-full max-w-sm cursor-pointer hover:scale-[1.02] transition-all duration-200 bg-slate-800/40 backdrop-blur-sm border-dashed border-2 border-slate-600/50 hover:border-purple-500/60 rounded-xl"
-              >
-                <div className="p-6 flex items-center justify-center gap-6 min-h-[140px]">
-                  <div className="w-16 h-16 bg-purple-400/20 rounded-full flex items-center justify-center">
-                    <Sparkles className="w-8 h-8 text-purple-400" />
-                  </div>
-                  <div className="text-center">
-                    <h3 className="text-lg font-bold text-gray-100 mb-2">Créer via l’assistant</h3>
-                    <p className="text-sm text-slate-300">
-                      Assistant complet (race, classe, compétences…)
+                      Créez un nouveau personnage pour vos aventures
                     </p>
                   </div>
                 </div>
@@ -610,23 +532,11 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
             </div>
           </div>
 
-          {/* Create Character Modal (simple RPC) */}
+          {/* Create Character Modal */}
           {showCreateForm && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
               <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-gray-100">Créer un nouveau personnage</h3>
-                  <button
-                    onClick={() => {
-                      setShowCreateForm(false);
-                      setNewCharacterName('');
-                    }}
-                    className="p-2 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 rounded-lg transition"
-                    aria-label="Fermer"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
+                <h3 className="text-xl font-bold text-gray-100 mb-4">Créer un nouveau personnage</h3>
 
                 <div className="space-y-4">
                   <div>
@@ -673,30 +583,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                 </div>
               </div>
             </div>
-          )}
-
-          {/* Overlay Assistant en iframe */}
-          {showCreator && (
-            <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md">
-              <div className="absolute top-4 right-4 z-10">
-                <button
-                  onClick={() => setShowCreator(false)}
-                  className="btn-secondary px-4 py-2 rounded-lg inline-flex items-center gap-2"
-                >
-                  <X size={18} />
-                  Fermer
-                </button>
-              </div>
-              <div className="w-full h-full p-4 sm:p-6">
-                <iframe
-                  src={CREATOR_URL}
-                  title="Assistant de création de personnage"
-                  className="w-full h-full rounded-xl border border-slate-600 bg-gray-900"
-                  allow="clipboard-write; clipboard-read"
-                />
-              </div>
-            </div>
-          )}
+          )} 
         </div>
       </div>
 
@@ -716,4 +603,4 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
   );
 }
 
-export default CharacterSelectionPage;
+export default CharacterSelectionPage; 
