@@ -12,6 +12,7 @@ import {
   AlertCircle,
   RefreshCw,
   Trash2,
+  X,
 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { authService } from '../services/authService';
@@ -283,7 +284,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'transparent' }}>
         <div className="text-center space-y-4">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto" />
           <p className="text-gray-400">Chargement des personnages...</p>
@@ -293,7 +294,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
   }
 
   return (
-    <div className="character-selection-page min-h-screen">
+    <div className="character-selection-page min-h-screen" style={{ background: 'transparent' }}>
       <div className="min-h-screen py-8">
         {/* Container centré avec une largeur maximale */}
         <div className="w-full max-w-6xl mx-auto px-4">
@@ -445,20 +446,27 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                     key={player.id}
                     className="w-full max-w-sm relative group bg-slate-800/60 backdrop-blur-sm border border-slate-600/40 rounded-xl shadow-lg overflow-hidden hover:bg-slate-700/70 transition-all duration-200"
                   >
-                    {/* Bouton de suppression */}
+                    {/* Bouton de suppression (z-index + blocage de la propagation) */}
                     <button
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
                       onClick={(e) => {
+                        e.preventDefault();
                         e.stopPropagation();
                         setDeletingCharacter(player);
                       }}
-                      className="absolute top-3 right-3 w-8 h-8 bg-red-600/80 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                      className="absolute top-3 right-3 w-8 h-8 bg-red-600/80 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition z-20 pointer-events-auto"
                       title="Supprimer le personnage"
+                      aria-label="Supprimer le personnage"
                     >
                       <Trash2 size={16} />
                     </button>
 
+                    {/* Zone cliquable pour ouvrir le personnage */}
                     <div
-                      className="p-6 cursor-pointer hover:scale-[1.02] transition-all duration-200"
+                      className="p-6 cursor-pointer hover:scale-[1.02] transition-all duration-200 relative z-10"
                       onClick={() => onCharacterSelect(player)}
                     >
                       {/* Avatar et informations */}
@@ -515,7 +523,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
               {/* Create New Character Card */}
               <div
                 onClick={() => setShowCreateForm(true)}
-                className="w-full max-w-sm cursor-pointer hover:scale-[1.02] transition-all duration-200 bg-slate-800/40 backdrop-blur-sm border-dashed border-2 border-slate-600/50 hover:border-green-500/50 rounded-xl p-6"
+                className="w-full max-w-sm cursor-pointer hover:scale-[1.02] transition-all duration-200 bg-slate-800/40 backdrop-blur-sm border-dashed border-2 border-slate-600/50 hover:border-green-500/60 rounded-xl"
               >
                 <div className="p-6 flex items-center justify-center gap-6 min-h-[140px]">
                   <div className="w-16 h-16 bg-green-400/20 rounded-full flex items-center justify-center">
@@ -536,7 +544,19 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
           {showCreateForm && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
               <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
-                <h3 className="text-xl font-bold text-gray-100 mb-4">Créer un nouveau personnage</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-gray-100">Créer un nouveau personnage</h3>
+                  <button
+                    onClick={() => {
+                      setShowCreateForm(false);
+                      setNewCharacterName('');
+                    }}
+                    className="p-2 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 rounded-lg transition"
+                    aria-label="Fermer"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
 
                 <div className="space-y-4">
                   <div>
@@ -583,7 +603,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                 </div>
               </div>
             </div>
-          )} 
+          )}
         </div>
       </div>
 
@@ -603,4 +623,4 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
   );
 }
 
-export default CharacterSelectionPage; 
+export default CharacterSelectionPage;
