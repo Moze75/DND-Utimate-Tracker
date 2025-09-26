@@ -35,6 +35,40 @@ function mapClassForRpc(pClass: DndClass | null | undefined): string | null | un
 
 /* ============================ Données de sélection ============================ */
 
+// ... helpers au-dessus (getModifier, etc.) inchangés
+
+const getDexModFromPlayer = (player: Player): number => {
+  const abilities: any = (player as any).abilities;
+
+  // 1) Cas tableau standard
+  const dexFromArray =
+    Array.isArray(abilities)
+      ? abilities.find?.((a: any) => a?.name === 'Dextérité')
+      : undefined;
+
+  // 2) Cas “map”/objet ou valeur brute (compat anciennes données)
+  let dexFromMap: any = undefined;
+  if (!dexFromArray && abilities && typeof abilities === 'object') {
+    const direct =
+      abilities['Dextérité'] ??
+      abilities['dextérité'] ??
+      abilities['dexterite'] ??
+      abilities['dexterity'];
+    if (typeof direct === 'number') {
+      dexFromMap = { score: direct };
+    } else if (direct && typeof direct === 'object') {
+      dexFromMap = direct;
+    }
+  }
+
+  const dex = dexFromArray ?? dexFromMap;
+  if (!dex) return 0;
+
+  if (typeof dex.modifier === 'number') return dex.modifier;
+  if (typeof dex.score === 'number') return getModifier(dex.score);
+  return 0;
+};
+
 const DND_RACES: string[] = [
   '',
   'Aasimar',
