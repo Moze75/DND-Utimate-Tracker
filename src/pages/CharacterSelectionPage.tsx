@@ -22,6 +22,11 @@ interface CharacterSelectionPageProps {
   onCharacterSelect: (player: Player) => void;
 }
 
+/ 1) Configure l’URL du fond ici (ou via .env VITE_SELECTION_BG_URL)
+const BG_URL =
+  (import.meta as any)?.env?.VITE_SELECTION_BG_URL ||
+  'https://yumzqyyogwzrmlcpvnky.supabase.co/storage/v1/object/public/static/tmpoofee5sh.png';
+
 export function CharacterSelectionPage({ session, onCharacterSelect }: CharacterSelectionPageProps) {
   const [loading, setLoading] = useState(true);
   const [players, setPlayers] = useState<Player[]>([]);
