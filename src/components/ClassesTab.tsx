@@ -975,7 +975,7 @@ function AbilityCard({
       className={[
         'rounded-xl border ring-1 ring-black/5 shadow-lg shadow-black/20',
         'border-gray-700/30',
-        'bg-gray-700/50', 
+        'bg-gray-800/50', 
       ].join(' ')}
     >
       <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-controls={contentId} className="w-full text-left">
