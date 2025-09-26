@@ -1026,7 +1026,7 @@ function OriginPill({ origin }: { origin: 'class' | 'subclass' }) {
     <span
       className={[
         'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase ring-1 ring-inset',
-        isClass ? 'bg-violet-500/15 text-violet-200 ring-violet-400/25' : 'bg-amber-500/15 text-amber-200 ring-amber-400/25',
+        isClass ? 'bg-Gray-800/50 text-violet-200 ring-violet-400/25' : 'bg-amber-500/15 text-amber-200 ring-amber-400/25',
       ].join(' ')}
     >
       {isClass ? 'Classe' : 'Sous-classe'}
