@@ -22,7 +22,7 @@ interface CharacterSelectionPageProps {
   onCharacterSelect: (player: Player) => void;
 }
 
-// 1) Configure l’URL du fond ici (ou via .env VITE_SELECTION_BG_URL)
+// URL du fond (modifiable via .env: VITE_SELECTION_BG_URL) ou mets un asset local dans public/
 const BG_URL =
   (import.meta as any)?.env?.VITE_SELECTION_BG_URL ||
   'https://yumzqyyogwzrmlcpvnky.supabase.co/storage/v1/object/public/static/tmpoofee5sh.png';
@@ -48,7 +48,6 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
     try {
       setDebugInfo((prev) => prev + '=== DIAGNOSTIC DE LA BASE DE DONNÉES ===\n');
 
-      // Test 1: Vérifier la connexion (simple select)
       const { error: connectionError } = await supabase.from('players').select('id').limit(1);
       if (connectionError) {
         setDebugInfo((prev) => prev + `❌ Erreur de connexion: ${connectionError.message}\n`);
@@ -56,7 +55,6 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
       }
       setDebugInfo((prev) => prev + '✅ Connexion à Supabase OK\n');
 
-      // Test 2: Compter les personnages existants de l’utilisateur
       const { data: existingPlayers, error: countError } = await supabase
         .from('players')
         .select('id, user_id, name')
@@ -111,18 +109,15 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
     setDebugInfo((prev) => prev + `\n🚀 TENTATIVE DE CRÉATION: "${newCharacterName}"\n`);
 
     try {
-      // Vérifier la session
       if (!session || !session.user?.id) {
         throw new Error('Session invalide - veuillez vous reconnecter');
       }
 
-      // Vérifier l’auth utilisateur
       const { data: authData, error: userError } = await supabase.auth.getUser();
       if (userError || !authData?.user) {
         throw new Error('Utilisateur non authentifié - veuillez vous reconnecter');
       }
 
-      // 1) Tentative via RPC standard
       try {
         const { data: playerId, error: rpcError } = await supabase.rpc('create_player_with_defaults', {
           p_user_id: authData.user.id,
@@ -134,7 +129,6 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
           throw rpcError;
         }
 
-        // Récupérer le personnage créé
         const { data: newPlayer, error: fetchError } = await supabase
           .from('players')
           .select('*')
@@ -152,7 +146,6 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
         toast.success('Nouveau personnage créé !');
         return;
       } catch (rpcError: any) {
-        // 2) Fallback: retenter la même RPC (ex: latence d’activation) avant abandon
         setDebugInfo((prev) => prev + `🔄 Tentative alternative RPC...\n`);
         const { data: playerId2, error: rpcError2 } = await supabase.rpc('create_player_with_defaults', {
           p_user_id: authData.user.id,
@@ -186,7 +179,6 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
       setDebugInfo((prev) => prev + `💥 ÉCHEC TOTAL: ${error.message}\n`);
       console.error('Erreur lors de la création du personnage:', error);
 
-      // Messages d'erreur détaillés
       if (error.message?.includes('Session invalide') || error.message?.includes('non authentifié')) {
         toast.error('Session expirée. Veuillez vous reconnecter.');
         await supabase.auth.signOut();
@@ -208,18 +200,15 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
 
   const handleSignOut = async () => {
     try {
-      // Utiliser le service d'authentification
       const { error } = await authService.signOut();
       if (error) throw error;
 
       toast.success('Déconnexion réussie');
 
-      // Forcer le rechargement sur Chrome mobile
       if (
         navigator.userAgent.includes('Chrome') &&
         /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
       ) {
-        // Nettoyer tout le stockage local
         localStorage.clear();
         sessionStorage.clear();
 
@@ -240,7 +229,6 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
     }
 
     try {
-      // Utiliser la fonction de suppression sécurisée si elle existe (essai/erreur)
       let deleted = false;
       try {
         await supabase.rpc('delete_character_safely', { character_id: character.id });
@@ -250,12 +238,10 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
       }
 
       if (!deleted) {
-        // Suppression directe si la fonction n'existe pas
         const { error } = await supabase.from('players').delete().eq('id', character.id);
         if (error) throw error;
       }
 
-      // Mettre à jour la liste des personnages
       setPlayers((prev) => prev.filter((p) => p.id !== character.id));
       setDeletingCharacter(null);
       setDeleteConfirmation('');
@@ -274,7 +260,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
         return <Sword className="w-5 h-5 text-red-500" />;
       case 'Magicien':
       case 'Ensorceleur':
-      case 'Occultiste': // nouveau 2024
+      case 'Occultiste':
         return <Sparkles className="w-5 h-5 text-purple-500" />;
       case 'Clerc':
       case 'Druide':
@@ -284,44 +270,56 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
     }
   };
 
-  // Affichage: remplacer "Sorcier" par "Occultiste" pour les anciens persos
   const displayClassName = (cls?: string | null) => (cls === 'Sorcier' ? 'Occultiste' : cls || '');
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'transparent' }}>
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{
+          backgroundImage: `url(${BG_URL})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed',
+        }}
+      >
         <div className="text-center space-y-4">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto" />
-          <p className="text-gray-400">Chargement des personnages...</p>
+          <p className="text-gray-200">Chargement des personnages...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="character-selection-page min-h-screen" style={{ background: 'transparent' }}>
-      <div className="min-h-screen py-8">
-        {/* Container centré avec une largeur maximale */}
+    <div
+      className="character-selection-page min-h-screen"
+      style={{
+        // Image de fond sur le wrapper principal (et pas de fond uni opaque)
+        backgroundImage: `url(${BG_URL})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+        backgroundColor: 'transparent',
+      }}
+    >
+      <div className="min-h-screen py-8 bg-transparent">
         <div className="w-full max-w-6xl mx-auto px-4">
           {/* Header */}
           <div className="text-center mb-8 sm:mb-12 pt-8">
             <h1
               className="text-3xl font-bold text-white mb-2"
               style={{
-                textShadow: `
-                  0 0 15px rgba(255, 255, 255, 0.9),
-                  0 0 20px rgba(255, 255, 255, 0.6),
-                  0 0 30px rgba(255, 255, 255, 0.4),
-                  0 0 40px rgba(255, 255, 255, 0.2)
-                `,
+                textShadow:
+                  '0 0 15px rgba(255,255,255,.9),0 0 20px rgba(255,255,255,.6),0 0 30px rgba(255,255,255,.4),0 0 40px rgba(255,255,255,.2)',
               }}
             >
               Mes Personnages
             </h1>
             <div className="flex items-center justify-center gap-4">
               <p
-                className="text-gray-300"
-                style={{ textShadow: '0 0 10px rgba(255, 255, 255, 0.3)' }}
+                className="text-gray-200"
+                style={{ textShadow: '0 0 10px rgba(255,255,255,.3)' }}
               >
                 {players.length > 0
                   ? `${players.length} personnage${players.length > 1 ? 's' : ''} créé${
@@ -332,7 +330,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
               {debugInfo && (
                 <button
                   onClick={() => setShowDebug(!showDebug)}
-                  className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300"
+                  className="flex items-center gap-2 text-sm text-blue-300 hover:text-blue-200"
                 >
                   <AlertCircle size={16} />
                   Debug
@@ -451,7 +449,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                     key={player.id}
                     className="w-full max-w-sm relative group bg-slate-800/60 backdrop-blur-sm border border-slate-600/40 rounded-xl shadow-lg overflow-hidden hover:bg-slate-700/70 transition-all duration-200"
                   >
-                    {/* Bouton de suppression (z-index + blocage de la propagation) */}
+                    {/* Bouton de suppression: empêcher l'ouverture de la carte */}
                     <button
                       onMouseDown={(e) => {
                         e.preventDefault();
@@ -474,7 +472,6 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                       className="p-6 cursor-pointer hover:scale-[1.02] transition-all duration-200 relative z-10"
                       onClick={() => onCharacterSelect(player)}
                     >
-                      {/* Avatar et informations */}
                       <div className="flex items-center gap-6">
                         <div className="w-20 h-28 flex-shrink-0 rounded-lg overflow-hidden bg-white/10">
                           <Avatar
@@ -486,7 +483,6 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                           />
                         </div>
 
-                        {/* Character Info */}
                         <div className="flex-1 min-w-0">
                           <div className="mb-3">
                             <h3 className="text-lg font-bold text-gray-100 mb-1 truncate">
@@ -501,11 +497,10 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                                 </span>
                               </div>
                             ) : (
-                              <p className="text-sm text-slate-400 mb-2">Personnage non configuré</p>
+                              <p className="text-sm text-slate-300 mb-2">Personnage non configuré</p>
                             )}
                           </div>
 
-                          {/* Health Bar */}
                           <div className="space-y-2">
                             <div className="w-full bg-slate-700/50 rounded-full h-3">
                               <div
@@ -513,7 +508,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                                 style={{ width: `${ratio}%` }}
                               />
                             </div>
-                            <p className="text-xs text-slate-300">
+                            <p className="text-xs text-slate-200">
                               {currHp} / {maxHp} PV
                               {tempHp > 0 && <span className="text-blue-300 ml-1">(+{tempHp})</span>}
                             </p>
@@ -536,7 +531,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                   </div>
                   <div className="text-center">
                     <h3 className="text-lg font-bold text-gray-100 mb-2">Nouveau Personnage</h3>
-                    <p className="text-sm text-slate-300">
+                    <p className="text-sm text-slate-200">
                       Créez un nouveau personnage pour vos aventures
                     </p>
                   </div>
@@ -612,7 +607,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
         </div>
       </div>
 
-      {/* Sign Out Button - Fixed at bottom */}
+      {/* Bandeau de déconnexion (gardé, n’occulte pas l’image) */}
       <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
         <div className="w-full max-w-md mx-auto px-4">
           <button
