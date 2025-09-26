@@ -51,13 +51,6 @@ const getDexModFromPlayer = (player: Player): number => {
   return 0;
 };
 
-const getDexModFromPlayer = (player: Player): number => {
-  const dex = player.abilities?.find((a) => a.name === 'Dextérité');
-  if (!dex) return 0;
-  if (typeof dex.modifier === 'number') return dex.modifier;
-  if (typeof dex.score === 'number') return getModifier(dex.score);
-  return 0;
-};
 
 // Canonicalisation minimale pour compat RPC
 function mapClassForRpc(pClass: DndClass | null | undefined): string | null | undefined {
