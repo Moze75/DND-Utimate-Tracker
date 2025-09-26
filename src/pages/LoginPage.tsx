@@ -14,6 +14,19 @@ export function LoginPage() {
   const [isCheckingConnection, setIsCheckingConnection] = useState(true);
   const [signUpSuccess, setSignUpSuccess] = useState(false);
 
+  // Image de fond (env optionnelle VITE_LOGIN_BG_URL)
+  const BG_URL =
+    (import.meta as any)?.env?.VITE_LOGIN_BG_URL ||
+    'https://yumzqyyogwzrmlcpvnky.supabase.co/storage/v1/object/public/static/tmpoofee5sh.png';
+
+  const bgStyle: React.CSSProperties = {
+    backgroundImage: `url(${BG_URL})`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundAttachment: 'fixed',
+    backgroundColor: 'transparent',
+  };
+
   useEffect(() => {
     // Vérifier si on revient d'une confirmation d'email
     const urlParams = new URLSearchParams(window.location.search);
@@ -166,10 +179,10 @@ export function LoginPage() {
 
   if (isCheckingConnection) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={bgStyle}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-500 mx-auto mb-4"></div>
-          <p className="text-gray-400">Vérification de la connexion...</p>
+          <p className="text-gray-200">Vérification de la connexion...</p>
         </div>
       </div>
     );
@@ -177,7 +190,7 @@ export function LoginPage() {
 
   if (signUpSuccess) {
     return (
-      <div className="login-page min-h-screen flex items-center justify-center p-4">
+      <div className="login-page min-h-screen flex items-center justify-center p-4" style={bgStyle}>
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
             <h1 className="text-4xl font-bold text-white mb-6" style={{
@@ -232,7 +245,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="login-page min-h-screen flex items-center justify-center p-4">
+    <div className="login-page min-h-screen flex items-center justify-center p-4" style={bgStyle}>
       <div className="w-full max-w-md space-y-8">
         {connectionError && (
           <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-4">
@@ -252,7 +265,7 @@ export function LoginPage() {
             <div className="leading-tight">D&D</div>
             <div className="leading-tight">Ultimate Tracker</div>
           </h1>
-          <p className="text-gray-300 mb-2" style={{
+          <p className="text-gray-200 mb-2" style={{
             textShadow: '0 0 10px rgba(255, 255, 255, 0.3)'
           }}>
             {isSignUp ? 'Créez votre compte' : 'Gérez vos personnages et vos parties'}
