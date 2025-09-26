@@ -773,11 +773,7 @@ useEffect(() => {
       {/* {renderSpellSlots()} */}
 
       <div className="stats-card">
-        <div className="stat-header flex items-center gap-3">
-          <Book className="w-5 h-5 text-blue-500" />
-          <h3 className="text-lg font-semibold text-gray-100">Grimoire</h3>
-        </div>
-        <div className="p-4">
+                <div className="p-4">
           <button
             onClick={() => setShowSpellbook(true)}
             className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg"
