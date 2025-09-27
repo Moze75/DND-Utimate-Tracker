@@ -145,71 +145,48 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
     }
   };
 
-  const handleCreatorComplete = async (payload: CharacterExportPayload) => {
-    if (creating) return;
-    try {
-      setCreating(true);
-      setDebugInfo((prev) => prev + `\n🚀 Création via assistant: "${payload.characterName}"\n`);
-      const newPlayer = await createCharacterFromCreatorPayload(session, payload);
-      setPlayers((prev) => [...prev, newPlayer]);
-      toast.success('Nouveau personnage créé !');
 
-      // Popup de bienvenue
-      toast.custom(
-        (t) => (
-          <div
-            className={`px-4 py-3 rounded-lg shadow-lg border ${
-              t.visible ? 'animate-enter' : 'animate-leave'
-            } bg-gray-900/95 border-red-500/30 text-gray-100`}
-          >
-            <div className="text-sm">Bienvenue, aventurier. L’histoire commence ici.</div>
-          </div>
-        ),
-        { duration: 3500 }
-      );
-
-      setShowCreator(false);
-      onCharacterSelect(newPlayer);
-    } catch (error: any) {
-      console.error('Erreur création via assistant:', error);
-      setDebugInfo((prev) => prev + `💥 ÉCHEC assistant: ${error.message}\n`);
-      if (error.message?.includes('Session invalide') || error.message?.includes('non authentifié')) {
-        toast.error('Session expirée. Veuillez vous reconnecter.');
-        await supabase.auth.signOut();
-      } else {
-        toast.error("Impossible de créer le personnage depuis l'assistant.");
-      }
-      setShowDebug(true);
-    } finally {
-      setCreating(false);
-    }
-  };
   
   // Création à partir du payload renvoyé par le wizard
-  const handleCreatorComplete = async (payload: CharacterExportPayload) => {
-    if (creating) return;
-    try {
-      setCreating(true);
-      setDebugInfo((prev) => prev + `\n🚀 Création via assistant: "${payload.characterName}"\n`);
-      const newPlayer = await createCharacterFromCreatorPayload(session, payload);
-      setPlayers((prev) => [...prev, newPlayer]);
-      toast.success('Nouveau personnage créé !');
-      setShowCreator(false);
-      onCharacterSelect(newPlayer);
-    } catch (error: any) {
-      console.error('Erreur création via assistant:', error);
-      setDebugInfo((prev) => prev + `💥 ÉCHEC assistant: ${error.message}\n`);
-      if (error.message?.includes('Session invalide') || error.message?.includes('non authentifié')) {
-        toast.error('Session expirée. Veuillez vous reconnecter.');
-        await supabase.auth.signOut();
-      } else {
-        toast.error("Impossible de créer le personnage depuis l'assistant.");
-      }
-      setShowDebug(true);
-    } finally {
-      setCreating(false);
+const handleCreatorComplete = async (payload: CharacterExportPayload) => {
+  if (creating) return;
+  try {
+    setCreating(true);
+    setDebugInfo((prev) => prev + `\n🚀 Création via assistant: "${payload.characterName}"\n`);
+    const newPlayer = await createCharacterFromCreatorPayload(session, payload);
+    setPlayers((prev) => [...prev, newPlayer]);
+    toast.success('Nouveau personnage créé !');
+
+    // Popup de bienvenue
+    toast.custom(
+      (t) => (
+        <div
+          className={`px-4 py-3 rounded-lg shadow-lg border ${
+            t.visible ? 'animate-enter' : 'animate-leave'
+          } bg-gray-900/95 border-red-500/30 text-gray-100`}
+        >
+          <div className="text-sm">Bienvenue, aventurier. L’histoire commence ici.</div>
+        </div>
+      ),
+      { duration: 3500 }
+    );
+
+    setShowCreator(false);
+    onCharacterSelect(newPlayer);
+  } catch (error: any) {
+    console.error('Erreur création via assistant:', error);
+    setDebugInfo((prev) => prev + `💥 ÉCHEC assistant: ${error.message}\n`);
+    if (error.message?.includes('Session invalide') || error.message?.includes('non authentifié')) {
+      toast.error('Session expirée. Veuillez vous reconnecter.');
+      await supabase.auth.signOut();
+    } else {
+      toast.error("Impossible de créer le personnage depuis l'assistant.");
     }
-  };
+    setShowDebug(true);
+  } finally {
+    setCreating(false);
+  }
+};
 
    
   const handleSignOut = async () => {
