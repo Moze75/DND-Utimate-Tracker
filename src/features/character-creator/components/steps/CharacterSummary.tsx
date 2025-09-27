@@ -308,7 +308,7 @@ export default function CharacterSummary({
         </CardContent>
       </Card>
 
-      {/* Section Don d'historique détaillée */}
+      {/* Section Don d'historique */}
       {backgroundData?.feat && (
         <Card>
           <CardHeader>
@@ -318,16 +318,12 @@ export default function CharacterSummary({
             </div>
           </CardHeader>
           <CardContent>
-            <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
-              <h4 className="font-semibold text-purple-300 mb-2">{backgroundData.feat}</h4>
-              <p className="text-gray-300 text-sm">
-                Ce don vous est accordé par votre historique <strong>{selectedBackground}</strong>. 
-                Il reflète les compétences particulières acquises durant votre passé et vous donne 
-                des capacités spéciales utilisables en jeu.
-              </p>
-              <div className="mt-3 text-xs text-purple-400">
-                Consultez le chapitre 5 pour les détails complets de ce don.
-              </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-400">Don acquis:</span>
+              <span className="text-white font-medium">{backgroundData.feat}</span>
+            </div>
+            <div className="text-xs text-gray-400 mt-2">
+              Accordé par l'historique {selectedBackground} - Voir chapitre 5 pour les détails
             </div>
           </CardContent>
         </Card>
