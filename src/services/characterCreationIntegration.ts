@@ -21,6 +21,7 @@ export async function createCharacterFromCreatorPayload(
       .eq('id', newId)
       .single();
     if (error) throw error;
+
     return data as Player;
   } catch (e) {
     const { data: playerId, error: rpc2 } = await supabase.rpc('create_player_with_defaults', {
@@ -42,7 +43,7 @@ export async function createCharacterFromCreatorPayload(
         armor_class: payload.armorClass,
         initiative: payload.initiative,
         speed: payload.speed,
-        // Si vous avez des colonnes JSON, décommentez:
+        // Décommentez si ces colonnes existent dans players:
         // abilities_json: payload.finalAbilities,
         // skills_json: payload.proficientSkills,
         // equipment_json: payload.equipment,
