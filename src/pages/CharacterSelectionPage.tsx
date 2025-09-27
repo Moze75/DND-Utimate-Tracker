@@ -21,7 +21,8 @@ import { CharacterExportPayload } from '../types/characterCreator';
 import { createCharacterFromCreatorPayload } from '../services/characterCreationIntegration';
 
 // Lazy import direct du wizard à son emplacement réel.
-// Gère export par défaut OU export nommé.
+// NOTE: adapte le chemin et la casse au fichier exact sur disque.
+// Si ton fichier s'appelle "CharacterCreationWizard.tsx", mets "CharacterCreationWizard" (C majuscule).
 const CharacterCreationWizard = React.lazy(() =>
   import('../features/character-creator/components/characterCreationWizard').then((m: any) => ({
     default: m.default ?? m.CharacterCreationWizard,
