@@ -61,7 +61,7 @@ function CreatorModal({ open, onClose, onComplete }: CreatorModalProps) {
             <Suspense
               fallback={
                 <div className="w-full h-full flex items-center justify-center text-gray-300 p-6">
-                  Chargement de l’assistant de création...
+                  Chargement de l'assistant de création...
                 </div>
               }
             >
@@ -69,6 +69,53 @@ function CreatorModal({ open, onClose, onComplete }: CreatorModalProps) {
               <CharacterCreationWizard onFinish={onComplete} onCancel={onClose} />
             </Suspense>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal de bienvenue après création de personnage
+type WelcomeModalProps = {
+  open: boolean;
+  characterName: string;
+  onContinue: () => void;
+};
+
+function WelcomeModal({ open, characterName, onContinue }: WelcomeModalProps) {
+  if (!open) return null;
+  
+  return (
+    <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 border border-yellow-500/30 rounded-xl max-w-md w-full p-8 shadow-2xl">
+        <div className="text-center space-y-6">
+          {/* Icône d'épée dorée */}
+          <div className="w-16 h-16 mx-auto bg-yellow-500/20 rounded-full flex items-center justify-center">
+            <Sword className="w-8 h-8 text-yellow-400" />
+          </div>
+          
+          {/* Message de bienvenue */}
+          <div className="space-y-3">
+            <h2 className="text-2xl font-bold text-yellow-400">
+              Bienvenue, {characterName} !
+            </h2>
+            <p 
+              className="text-lg text-gray-200 font-medium"
+              style={{
+                textShadow: '0 0 10px rgba(255,255,255,0.3)'
+              }}
+            >
+              Bienvenue, aventurier. L'histoire commence ici.
+            </p>
+          </div>
+          
+          {/* Bouton Continuer */}
+          <button
+            onClick={onContinue}
+            className="w-full bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-bold py-3 px-6 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg"
+          >
+            Continuer
+          </button>
         </div>
       </div>
     </div>
@@ -84,9 +131,8 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
   const [deletingCharacter, setDeletingCharacter] = useState<Player | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [showCreator, setShowCreator] = useState(false);
-
-  // Etat du popup de bienvenue
   const [showWelcome, setShowWelcome] = useState(false);
+  const [newCharacter, setNewCharacter] = useState<Player | null>(null);
 
   useEffect(() => {
     fetchPlayers();
@@ -118,7 +164,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
             prev +
             `📊 Personnages existants: ${existingPlayers?.length || 0}\n` +
             (existingPlayers && existingPlayers.length > 0
-              ? `📝 Noms: ${existingPlayers.map((p) => p.name).join(', ')}\n`
+              ? `🔍 Noms: ${existingPlayers.map((p) => p.name).join(', ')}\n`
               : '')
         );
       }
@@ -158,11 +204,11 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
       setPlayers((prev) => [...prev, newPlayer]);
       toast.success('Nouveau personnage créé !');
 
-      // Ouvre la modale de bienvenue centrée et accueillante
+      // Fermer le modal de création et afficher le modal de bienvenue
+      setShowCreator(false);
+      setNewCharacter(newPlayer);
       setShowWelcome(true);
 
-      setShowCreator(false);
-      onCharacterSelect(newPlayer);
     } catch (error: any) {
       console.error('Erreur création via assistant:', error);
       setDebugInfo((prev) => prev + `💥 ÉCHEC assistant: ${error.message}\n`);
@@ -176,8 +222,16 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
     } finally {
       setCreating(false);
     }
-  };
+  }; 
 
+  const handleWelcomeContinue = () => {
+    setShowWelcome(false);
+    if (newCharacter) {
+      onCharacterSelect(newCharacter);
+      setNewCharacter(null);
+    }
+  };
+   
   const handleSignOut = async () => {
     try {
       const { error } = await authService.signOut();
@@ -202,6 +256,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
     }
   };
 
+  
   const handleDeleteCharacter = async (character: Player) => {
     if (deleteConfirmation !== 'Supprime') {
       toast.error('Veuillez taper exactement "Supprime" pour confirmer');
@@ -270,7 +325,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
       </div>
     );
   }
-
+ 
   return (
     <div
       className="character-selection-page min-h-screen"
@@ -356,6 +411,12 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center">
                     <Trash2 className="w-6 h-6 text-red-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-100">Supprimer le personnage</h3>
+                    <p className="text-sm text-gray-400">
+                      {deletingCharacter.adventurer_name || deletingCharacter.name}
+                    </p>
                   </div>
                 </div>
 
@@ -516,7 +577,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
         </div>
       </div>
 
-      {/* Bandeau de déconnexion (gardé, n’occulte pas l’image) */}
+      {/* Bandeau de déconnexion (gardé, n'occulte pas l'image) */}
       <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
         <div className="w-full max-w-md mx-auto px-4">
           <button
@@ -529,87 +590,21 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
         </div>
       </div>
 
-      {/* Popup de bienvenue centré et accueillant */}
-      {showWelcome && (
-        <WelcomeOverlay onClose={() => setShowWelcome(false)} autoCloseAfterMs={4000} />
-      )}
-
       {/* Modal du wizard du Character Creator */}
       <CreatorModal
         open={showCreator}
         onClose={() => setShowCreator(false)}
         onComplete={handleCreatorComplete}
       />
+
+      {/* Modal de bienvenue */}
+      <WelcomeModal
+        open={showWelcome}
+        characterName={newCharacter?.adventurer_name || newCharacter?.name || 'Aventurier'}
+        onContinue={handleWelcomeContinue}
+      />
     </div>
   );
 }
 
 export default CharacterSelectionPage;
-
-/* ===========================================================
-   Composant de popup de bienvenue
-   =========================================================== */
-function WelcomeOverlay({
-  onClose,
-  autoCloseAfterMs = 0,
-}: {
-  onClose: () => void;
-  autoCloseAfterMs?: number;
-}) {
-  useEffect(() => {
-    if (!autoCloseAfterMs) return;
-    const id = window.setTimeout(onClose, autoCloseAfterMs);
-    return () => window.clearTimeout(id);
-  }, [autoCloseAfterMs, onClose]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      {/* Overlay */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      {/* Carte centrée */}
-      <div
-        className="relative mx-4 w-full max-w-md rounded-2xl border border-red-500/30
-                   bg-gradient-to-b from-gray-900 to-gray-800 p-6 text-center shadow-2xl
-                   animate-fade-in"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Bienvenue"
-      >
-        <div className="text-2xl font-bold text-white mb-2">
-          Bienvenue, aventurier
-        </div>
-        <p className="text-gray-300 mb-6">
-          L’histoire commence ici.
-        </p>
-        <button
-          onClick={onClose}
-          className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium shadow-md transition-colors"
-        >
-          Commencer
-        </button>
-      </div>
-
-      {/* Animation d’apparition */}
-      <style>{`
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(6px) scale(0.98); }
-          to   { opacity: 1; transform: translateY(0)   scale(1); }
-        }
-        .animate-fade-in {
-          animation: fade-in 180ms ease-out;
-        }
-      `}</style>
-    </div>
-  );
-}
