@@ -19,7 +19,6 @@ export async function createCharacterFromCreatorPayload(
   if (rpcError) throw rpcError;
 
   // 2) Mettre à jour uniquement les colonnes qui existent dans players
-  // D'après ton code, on peut mettre à jour: class, level, max_hp, current_hp
   const { error: updError } = await supabase
     .from('players')
     .update({
