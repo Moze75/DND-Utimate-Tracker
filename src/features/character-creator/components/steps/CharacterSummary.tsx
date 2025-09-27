@@ -25,37 +25,34 @@ export default function RaceSelection({ selectedRace, onRaceSelect, onNext }: Ra
   };
 
   const getRaceIcon = (raceName: string) => {
-    if (raceName === 'Elfe' || raceName === 'Demi-Elfe') {
+    if (raceName.includes('Elfe') || raceName.includes('Demi-Elfe')) {
       return <Star className="w-5 h-5 text-green-400" />;
     }
-    if (raceName === 'Nain') {
+    if (raceName.includes('Nain')) {
       return <Shield className="w-5 h-5 text-orange-400" />;
     }
-    if (raceName === 'Halfelin') {
+    if (raceName.includes('Halfelin')) {
       return <Heart className="w-5 h-5 text-yellow-400" />;
     }
-    if (raceName === 'Drakéide') {
+    if (raceName.includes('Drakéide')) {
       return <Zap className="w-5 h-5 text-red-400" />;
     }
-    if (raceName === 'Gnome') {
+    if (raceName.includes('Gnome')) {
       return <Star className="w-5 h-5 text-purple-400" />;
     }
     if (raceName.includes('Orc')) {
       return <Shield className="w-5 h-5 text-red-500" />;
     }
-    if (raceName === 'Tieffelin') {
+    if (raceName.includes('Tieffelin')) {
       return <Zap className="w-5 h-5 text-purple-500" />;
     }
-    if (raceName === 'Aasimar') {
+    if (raceName.includes('Aasimar')) {
       return <Star className="w-5 h-5 text-blue-300" />;
     }
-    if (raceName === 'Goliath') {
+    if (raceName.includes('Goliath')) {
       return <Shield className="w-5 h-5 text-gray-400" />;
     }
-    if (raceName === 'Humain') {
-      return <Users className="w-5 h-5 text-blue-400" />;
-    }
-    return <Users className="w-5 h-5 text-gray-400" />;
+    return <Users className="w-5 h-5 text-blue-400" />;
   };
 
   const hasVisionInDark = (traits: string[]) => {
