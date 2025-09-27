@@ -85,6 +85,9 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [showCreator, setShowCreator] = useState(false);
 
+  // AJOUT: état du popup de bienvenue
+  const [showWelcome, setShowWelcome] = useState(false);
+
   useEffect(() => {
     fetchPlayers();
     runDiagnostic();
@@ -145,50 +148,36 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
     }
   };
 
-
-  
   // Création à partir du payload renvoyé par le wizard
-const handleCreatorComplete = async (payload: CharacterExportPayload) => {
-  if (creating) return;
-  try {
-    setCreating(true);
-    setDebugInfo((prev) => prev + `\n🚀 Création via assistant: "${payload.characterName}"\n`);
-    const newPlayer = await createCharacterFromCreatorPayload(session, payload);
-    setPlayers((prev) => [...prev, newPlayer]);
-    toast.success('Nouveau personnage créé !');
+  const handleCreatorComplete = async (payload: CharacterExportPayload) => {
+    if (creating) return;
+    try {
+      setCreating(true);
+      setDebugInfo((prev) => prev + `\n🚀 Création via assistant: "${payload.characterName}"\n`);
+      const newPlayer = await createCharacterFromCreatorPayload(session, payload);
+      setPlayers((prev) => [...prev, newPlayer]);
+      toast.success('Nouveau personnage créé !');
 
-    // Popup de bienvenue
-    toast.custom(
-      (t) => (
-        <div
-          className={`px-4 py-3 rounded-lg shadow-lg border ${
-            t.visible ? 'animate-enter' : 'animate-leave'
-          } bg-gray-900/95 border-red-500/30 text-gray-100`}
-        >
-          <div className="text-sm">Bienvenue, aventurier. L’histoire commence ici.</div>
-        </div>
-      ),
-      { duration: 3500 }
-    );
+      // REMPLACEMENT: ouvrir une modale centrée et accueillante (pas un toast)
+      setShowWelcome(true);
 
-    setShowCreator(false);
-    onCharacterSelect(newPlayer);
-  } catch (error: any) {
-    console.error('Erreur création via assistant:', error);
-    setDebugInfo((prev) => prev + `💥 ÉCHEC assistant: ${error.message}\n`);
-    if (error.message?.includes('Session invalide') || error.message?.includes('non authentifié')) {
-      toast.error('Session expirée. Veuillez vous reconnecter.');
-      await supabase.auth.signOut();
-    } else {
-      toast.error("Impossible de créer le personnage depuis l'assistant.");
+      setShowCreator(false);
+      onCharacterSelect(newPlayer);
+    } catch (error: any) {
+      console.error('Erreur création via assistant:', error);
+      setDebugInfo((prev) => prev + `💥 ÉCHEC assistant: ${error.message}\n`);
+      if (error.message?.includes('Session invalide') || error.message?.includes('non authentifié')) {
+        toast.error('Session expirée. Veuillez vous reconnecter.');
+        await supabase.auth.signOut();
+      } else {
+        toast.error("Impossible de créer le personnage depuis l'assistant.");
+      }
+      setShowDebug(true);
+    } finally {
+      setCreating(false);
     }
-    setShowDebug(true);
-  } finally {
-    setCreating(false);
-  }
-}; 
+  };
 
-   
   const handleSignOut = async () => {
     try {
       const { error } = await authService.signOut();
@@ -213,7 +202,6 @@ const handleCreatorComplete = async (payload: CharacterExportPayload) => {
     }
   };
 
-  
   const handleDeleteCharacter = async (character: Player) => {
     if (deleteConfirmation !== 'Supprime') {
       toast.error('Veuillez taper exactement "Supprime" pour confirmer');
@@ -282,7 +270,7 @@ const handleCreatorComplete = async (payload: CharacterExportPayload) => {
       </div>
     );
   }
- 
+
   return (
     <div
       className="character-selection-page min-h-screen"
@@ -368,12 +356,6 @@ const handleCreatorComplete = async (payload: CharacterExportPayload) => {
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center">
                     <Trash2 className="w-6 h-6 text-red-500" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-100">Supprimer le personnage</h3>
-                    <p className="text-sm text-gray-400">
-                      {deletingCharacter.adventurer_name || deletingCharacter.name}
-                    </p>
                   </div>
                 </div>
 
@@ -547,6 +529,11 @@ const handleCreatorComplete = async (payload: CharacterExportPayload) => {
         </div>
       </div>
 
+      {/* Popup de bienvenue centré et accueillant */}
+      {showWelcome && (
+        <WelcomeOverlay onClose={() => setShowWelcome(false)} autoCloseAfterMs={4000} />
+      )}
+
       {/* Modal du wizard du Character Creator */}
       <CreatorModal
         open={showCreator}
@@ -557,4 +544,72 @@ const handleCreatorComplete = async (payload: CharacterExportPayload) => {
   );
 }
 
-export default CharacterSelectionPage; 
+export default CharacterSelectionPage;
+
+/* ===========================================================
+   Composant de popup de bienvenue
+   =========================================================== */
+function WelcomeOverlay({
+  onClose,
+  autoCloseAfterMs = 0,
+}: {
+  onClose: () => void;
+  autoCloseAfterMs?: number;
+}) {
+  useEffect(() => {
+    if (!autoCloseAfterMs) return;
+    const id = window.setTimeout(onClose, autoCloseAfterMs);
+    return () => window.clearTimeout(id);
+  }, [autoCloseAfterMs, onClose]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+      {/* Overlay */}
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      {/* Carte centrée */}
+      <div
+        className="relative mx-4 w-full max-w-md rounded-2xl border border-red-500/30
+                   bg-gradient-to-b from-gray-900 to-gray-800 p-6 text-center shadow-2xl
+                   animate-fade-in"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Bienvenue"
+      >
+        <div className="text-2xl font-bold text-white mb-2">
+          Bienvenue, aventurier
+        </div>
+        <p className="text-gray-300 mb-6">
+          L’histoire commence ici.
+        </p>
+        <button
+          onClick={onClose}
+          className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium shadow-md transition-colors"
+        >
+          Commencer
+        </button>
+      </div>
+
+      {/* Animation d’apparition */}
+      <style>{`
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(6px) scale(0.98); }
+          to   { opacity: 1; transform: translateY(0)   scale(1); }
+        }
+        .animate-fade-in {
+          animation: fade-in 180ms ease-out;
+        }
+      `}</style>
+    </div>
+  );
+}
