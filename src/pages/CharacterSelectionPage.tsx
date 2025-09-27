@@ -12,6 +12,7 @@ import {
   AlertCircle,
   RefreshCw,
   Trash2,
+  Dices,
 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { authService } from '../services/authService';
@@ -87,32 +88,35 @@ function WelcomeModal({ open, characterName, onContinue }: WelcomeModalProps) {
   
   return (
     <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 border border-yellow-500/30 rounded-xl max-w-md w-full p-8 shadow-2xl">
+      <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 border border-purple-500/30 rounded-xl max-w-md w-full p-8 shadow-2xl">
         <div className="text-center space-y-6">
-          {/* Icône d'épée dorée */}
-          <div className="w-16 h-16 mx-auto bg-yellow-500/20 rounded-full flex items-center justify-center">
-            <Sword className="w-8 h-8 text-yellow-400" />
+          {/* Icône de dés (retirée car maintenant inline) */}
+          <div className="w-16 h-16 mx-auto bg-purple-500/20 rounded-full flex items-center justify-center">
+            <Dices className="w-8 h-8 text-purple-400" />
           </div>
           
           {/* Message de bienvenue */}
           <div className="space-y-3">
-            <h2 className="text-2xl font-bold text-yellow-400">
-              Bienvenue, {characterName} !
+            <h2 className="text-2xl font-bold text-red-400">
+              Bienvenue {characterName}
             </h2>
-            <p 
-              className="text-lg text-gray-200 font-medium"
-              style={{
-                textShadow: '0 0 10px rgba(255,255,255,0.3)'
-              }}
-            >
-              Bienvenue, aventurier. L'histoire commence ici.
-            </p>
+            <div className="flex items-center justify-center gap-2">
+              <p 
+                className="text-lg text-gray-200 font-medium"
+                style={{
+                  textShadow: '0 0 10px rgba(255,255,255,0.3)'
+                }}
+              >
+                L'aventure commence ici
+              </p>
+              <Dices className="w-6 h-6 text-purple-400" />
+            </div>
           </div>
           
           {/* Bouton Continuer */}
           <button
             onClick={onContinue}
-            className="w-full bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-bold py-3 px-6 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg"
+            className="w-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg"
           >
             Continuer
           </button>
