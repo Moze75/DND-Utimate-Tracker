@@ -158,7 +158,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
       setPlayers((prev) => [...prev, newPlayer]);
       toast.success('Nouveau personnage créé !');
 
-      // REMPLACEMENT: ouvrir une modale centrée et accueillante (pas un toast)
+      // Ouvre la modale de bienvenue centrée et accueillante
       setShowWelcome(true);
 
       setShowCreator(false);
@@ -544,8 +544,6 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
   );
 }
 
-export default CharacterSelectionPage;
-
 /* ===========================================================
    Composant de popup de bienvenue
    =========================================================== */
@@ -613,3 +611,5 @@ function WelcomeOverlay({
     </div>
   );
 }
+
+export default CharacterSelectionPage;
