@@ -19,11 +19,10 @@ const SKILL_GROUPS: Record<
 const SKILL_NAME_MAP: Record<string, string> = {
   Furtivité: 'Discrétion',
   Performance: 'Représentation',
-  Perspicacité: 'Perspicacité', // déjà aligné
+  Perspicacité: 'Perspicacité',
 };
 
 function normalizeSkillForTracker(name: string): string {
-  // Retourne le nom StatsTab si connu, sinon laisse tel quel
   return SKILL_NAME_MAP[name] ?? name;
 }
 
@@ -31,7 +30,6 @@ function getModifier(score: number): number {
   return Math.floor((score - 10) / 2);
 }
 
-// Bonus de maîtrise PHB
 function getProficiencyBonusForLevel(level: number): number {
   if (level >= 17) return 6;
   if (level >= 13) return 5;
@@ -40,25 +38,21 @@ function getProficiencyBonusForLevel(level: number): number {
   return 2;
 }
 
-// Conversion ft -> m arrondi au 0,5 m (30 ft → 9 m)
 function feetToMeters(ft?: number): number {
   const n = Number(ft);
   if (!Number.isFinite(n)) return 9;
   return Math.round(n * 0.3048 * 2) / 2;
 }
 
-// Construit le tableau abilities (format StatsTab) depuis les caracs finales et les maîtrises de compétences
 function buildAbilitiesForTracker(
   finalAbilities: Record<string, number>,
   proficientSkillsRaw: string[],
   level: number
 ) {
   const proficiency = getProficiencyBonusForLevel(level);
-  // Set de compétences maîtrisées, normalisées vers les noms StatsTab
   const profSet = new Set(proficientSkillsRaw.map(normalizeSkillForTracker));
 
-  // Liste canonique des 6 caracs pour assurer l’ordre et éviter les oublis
-  const ABILITY_ORDER: Array<keyof typeof finalAbilities> = [
+  const ORDER: Array<keyof typeof finalAbilities> = [
     'Force',
     'Dextérité',
     'Constitution',
@@ -67,19 +61,18 @@ function buildAbilitiesForTracker(
     'Charisme',
   ];
 
-  return ABILITY_ORDER.map((abilityName) => {
+  return ORDER.map((abilityName) => {
     const score = Number(finalAbilities[abilityName] ?? 10);
     const modifier = getModifier(score);
 
     const skills = (SKILL_GROUPS as any)[abilityName] as string[];
     const skillsDetails = skills.map((skillName) => {
       const isProficient = profSet.has(skillName);
-      const hasExpertise = false; // on ne gère pas l’expertise à la création
+      const hasExpertise = false;
       const bonus = modifier + (isProficient ? proficiency : 0);
       return { name: skillName, bonus, isProficient, hasExpertise };
     });
 
-    // Sauvegarde: par défaut = modificateur (sans maîtrise initiale)
     const savingThrow = modifier;
 
     return {
@@ -110,16 +103,37 @@ export async function createCharacterFromCreatorPayload(
   const level = Math.max(1, payload.level ?? 1);
   const proficiency_bonus = getProficiencyBonusForLevel(level);
 
-  const abilitiesArray = buildAbilitiesForTracker(payload.finalAbilities || {}, payload.proficientSkills || [], level);
+  const abilitiesArray = buildAbilitiesForTracker(
+    payload.finalAbilities || {},
+    payload.proficientSkills || [],
+    level
+  );
+
+  // Feats (don d'historique) + monnaie initiale
+  const feats: any = {
+    origins: payload.backgroundFeat ? [payload.backgroundFeat] : [],
+  };
+  if (feats.origins.length > 0) {
+    feats.origin = feats.origins[0]; // rétrocompat pour PlayerProfileSettingsModal
+  }
+
+  const coins = {
+    gp: Number(payload.gold ?? 0) || 0,
+    sp: 0,
+    cp: 0,
+  };
 
   const stats = {
     armor_class: payload.armorClass ?? 10,
-    initiative: payload.initiative ?? getModifier((payload.finalAbilities || {})['Dextérité'] ?? 10),
-    speed: feetToMeters(payload.speed ?? 30), // stocké en mètres pour coller au SettingsModal
+    initiative:
+      payload.initiative ??
+      getModifier((payload.finalAbilities || {})['Dextérité'] ?? 10),
+    speed: feetToMeters(payload.speed ?? 30), // en mètres
     proficiency_bonus,
     inspirations: 0,
-    feats: {}, // vide à la création, editable ensuite dans le SettingsModal
-    // jack_of_all_trades: false, // optionnel; StatsTab gère ça côté classe/niveau
+    feats,
+    coins,
+    gold: coins.gp, // compat si un ancien composant lit stats.gold
   };
 
   // 3) Mise à jour minimale et robuste sur des colonnes existantes
@@ -132,10 +146,11 @@ export async function createCharacterFromCreatorPayload(
       background: payload.selectedBackground || null,
       max_hp: payload.hitPoints,
       current_hp: payload.hitPoints,
-      abilities: abilitiesArray, // JSONB tableau
-      stats,                     // JSONB objet
-      // On NE TOUCHE PAS à des colonnes top-level non-existantes
-      // On évite aussi "equipment" si vous n'êtes pas sûr que la colonne existe côté DB
+      abilities: abilitiesArray, // JSONB tableau attendu par StatsTab
+      stats,                     // JSONB objet attendu par Settings/Equipment tabs
+      hit_dice: payload.hitDice
+        ? { total: payload.hitDice.total, used: payload.hitDice.used, die: payload.hitDice.die }
+        : { total: level, used: 0 }, // rétrocompat
     })
     .eq('id', playerId);
   if (updError) throw updError;
