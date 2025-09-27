@@ -20,9 +20,7 @@ import { authService } from '../services/authService';
 import { CharacterExportPayload } from '../types/characterCreator';
 import { createCharacterFromCreatorPayload } from '../services/characterCreationIntegration';
 
-// Lazy import direct du wizard à son emplacement réel.
-// NOTE: adapte le chemin et la casse au fichier exact sur disque.
-// Si ton fichier s'appelle "CharacterCreationWizard.tsx", mets "CharacterCreationWizard" (C majuscule).
+// IMPORTANT: adapte la casse au fichier réel (characterCreationWizard.tsx vs CharacterCreationWizard.tsx)
 const CharacterCreationWizard = React.lazy(() =>
   import('../features/character-creator/components/characterCreationWizard').then((m: any) => ({
     default: m.default ?? m.CharacterCreationWizard,
@@ -45,30 +43,32 @@ type CreatorModalProps = {
   onComplete: (payload: CharacterExportPayload) => void;
 };
 
-// Modal plein écran qui charge le wizard
+// Modal plein écran qui charge le wizard (scroll corrigé)
 function CreatorModal({ open, onClose, onComplete }: CreatorModalProps) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center">
-      <div className="relative w-full h-full md:h-[92vh] md:w-[1100px] bg-gray-900 border border-gray-800 rounded-none md:rounded-xl overflow-hidden">
-        <button
-          onClick={onClose}
-          className="absolute top-3 right-3 z-10 bg-gray-800/80 hover:bg-gray-700 text-white px-3 py-1 rounded"
-          aria-label="Fermer"
-        >
-          Fermer
-        </button>
-        <div className="w-full h-full">
-          <Suspense
-            fallback={
-              <div className="w-full h-full flex items-center justify-center text-gray-300">
-                Chargement de l’assistant de création...
-              </div>
-            }
+    <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm overflow-y-auto">
+      <div className="min-h-full flex items-center justify-center py-6">
+        <div className="relative w-full md:w-[1100px] bg-gray-900 border border-gray-800 rounded-none md:rounded-xl max-h-[95vh] flex flex-col">
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 z-10 bg-gray-800/80 hover:bg-gray-700 text-white px-3 py-1 rounded"
+            aria-label="Fermer"
           >
-            {/* Adapte les props à celles du wizard: onFinish(payload) + onCancel */}
-            <CharacterCreationWizard onFinish={onComplete} onCancel={onClose} />
-          </Suspense>
+            Fermer
+          </button>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <Suspense
+              fallback={
+                <div className="w-full h-full flex items-center justify-center text-gray-300 p-6">
+                  Chargement de l’assistant de création...
+                </div>
+              }
+            >
+              {/* Adapte les props à celles du wizard: onFinish(payload) + onCancel */}
+              <CharacterCreationWizard onFinish={onComplete} onCancel={onClose} />
+            </Suspense>
+          </div>
         </div>
       </div>
     </div>
@@ -528,7 +528,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
         </div>
       </div>
 
-      {/* Modal du wizard du Character Creator (pointe sur components/characterCreationWizard.tsx) */}
+      {/* Modal du wizard du Character Creator */}
       <CreatorModal
         open={showCreator}
         onClose={() => setShowCreator(false)}
