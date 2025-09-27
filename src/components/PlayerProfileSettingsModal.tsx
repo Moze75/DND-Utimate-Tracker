@@ -413,6 +413,14 @@ export function PlayerProfileSettingsModal({
     loadSubclasses();
   }, [open, selectedClass]);
 
+  // Quand le niveau change, synchroniser le total des dés de vie et borner les utilisés
+  useEffect(() => {
+    setHitDice((prev) => {
+      const used = Math.max(0, Math.min(prev?.used ?? 0, level));
+      return { total: level, used };
+    });
+  }, [level]);
+
   /* ============================ Données/Options utilitaires ============================ */
   const buildOptions = (all: string[], selected: string[], idx: number) => {
     const current = selected[idx] || '';
@@ -515,8 +523,8 @@ export function PlayerProfileSettingsModal({
         alignment: selectedAlignment || null,
         languages: selectedLanguages,
         max_hp: maxHp,
-        current_hp: currentHp,
-        temporary_hp: tempHp,
+        current_hp: Math.max(0, Math.min(maxHp, currentHp)),
+        temporary_hp: Math.max(0, tempHp),
         age: age.trim() || null,
         gender: gender.trim() || null,
         character_history: characterHistory.trim() || null,
@@ -564,14 +572,14 @@ export function PlayerProfileSettingsModal({
   const initialTranslate = slideFrom === 'right' ? 'translate-x-full' : '-translate-x-full';
 
   /* ============================ Swipe-to-close (gestuelle) ============================ */
-const startXRef = useRef<number | null>(null);
-const startYRef = useRef<number | null>(null);
-const gestureRef = useRef<'undetermined' | 'horizontal' | 'vertical'>('undetermined');
+  const startXRef = useRef<number | null>(null);
+  const startYRef = useRef<number | null>(null);
+  const gestureRef = useRef<'undetermined' | 'horizontal' | 'vertical'>('undetermined');
 
-const smoothClose = useCallback(() => {
-  setEnter(false);
-  window.setTimeout(() => onClose(), 300);
-}, [onClose]);
+  const smoothClose = useCallback(() => {
+    setEnter(false);
+    window.setTimeout(() => onClose(), 300);
+  }, [onClose]);
 
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches.length !== 1) return;
@@ -625,54 +633,54 @@ const smoothClose = useCallback(() => {
     // Enveloppe fixe plein écran, fond OPAQUE pour couvrir totalement l'interface
     <div className="fixed inset-0 z-50 bg-gray-900">
       {/* Panneau qui glisse depuis la gauche ou la droite */}
-<div
-  className={`
+      <div
+        className={`
     absolute inset-0 overflow-y-auto
     transform transition-transform duration-300 ease-out
     ${enter ? 'translate-x-0' : initialTranslate}
   `}
-  role="dialog"
-  aria-modal="true"
-  aria-label="Paramètres du personnage"
-  style={{ touchAction: 'pan-y' }}
-  onTouchStart={(e) => {
-    if (e.touches.length !== 1) return;
-    const t = e.touches[0];
-    startXRef.current = t.clientX;
-    startYRef.current = t.clientY;
-    gestureRef.current = 'undetermined';
-  }}
-  onTouchMove={(e) => {
-    if (startXRef.current == null || startYRef.current == null) return;
-    const t = e.touches[0];
-    const dx = t.clientX - startXRef.current;
-    const dy = t.clientY - startYRef.current;
-    const adx = Math.abs(dx);
-    const ady = Math.abs(dy);
+        role="dialog"
+        aria-modal="true"
+        aria-label="Paramètres du personnage"
+        style={{ touchAction: 'pan-y' }}
+        onTouchStart={(e) => {
+          if (e.touches.length !== 1) return;
+          const t = e.touches[0];
+          startXRef.current = t.clientX;
+          startYRef.current = t.clientY;
+          gestureRef.current = 'undetermined';
+        }}
+        onTouchMove={(e) => {
+          if (startXRef.current == null || startYRef.current == null) return;
+          const t = e.touches[0];
+          const dx = t.clientX - startXRef.current;
+          const dy = t.clientY - startYRef.current;
+          const adx = Math.abs(dx);
+          const ady = Math.abs(dy);
 
-    // Décide l'axe
-    if (gestureRef.current === 'undetermined') {
-      if (adx >= 14 || ady >= 14) {
-        gestureRef.current = adx > ady * 1.15 ? 'horizontal' : 'vertical';
-      } else {
-        return;
-      }
-    }
-    if (gestureRef.current !== 'horizontal') return;
+          // Décide l'axe
+          if (gestureRef.current === 'undetermined') {
+            if (adx >= 14 || ady >= 14) {
+              gestureRef.current = adx > ady * 1.15 ? 'horizontal' : 'vertical';
+            } else {
+              return;
+            }
+          }
+          if (gestureRef.current !== 'horizontal') return;
 
-    // Fermer sur swipe DROITE -> GAUCHE (dx < -64)
-    const threshold = 64;
-    if (dx < -threshold) {
-      e.preventDefault();
-      smoothClose();
-    }
-  }}
-  onTouchEnd={() => {
-    startXRef.current = null;
-    startYRef.current = null;
-    gestureRef.current = 'undetermined';
-  }}
->
+          // Fermer sur swipe DROITE -> GAUCHE (dx < -64)
+          const threshold = 64;
+          if (dx < -threshold) {
+            e.preventDefault();
+            smoothClose();
+          }
+        }}
+        onTouchEnd={() => {
+          startXRef.current = null;
+          startYRef.current = null;
+          gestureRef.current = 'undetermined';
+        }}
+      >
         <div className="max-w-4xl mx-auto p-4 py-8 space-y-6">
           {/* Titre + bouton fermer */}
           <div className="flex items-center justify-between mb-2">
@@ -729,7 +737,7 @@ const smoothClose = useCallback(() => {
             </div>
           </div>
 
-          {/* Niveau (non replié) */}
+          {/* Niveau (non repliée) */}
           <div className="stat-card">
             <div className="stat-header">
               <h3 className="text-lg font-semibold text-gray-100">Niveau</h3>
@@ -764,6 +772,154 @@ const smoothClose = useCallback(() => {
               </button>
             </div>
           </div>
+
+          {/* Points de vie et Dés de vie (replié par défaut) */}
+          <CollapsibleCard title="Points de vie et Dés de vie" defaultCollapsed>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">PV max</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={maxHp}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (!isNaN(v)) {
+                        setMaxHp(Math.max(1, v));
+                        setDirty(true);
+                      }
+                    }}
+                    onBlur={() => {
+                      // Clamp current HP si dépasse PV max
+                      if (currentHp > maxHp) {
+                        setCurrentHp(maxHp);
+                        setDirty(true);
+                      }
+                    }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                    placeholder="PV maximum"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">PV actuels</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={currentHp}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (!isNaN(v)) {
+                        setCurrentHp(v);
+                        setDirty(true);
+                      }
+                    }}
+                    onBlur={() => {
+                      const clamped = Math.max(0, Math.min(maxHp, currentHp));
+                      if (clamped !== currentHp) {
+                        setCurrentHp(clamped);
+                        setDirty(true);
+                      }
+                    }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                    placeholder="PV actuels"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">PV temporaires</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={tempHp}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (!isNaN(v)) {
+                        setTempHp(Math.max(0, v));
+                        setDirty(true);
+                      }
+                    }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                    placeholder="PV temporaires"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Dés de vie (total)</label>
+                  <input
+                    type="number"
+                    value={level}
+                    readOnly
+                    className="input-dark w-full px-3 py-2 rounded-md bg-gray-800/50 text-gray-400 cursor-not-allowed"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Égal au niveau</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Dés de vie utilisés</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="px-2 py-2 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
+                      onClick={() => {
+                        setHitDice((prev) => {
+                          const used = Math.max(0, Math.min((prev?.used ?? 0) - 1, level));
+                          return { total: level, used };
+                        });
+                        setDirty(true);
+                      }}
+                      aria-label="Décrémenter dés de vie utilisés"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min={0}
+                      max={level}
+                      value={hitDice?.used ?? 0}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        if (!isNaN(v)) {
+                          const used = Math.max(0, Math.min(v, level));
+                          setHitDice({ total: level, used });
+                          setDirty(true);
+                        }
+                      }}
+                      className="input-dark w-full px-3 py-2 rounded-md"
+                      placeholder="0"
+                    />
+                    <button
+                      type="button"
+                      className="px-2 py-2 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
+                      onClick={() => {
+                        setHitDice((prev) => {
+                          const used = Math.max(0, Math.min((prev?.used ?? 0) + 1, level));
+                          return { total: level, used };
+                        });
+                        setDirty(true);
+                      }}
+                      aria-label="Incrémenter dés de vie utilisés"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Dés de vie restants</label>
+                  <input
+                    type="text"
+                    value={`${Math.max(0, level - (hitDice?.used ?? 0))} / ${level}`}
+                    readOnly
+                    className="input-dark w-full px-3 py-2 rounded-md bg-gray-800/50 text-gray-400 cursor-not-allowed"
+                  />
+                </div>
+              </div>
+            </div>
+          </CollapsibleCard>
 
           {/* Classe et Espèce (replié par défaut) */}
           <CollapsibleCard title="Classe et Espèce" defaultCollapsed>
@@ -1222,4 +1378,4 @@ const smoothClose = useCallback(() => {
       </div>
     </div>
   );
-} 
+}
