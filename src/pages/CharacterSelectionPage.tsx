@@ -85,7 +85,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [showCreator, setShowCreator] = useState(false);
 
-  // AJOUT: état du popup de bienvenue
+  // Etat du popup de bienvenue
   const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
@@ -544,6 +544,8 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
   );
 }
 
+export default CharacterSelectionPage;
+
 /* ===========================================================
    Composant de popup de bienvenue
    =========================================================== */
@@ -611,5 +613,3 @@ function WelcomeOverlay({
     </div>
   );
 }
-
-export default CharacterSelectionPage;
