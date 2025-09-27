@@ -158,38 +158,35 @@ const handleCreatorComplete = async (payload: CharacterExportPayload) => {
     toast.success('Nouveau personnage créé !');
 
     // Popup de bienvenue
-toast.custom(
-  (t) => (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      {/* Overlay */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={() => toast.dismiss(t.id)}
-      />
-      {/* Carte au centre */}
-      <div
-        className={`relative mx-4 w-full max-w-md rounded-2xl border border-red-500/30
-          bg-gradient-to-b from-gray-900 to-gray-800 p-6 text-center shadow-2xl
-          transition-all duration-200
-          ${t.visible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
-      >
-        <div className="text-2xl font-bold text-white mb-2">
-          Bienvenue, aventurier
-        </div>
-        <p className="text-gray-300 mb-6">
-          L’histoire commence ici.
-        </p>
-        <button
-          onClick={() => toast.dismiss(t.id)}
-          className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium shadow-md transition-colors"
+    toast.custom(
+      (t) => (
+        <div
+          className={`px-4 py-3 rounded-lg shadow-lg border ${
+            t.visible ? 'animate-enter' : 'animate-leave'
+          } bg-gray-900/95 border-red-500/30 text-gray-100`}
         >
-          Commencer
-        </button>
-      </div>
-    </div>
-  ),
-  { duration: 4000, id: 'welcome-center' }
-); 
+          <div className="text-sm">Bienvenue, aventurier. L’histoire commence ici.</div>
+        </div>
+      ),
+      { duration: 3500 }
+    );
+
+    setShowCreator(false);
+    onCharacterSelect(newPlayer);
+  } catch (error: any) {
+    console.error('Erreur création via assistant:', error);
+    setDebugInfo((prev) => prev + `💥 ÉCHEC assistant: ${error.message}\n`);
+    if (error.message?.includes('Session invalide') || error.message?.includes('non authentifié')) {
+      toast.error('Session expirée. Veuillez vous reconnecter.');
+      await supabase.auth.signOut();
+    } else {
+      toast.error("Impossible de créer le personnage depuis l'assistant.");
+    }
+    setShowDebug(true);
+  } finally {
+    setCreating(false);
+  }
+}; 
 
    
   const handleSignOut = async () => {
