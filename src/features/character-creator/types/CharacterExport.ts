@@ -6,7 +6,7 @@ export interface CharacterExportPayload {
   selectedBackground: string;
   level: number;
 
-  // Caractéristiques finales (bonus arrière-plan + raciaux déjà appliqués)
+  // Caractéristiques finales (bonus d’historique + raciaux déjà appliqués)
   finalAbilities: Record<string, number>; // ex: { Force: 16, Dextérité: 14, ... }
 
   // Compétences maîtrisées (noms FR normalisés)
@@ -21,4 +21,15 @@ export interface CharacterExportPayload {
   armorClass: number;
   initiative: number;
   speed: number;
+
+  // Nouveaux champs (facultatifs) pour enrichir la création dans le tracker
+  backgroundFeat?: string; // "don d'historique" si calculé côté summary/wizard
+  gold?: number; // or initial, si le summary l'a calculé
+
+  // Dés de vie (on stocke aussi le dé; SettingsModal utilise total/used)
+  hitDice?: {
+    die: 'd6' | 'd8' | 'd10' | 'd12';
+    total: number; // généralement = level à la création
+    used: number;  // 0 au départ
+  };
 }
