@@ -1,339 +1,233 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Toaster, toast } from 'react-hot-toast';
+import React, { useMemo, useState } from 'react';
 
-import ProgressBar from './ui/ProgressBar';
+// Étapes (gardent votre mise en page)
 import RaceSelection from './steps/RaceSelection';
 import ClassSelection from './steps/ClassSelection';
 import BackgroundSelection from './steps/BackgroundSelection';
 import AbilityScores from './steps/AbilityScores';
 import CharacterSummary from './steps/CharacterSummary';
 
-import { DndClass } from '../types/character';
-import { supabase } from '../lib/supabase';
-import { calculateArmorClass, calculateHitPoints, calculateModifier } from '../utils/dndCalculations';
-
+// Données et utilitaires de calcul
 import { races } from '../data/races';
 import { classes } from '../data/classes';
 import { backgrounds } from '../data/backgrounds';
+import { calculateHitPoints, calculateArmorClass, calculateModifier } from '../utils/dndCalculations';
 
-/* ===========================================================
-   Utilitaires
-   =========================================================== */
+// Type de payload attendu par l’app parente
+import { CharacterExportPayload } from '../../../types/characterCreator';
 
-// Convertit ft -> m en arrondissant au 0,5 m (30 ft → 9 m)
-const feetToMeters = (ft?: number) => {
-  const n = Number(ft);
-  if (!Number.isFinite(n)) return 9; // fallback raisonnable
-  return Math.round(n * 0.3048 * 2) / 2;
+type WizardProps = {
+  onFinish: (payload: CharacterExportPayload) => void;
+  onCancel: () => void;
 };
 
-// Notifie le parent (iframe/opener) qu’un personnage a été créé
-type CreatedEvent = {
-  type: 'creator:character_created';
-  payload: { playerId: string; player?: any };
+enum Step {
+  Race = 0,
+  Class = 1,
+  Background = 2,
+  Abilities = 3,
+  Summary = 4,
+}
+
+const defaultAbilities: Record<string, number> = {
+  Force: 10,
+  Dextérité: 10,
+  Constitution: 10,
+  Intelligence: 10,
+  Sagesse: 10,
+  Charisme: 10,
 };
-const notifyParentCreated = (playerId: string, player?: any) => {
-  const msg: CreatedEvent = { type: 'creator:character_created', payload: { playerId, player } };
-  try { window.parent?.postMessage(msg, '*'); } catch {}
-  try { (window as any).opener?.postMessage(msg, '*'); } catch {}
-  try { window.postMessage(msg, '*'); } catch {}
-};
 
-/* ===========================================================
-   Étapes (sans sous-classe)
-   =========================================================== */
+export default function CharacterCreationWizard({ onFinish, onCancel }: WizardProps) {
+  // Navigation
+  const [step, setStep] = useState<Step>(Step.Race);
+  const goNext = () => setStep((s) => Math.min(Step.Summary, s + 1));
+  const goPrev = () => setStep((s) => Math.max(Step.Race, s - 1));
 
-const steps = ['Race', 'Classe', 'Historique', 'Caractéristiques', 'Résumé'];
+  // État de la fiche (garde vos choix et UI)
+  const [characterName, setCharacterName] = useState<string>('');
+  const [selectedRace, setSelectedRace] = useState<string>('');
+  const [selectedClass, setSelectedClass] = useState<string>('');
+  const [selectedBackground, setSelectedBackground] = useState<string>('');
+  const [abilities, setAbilities] = useState<Record<string, number>>({ ...defaultAbilities });
 
-export default function CharacterCreationWizard() {
-  // Étape courante
-  const [currentStep, setCurrentStep] = useState(0);
+  // Compétences de classe (sélectionnées dans l’étape Classe)
+  const [selectedClassSkills, setSelectedClassSkills] = useState<string[]>([]);
+  // Option d’équipement d’historique (si votre étape la gère)
+  const [selectedBgEquipOption, setSelectedBgEquipOption] = useState<'A' | 'B' | ''>('');
 
-  // Identité
-  const [characterName, setCharacterName] = useState('');
-
-  // Choix principaux
-  const [selectedRace, setSelectedRace] = useState('');
-  const [selectedClass, setSelectedClass] = useState<DndClass | ''>('');
-  const [selectedBackground, setSelectedBackground] = useState('');
-
-  // Choix dépendants
-  const [backgroundEquipmentOption, setBackgroundEquipmentOption] = useState<'A' | 'B' | ''>('');
-  const [selectedClassSkills, setSelectedClassSkills] = useState<string[]>([]); // normalisées (ex: "Discrétion")
-
-  // Caractéristiques (base) et “effectives” (base + historique)
-  const [abilities, setAbilities] = useState<Record<string, number>>({
-    'Force': 8,
-    'Dextérité': 8,
-    'Constitution': 8,
-    'Intelligence': 8,
-    'Sagesse': 8,
-    'Charisme': 8,
-  });
-  const [effectiveAbilities, setEffectiveAbilities] = useState<Record<string, number>>(abilities);
-
-  // Objet d'historique sélectionné
-  const selectedBackgroundObj = useMemo(
-    () => backgrounds.find((b) => b.name === selectedBackground) || null,
+  // Données choisies
+  const raceData = useMemo(() => races.find((r) => r.name === selectedRace), [selectedRace]);
+  const classData = useMemo(() => classes.find((c) => c.name === selectedClass), [selectedClass]);
+  const backgroundData = useMemo(
+    () => backgrounds.find((b) => b.name === selectedBackground),
     [selectedBackground]
   );
 
-  // Resets cohérents
-  useEffect(() => {
-    // Si la classe change, réinitialiser les compétences de classe choisies
-    setSelectedClassSkills([]);
-  }, [selectedClass]);
-
-  useEffect(() => {
-    // Si l’historique change, réinitialiser le choix d’équipement A/B
-    setBackgroundEquipmentOption('');
-  }, [selectedBackground]);
-
-  // Navigation
-  const nextStep = () => setCurrentStep((s) => Math.min(s + 1, steps.length - 1));
-  const previousStep = () => setCurrentStep((s) => Math.max(s - 1, 0));
-
-  /* ===========================================================
-     Finalisation / Enregistrement
-     =========================================================== */
-  const handleFinish = async () => {
-    try {
-      const { data: auth, error: authErr } = await supabase.auth.getUser();
-      if (authErr) throw authErr;
-      const user = auth?.user;
-      if (!user) {
-        toast.error('Vous devez être connecté pour créer un personnage');
-        return;
-      }
-
-      const raceData = races.find((r) => r.name === selectedRace);
-      const classData = classes.find((c) => c.name === selectedClass);
-
-      // Partir des “abilities effectives” (base + historique) calculées dans AbilityScores
-      const finalAbilities = { ...effectiveAbilities };
-
-      // Appliquer les bonus raciaux si présents
-      if (raceData?.abilityScoreIncrease) {
-        Object.entries(raceData.abilityScoreIncrease).forEach(([ability, bonus]) => {
-          if (finalAbilities[ability] != null) {
-            finalAbilities[ability] += bonus;
-          }
-        });
-      }
-
-      // Dérivés de combat
-      const hitPoints = calculateHitPoints(finalAbilities['Constitution'] || 10, selectedClass as DndClass);
-      const armorClass = calculateArmorClass(finalAbilities['Dextérité'] || 10);
-      const initiative = calculateModifier(finalAbilities['Dextérité'] || 10);
-
-      // Vitesse en mètres
-      const speedMeters = feetToMeters(raceData?.speed || 30);
-
-      // Équipement d’historique selon Option A/B
-      const bgEquip =
-        backgroundEquipmentOption === 'A'
-          ? selectedBackgroundObj?.equipmentOptions?.optionA ?? []
-          : backgroundEquipmentOption === 'B'
-            ? selectedBackgroundObj?.equipmentOptions?.optionB ?? []
-            : [];
-
-      // Données minimales compatibles (le Tracker saura enrichir/éditer ensuite)
-      const characterData = {
-        user_id: user.id,
-        name: characterName.trim(),
-        // Optionnel: on peut dupliquer dans adventurer_name
-        adventurer_name: characterName.trim(),
-        level: 1,
-        current_hp: hitPoints,
-        max_hp: hitPoints,
-        class: selectedClass || null,
-        subclass: null, // pas de sous-classe au niveau 1
-        race: selectedRace || null,
-        background: selectedBackground || null,
-        stats: {
-          armor_class: armorClass,
-          initiative: initiative,
-          speed: speedMeters,            // stockée en mètres
-          proficiency_bonus: 2,
-          inspirations: 0,
-          // On peut stocker des métadonnées souples
-          feats: {},
-        },
-        // Le Tracker affichera par défaut s’il n’a pas d’abilities[]
-        abilities: null,
-        equipment: {
-          starting_equipment: classData?.equipment || [],
-          background_equipment_option: backgroundEquipmentOption || null,
-          background_equipment_items: bgEquip,
-        },
-        // Garde une trace des maîtrises choisies (utile pour migration ultérieure)
-        proficiencies: {
-          skills_from_class: selectedClassSkills,
-          skills_from_background: selectedBackgroundObj?.skillProficiencies ?? [],
-          saving_throws: classData?.savingThrows ?? [],
-        },
-        created_at: new Date().toISOString(),
-      };
-
-      const { data: inserted, error } = await supabase
-        .from('players')
-        .insert([characterData])
-        .select('*')
-        .single();
-
-      if (error) {
-        console.error('Error creating character:', error);
-        toast.error('Erreur lors de la création du personnage');
-        return;
-      }
-
-      // Notifier l’app parente (pour l’intégration avec le Tracker)
-      if (inserted?.id) {
-        notifyParentCreated(inserted.id, inserted);
-      }
-
-      toast.success('Personnage créé avec succès !');
-
-      // Reset complet
-      setCurrentStep(0);
-      setCharacterName('');
-      setSelectedRace('');
-      setSelectedClass('');
-      setSelectedBackground('');
-      setBackgroundEquipmentOption('');
-      setSelectedClassSkills([]);
-      setAbilities({
-        'Force': 8,
-        'Dextérité': 8,
-        'Constitution': 8,
-        'Intelligence': 8,
-        'Sagesse': 8,
-        'Charisme': 8,
+  // Caracs finales = base + bonus raciaux (les bonus d’historique si vous en avez appliqués en amont)
+  const finalAbilities = useMemo(() => {
+    const fa = { ...abilities };
+    if (raceData?.abilityScoreIncrease) {
+      Object.entries(raceData.abilityScoreIncrease).forEach(([ability, bonus]) => {
+        if (fa[ability] != null) fa[ability] += bonus;
       });
-      setEffectiveAbilities({
-        'Force': 8,
-        'Dextérité': 8,
-        'Constitution': 8,
-        'Intelligence': 8,
-        'Sagesse': 8,
-        'Charisme': 8,
-      });
-    } catch (err) {
-      console.error('Error creating character:', err);
-      toast.error('Erreur lors de la création du personnage');
     }
+    return fa;
+  }, [abilities, raceData]);
+
+  // Valeurs dérivées
+  const hitPoints = useMemo(
+    () => calculateHitPoints(finalAbilities['Constitution'] || 10, selectedClass as any),
+    [finalAbilities, selectedClass]
+  );
+  const armorClass = useMemo(
+    () => calculateArmorClass(finalAbilities['Dextérité'] || 10),
+    [finalAbilities]
+  );
+  const initiative = useMemo(
+    () => calculateModifier(finalAbilities['Dextérité'] || 10),
+    [finalAbilities]
+  );
+  const speed = raceData?.speed || 30;
+
+  // Équipement d’historique (option A/B)
+  const bgEquip = useMemo(() => {
+    if (!backgroundData?.equipmentOptions) return [];
+    if (selectedBgEquipOption === 'A') return backgroundData.equipmentOptions.optionA ?? [];
+    if (selectedBgEquipOption === 'B') return backgroundData.equipmentOptions.optionB ?? [];
+    return [];
+  }, [backgroundData, selectedBgEquipOption]);
+
+  // Validation pour “Suivant”
+  const canGoNextFromRace = !!selectedRace;
+  const canGoNextFromClass = !!selectedClass;
+  const canGoNextFromBackground = !!selectedBackground;
+  const canGoNextFromAbilities = true;
+
+  // Construction du payload final et remontée à l’app parente
+  const handleFinish = () => {
+    const proficientSkills = Array.from(
+      new Set([...(selectedClassSkills || []), ...((backgroundData?.skillProficiencies ?? []))])
+    );
+    const equipment = [...(classData?.equipment ?? []), ...bgEquip];
+
+    const payload: CharacterExportPayload = {
+      characterName: characterName.trim(),
+      selectedRace,
+      selectedClass,
+      selectedBackground,
+      level: 1,
+      finalAbilities,
+      proficientSkills,
+      equipment,
+      selectedBackgroundEquipmentOption: selectedBgEquipOption,
+      hitPoints,
+      armorClass,
+      initiative,
+      speed,
+    };
+
+    onFinish(payload);
   };
 
-  /* ===========================================================
-     Rendu des étapes
-     =========================================================== */
-  const renderStep = () => {
-    switch (currentStep) {
-      case 0:
-        return (
+  // Rendu (conserve vos composants d’étapes)
+  return (
+    <div className="w-full min-h-full bg-transparent text-gray-200">
+      {/* Stepper (optionnel) */}
+      <div className="w-full px-6 pt-5">
+        <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
+          {[
+            { idx: Step.Race, label: 'Espèce' },
+            { idx: Step.Class, label: 'Classe' },
+            { idx: Step.Background, label: 'Historique' },
+            { idx: Step.Abilities, label: 'Caracs' },
+            { idx: Step.Summary, label: 'Résumé' },
+          ].map((s) => (
+            <div
+              key={s.idx}
+              className={`px-2 py-1 rounded border ${
+                step === s.idx ? 'border-red-500 text-red-200' : 'border-gray-700'
+              }`}
+            >
+              {s.label}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="w-full">
+        {step === Step.Race && (
           <RaceSelection
             selectedRace={selectedRace}
-            onRaceSelect={setSelectedRace}
-            onNext={nextStep}
+            onSelectRace={setSelectedRace}
+            onCancel={onCancel}
+            onNext={() => canGoNextFromRace && goNext()}
           />
-        );
+        )}
 
-      case 1:
-        return (
+        {step === Step.Class && (
           <ClassSelection
             selectedClass={selectedClass}
-            onClassSelect={setSelectedClass}
-            // Compétences cliquables dans la classe
+            onSelectClass={(name: string) => {
+              setSelectedClass(name);
+              setSelectedClassSkills([]); // reset si la classe change
+            }}
             selectedSkills={selectedClassSkills}
-            onSelectedSkillsChange={setSelectedClassSkills}
-            onNext={nextStep}
-            onPrevious={previousStep}
+            onToggleSkill={(skill: string, allowed: number) => {
+              setSelectedClassSkills((prev) => {
+                const exists = prev.includes(skill);
+                if (exists) return prev.filter((s) => s !== skill);
+                if (prev.length >= allowed) return prev;
+                return [...prev, skill];
+              });
+            }}
+            onPrev={goPrev}
+            onCancel={onCancel}
+            onNext={() => canGoNextFromClass && goNext()}
           />
-        );
+        )}
 
-      case 2:
-        return (
+        {step === Step.Background && (
           <BackgroundSelection
             selectedBackground={selectedBackground}
-            onBackgroundSelect={setSelectedBackground}
-            // Option A / B d’équipement d’historique
-            selectedEquipmentOption={backgroundEquipmentOption}
-            onEquipmentOptionChange={setBackgroundEquipmentOption}
-            onNext={nextStep}
-            onPrevious={previousStep}
+            onSelectBackground={(name: string) => {
+              setSelectedBackground(name);
+              setSelectedBgEquipOption('');
+            }}
+            selectedEquipmentOption={selectedBgEquipOption}
+            onSelectEquipmentOption={setSelectedBgEquipOption}
+            onPrev={goPrev}
+            onCancel={onCancel}
+            onNext={() => canGoNextFromBackground && goNext()}
           />
-        );
+        )}
 
-      case 3:
-        return (
+        {step === Step.Abilities && (
           <AbilityScores
             abilities={abilities}
-            onAbilitiesChange={setAbilities}
-            selectedBackground={selectedBackgroundObj}
-            // Remonte “base + historique” pour tout le reste du process
-            onEffectiveAbilitiesChange={setEffectiveAbilities}
-            onNext={nextStep}
-            onPrevious={previousStep}
+            onChange={(next: Record<string, number>) => setAbilities(next)}
+            onPrev={goPrev}
+            onCancel={onCancel}
+            onNext={() => canGoNextFromAbilities && goNext()}
           />
-        );
+        )}
 
-      case 4:
-        return (
+        {step === Step.Summary && (
           <CharacterSummary
             characterName={characterName}
             onCharacterNameChange={setCharacterName}
             selectedRace={selectedRace}
-            selectedClass={selectedClass as DndClass}
+            selectedClass={selectedClass as any}
             selectedBackground={selectedBackground}
-            abilities={effectiveAbilities}
-            // Affichage des compétences (si implémenté) + équipement historique
-            selectedClassSkills={selectedClassSkills}
-            selectedBackgroundEquipmentOption={backgroundEquipmentOption}
+            abilities={abilities}
+            // IMPORTANT: ne pas appeler Supabase ici. On remonte le payload.
             onFinish={handleFinish}
-            onPrevious={previousStep}
+            onPrevious={goPrev}
+            selectedClassSkills={selectedClassSkills}
+            selectedBackgroundEquipmentOption={selectedBgEquipOption}
           />
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  /* ===========================================================
-     Layout général
-     =========================================================== */
-  return (
-    <div className="min-h-screen bg-fantasy relative">
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          className: 'bg-gray-800 text-white border border-gray-700',
-          duration: 4000,
-        }}
-      />
-
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-white mb-2">
-              Créateur de Personnage D&D
-            </h1>
-            <p className="text-gray-400">
-              Créez votre héros pour vos aventures dans les Donjons et Dragons
-            </p>
-          </div>
-
-          <ProgressBar
-            currentStep={currentStep}
-            totalSteps={steps.length - 1}
-            steps={steps}
-          />
-
-          <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 md:p-8">
-            {renderStep()}
-          </div>
-        </div>
+        )}
       </div>
     </div>
-  ); 
+  );
 }
