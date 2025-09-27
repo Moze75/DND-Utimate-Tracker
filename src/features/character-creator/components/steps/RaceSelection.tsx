@@ -13,7 +13,7 @@ interface RaceSelectionProps {
 export default function RaceSelection({ selectedRace, onRaceSelect, onNext }: RaceSelectionProps) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  // Conversion pieds -> mètres (les données sont déjà en pieds dans le nouveau système)
+  // Conversion pieds -> mètres (les données sont en pieds)
   const feetToMeters = (ft?: number) => {
     if (!ft && ft !== 0) return '';
     return Math.round(ft * 0.3048 * 2) / 2;
@@ -61,6 +61,46 @@ export default function RaceSelection({ selectedRace, onRaceSelect, onNext }: Ra
   const hasVisionInDark = (traits: string[]) => {
     return traits.some(trait => trait.includes('Vision dans le noir'));
   };
+
+  // Image de race (public/Races/...) avec fallback de noms
+  function RaceImage({ raceName }: { raceName: string }) {
+    const toASCII = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const slug = (s: string) =>
+      toASCII(s)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    const ascii = toASCII(raceName);
+    const noSpaces = ascii.replace(/\s+/g, '');
+    const base = '/Races/';
+
+    const candidates = [
+      `${raceName}.png`,
+      `${raceName}.jpg`,
+      `${ascii}.png`,
+      `${ascii}.jpg`,
+      `${slug(raceName)}.png`,
+      `${slug(raceName)}.jpg`,
+      `${slug(raceName)}.webp`,
+      `${noSpaces}.png`,
+      `${noSpaces}.jpg`,
+      `${noSpaces}.webp`,
+    ];
+
+    const [idx, setIdx] = useState(0);
+    if (idx >= candidates.length) return null;
+
+    const src = base + candidates[idx];
+    return (
+      <img
+        src={src}
+        alt={raceName}
+        className="w-full h-auto object-contain rounded-md shadow-sm"
+        loading="lazy"
+        onError={() => setIdx((i) => i + 1)}
+      />
+    );
+  }
 
   return (
     <div className="wizard-step space-y-6">
@@ -120,9 +160,14 @@ export default function RaceSelection({ selectedRace, onRaceSelect, onNext }: Ra
                   )}
                 </div>
 
+                {/* Image et détails supplémentaires uniquement quand la carte est dépliée */}
                 {isExpanded && (
                   <div className="mt-4 border-t border-gray-700/50 pt-4 animate-fade-in">
-                    <div className="grid grid-cols-1 gap-4">
+                    {/* Image de la race (pleine largeur, non rognée) */}
+                    <RaceImage raceName={race.name} />
+
+                    {/* Détails étendus */}
+                    <div className="grid grid-cols-1 gap-4 mt-4">
                       <div>
                         <h4 className="font-medium text-white mb-2">Langues</h4>
                         <p className="text-gray-300 text-sm">
@@ -149,8 +194,7 @@ export default function RaceSelection({ selectedRace, onRaceSelect, onNext }: Ra
                               ))}
                             </ul>
                           </div>
-                          
-                          {/* Affichage des variantes disponibles */}
+
                           {(race.name === 'Elfe' || race.name === 'Gnome' || race.name === 'Tieffelin') && (
                             <div className="mt-3 p-3 bg-gray-800/50 rounded-lg border border-gray-600/30">
                               <h5 className="text-xs font-medium text-gray-300 mb-2">Variantes disponibles :</h5>
