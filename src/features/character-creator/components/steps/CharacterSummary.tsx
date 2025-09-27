@@ -7,7 +7,7 @@ import { races } from '../../data/races';
 import { classes } from '../../data/classes';
 import { backgrounds } from '../../data/backgrounds';
 import { DndClass } from '../../types/character';
-import { User, Heart, Shield, Zap, Users, BookOpen, Package } from 'lucide-react';
+import { User, Heart, Shield, Zap, Users, BookOpen, Package, Scroll, Star } from 'lucide-react';
 
 interface CharacterSummaryProps {
   characterName: string;
@@ -211,6 +211,16 @@ export default function CharacterSummary({
               <span className="text-gray-400">Niveau:</span>
               <span className="text-white font-medium">1</span>
             </div>
+            {/* Nouveau: Don d'historique */}
+            {backgroundData?.feat && (
+              <div className="flex justify-between items-center border-t border-gray-700/50 pt-3 mt-3">
+                <div className="flex items-center">
+                  <Scroll className="w-4 h-4 text-purple-400 mr-2" />
+                  <span className="text-gray-400">Don:</span>
+                </div>
+                <span className="text-purple-300 font-medium text-sm">{backgroundData.feat}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -272,7 +282,7 @@ export default function CharacterSummary({
       <Card>
         <CardHeader>
           <div className="flex items-center">
-            <Users className="w-5 h-5 text-purple-400 mr-2" />
+            <Star className="w-5 h-5 text-yellow-400 mr-2" />
             <h3 className="text-lg font-semibold text-white">Compétences</h3>
           </div>
         </CardHeader>
@@ -297,6 +307,31 @@ export default function CharacterSummary({
           </div>
         </CardContent>
       </Card>
+
+      {/* Section Don d'historique détaillée */}
+      {backgroundData?.feat && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center">
+              <Scroll className="w-5 h-5 text-purple-400 mr-2" />
+              <h3 className="text-lg font-semibold text-white">Don d'historique</h3>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
+              <h4 className="font-semibold text-purple-300 mb-2">{backgroundData.feat}</h4>
+              <p className="text-gray-300 text-sm">
+                Ce don vous est accordé par votre historique <strong>{selectedBackground}</strong>. 
+                Il reflète les compétences particulières acquises durant votre passé et vous donne 
+                des capacités spéciales utilisables en jeu.
+              </p>
+              <div className="mt-3 text-xs text-purple-400">
+                Consultez le chapitre 5 pour les détails complets de ce don.
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Traits raciaux + espèce */}
@@ -364,7 +399,7 @@ export default function CharacterSummary({
             </div>
             <div>
               <h4 className="font-medium text-white mb-2">
-                D’historique {selectedBackgroundEquipmentOption ? `(Option ${selectedBackgroundEquipmentOption})` : ''}
+                D'historique {selectedBackgroundEquipmentOption ? `(Option ${selectedBackgroundEquipmentOption})` : ''}
               </h4>
               <ul className="text-gray-300 text-sm space-y-1">
                 {bgEquip.length > 0
