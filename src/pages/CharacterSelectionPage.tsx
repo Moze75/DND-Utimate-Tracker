@@ -189,7 +189,7 @@ toast.custom(
     </div>
   ),
   { duration: 4000, id: 'welcome-center' }
-);
+); 
 
    
   const handleSignOut = async () => {
