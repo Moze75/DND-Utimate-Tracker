@@ -2,62 +2,44 @@ import { supabase } from '../lib/supabase';
 import { Player } from '../types/dnd';
 import { CharacterExportPayload } from '../types/characterCreator';
 
+// Version "safe" sans colonnes additionnelles, sans RPC one-shot.
+// On utilise uniquement la RPC existante create_player_with_defaults puis un update minimal.
 export async function createCharacterFromCreatorPayload(
   session: any,
   payload: CharacterExportPayload
 ): Promise<Player> {
   if (!session?.user?.id) throw new Error('Session invalide');
 
-  try {
-    const { data: newId, error: rpcError } = await supabase.rpc('create_player_from_creator', {
-      p_user_id: session.user.id,
-      p_payload: payload as any,
-    });
-    if (rpcError) throw rpcError;
+  // 1) Créer un player "vide" avec defaults (retourne l'id)
+  const { data: playerId, error: rpcError } = await supabase.rpc('create_player_with_defaults', {
+    p_user_id: session.user.id,
+    p_name: payload.characterName,
+    p_adventurer_name: payload.characterName,
+  });
+  if (rpcError) throw rpcError;
 
-    const { data, error } = await supabase
-      .from('players')
-      .select('*')
-      .eq('id', newId)
-      .single();
-    if (error) throw error;
+  // 2) Mettre à jour uniquement les colonnes qui existent dans players
+  // D'après ton code, on peut mettre à jour: class, level, max_hp, current_hp
+  const { error: updError } = await supabase
+    .from('players')
+    .update({
+      class: payload.selectedClass,
+      level: payload.level ?? 1,
+      max_hp: payload.hitPoints,
+      current_hp: payload.hitPoints,
+      // Pas d'armor_class, initiative, speed, race, background ici
+      // Pas de JSON (abilities_json, skills_json, equipment_json) si les colonnes n'existent pas
+    })
+    .eq('id', playerId);
+  if (updError) throw updError;
 
-    return data as Player;
-  } catch (e) {
-    const { data: playerId, error: rpc2 } = await supabase.rpc('create_player_with_defaults', {
-      p_user_id: session.user.id,
-      p_name: payload.characterName,
-      p_adventurer_name: payload.characterName,
-    });
-    if (rpc2) throw rpc2;
+  // 3) Récupérer et retourner le player créé
+  const { data: newPlayer, error: fetchError } = await supabase
+    .from('players')
+    .select('*')
+    .eq('id', playerId)
+    .single();
+  if (fetchError) throw fetchError;
 
-    const { error: updError } = await supabase
-      .from('players')
-      .update({
-        class: payload.selectedClass,
-        level: payload.level ?? 1,
-        race: payload.selectedRace,
-        background: payload.selectedBackground,
-        max_hp: payload.hitPoints,
-        current_hp: payload.hitPoints,
-        armor_class: payload.armorClass,
-        initiative: payload.initiative,
-        speed: payload.speed,
-        // Décommentez si ces colonnes existent dans players:
-        // abilities_json: payload.finalAbilities,
-        // skills_json: payload.proficientSkills,
-        // equipment_json: payload.equipment,
-      })
-      .eq('id', playerId);
-    if (updError) throw updError;
-
-    const { data: newPlayer, error: fetchError } = await supabase
-      .from('players')
-      .select('*')
-      .eq('id', playerId)
-      .single();
-    if (fetchError) throw fetchError;
-
-    return newPlayer as Player;
-  }
+  return newPlayer as Player;
 }
