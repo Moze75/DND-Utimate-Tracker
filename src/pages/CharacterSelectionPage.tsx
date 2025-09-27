@@ -17,6 +17,11 @@ import {
 import { Avatar } from '../components/Avatar';
 import { authService } from '../services/authService';
 
+// AJOUTS: imports pour l'intégration du Character Creator
+import { CharacterCreatorModal } from '../components/CharacterCreatorModal';
+import { CharacterExportPayload } from '../types/characterCreator';
+import { createCharacterFromCreatorPayload } from '../services/characterCreationIntegration';
+
 interface CharacterSelectionPageProps {
   session: any;
   onCharacterSelect: (player: Player) => void;
@@ -30,13 +35,19 @@ const BG_URL =
 export function CharacterSelectionPage({ session, onCharacterSelect }: CharacterSelectionPageProps) {
   const [loading, setLoading] = useState(true);
   const [players, setPlayers] = useState<Player[]>([]);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newCharacterName, setNewCharacterName] = useState('');
+
+  // SUPPRESSION de l'ancien flux "nom simple" et REMPLACEMENT par le wizard
+  // const [showCreateForm, setShowCreateForm] = useState(false);
+  // const [newCharacterName, setNewCharacterName] = useState('');
+
   const [creating, setCreating] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [showDebug, setShowDebug] = useState(false);
   const [deletingCharacter, setDeletingCharacter] = useState<Player | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+
+  // AJOUT: état pour afficher le wizard Character Creator
+  const [showCreator, setShowCreator] = useState(false);
 
   useEffect(() => {
     fetchPlayers();
@@ -98,100 +109,30 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
     }
   };
 
-  const createNewCharacter = async () => {
-    if (!newCharacterName.trim()) {
-      toast.error('Veuillez entrer un nom pour votre personnage');
-      return;
-    }
+  // SUPPRESSION: ancien flux de création par simple nom
+  // const createNewCharacter = async () => { ... }
+
+  // AJOUT: création depuis le payload exporté par le wizard
+  const handleCreatorComplete = async (payload: CharacterExportPayload) => {
     if (creating) return;
-
-    setCreating(true);
-    setDebugInfo((prev) => prev + `\n🚀 TENTATIVE DE CRÉATION: "${newCharacterName}"\n`);
-
     try {
-      if (!session || !session.user?.id) {
-        throw new Error('Session invalide - veuillez vous reconnecter');
-      }
-
-      const { data: authData, error: userError } = await supabase.auth.getUser();
-      if (userError || !authData?.user) {
-        throw new Error('Utilisateur non authentifié - veuillez vous reconnecter');
-      }
-
-      try {
-        const { data: playerId, error: rpcError } = await supabase.rpc('create_player_with_defaults', {
-          p_user_id: authData.user.id,
-          p_name: newCharacterName.trim(),
-          p_adventurer_name: newCharacterName.trim(),
-        });
-        if (rpcError) {
-          setDebugInfo((prev) => prev + `❌ Erreur RPC: ${rpcError.message}\n`);
-          throw rpcError;
-        }
-
-        const { data: newPlayer, error: fetchError } = await supabase
-          .from('players')
-          .select('*')
-          .eq('id', playerId)
-          .single();
-        if (fetchError) {
-          setDebugInfo((prev) => prev + `❌ Erreur récupération: ${fetchError.message}\n`);
-          throw fetchError;
-        }
-
-        setPlayers((prev) => [...prev, newPlayer]);
-        setNewCharacterName('');
-        setShowCreateForm(false);
-        setDebugInfo((prev) => prev + `🎉 SUCCÈS: Personnage créé avec RPC!\n`);
-        toast.success('Nouveau personnage créé !');
-        return;
-      } catch (rpcError: any) {
-        setDebugInfo((prev) => prev + `🔄 Tentative alternative RPC...\n`);
-        const { data: playerId2, error: rpcError2 } = await supabase.rpc('create_player_with_defaults', {
-          p_user_id: authData.user.id,
-          p_name: newCharacterName.trim(),
-          p_adventurer_name: newCharacterName.trim(),
-        });
-        if (rpcError2) {
-          setDebugInfo(
-            (prev) =>
-              prev +
-              `❌ Erreur alternative RPC: ${rpcError2.message} (Code: ${rpcError2.code || 'NA'})\n`
-          );
-          throw rpcError2;
-        }
-        const { data: newPlayer2, error: fetchError2 } = await supabase
-          .from('players')
-          .select('*')
-          .eq('id', playerId2)
-          .single();
-        if (fetchError2) {
-          setDebugInfo((prev) => prev + `❌ Erreur récupération: ${fetchError2.message}\n`);
-          throw fetchError2;
-        }
-        setPlayers((prev) => [...prev, newPlayer2]);
-        setNewCharacterName('');
-        setShowCreateForm(false);
-        setDebugInfo((prev) => prev + `🎉 SUCCÈS: Personnage créé (RPC alt)!\n`);
-        toast.success('Nouveau personnage créé !');
-      }
+      setCreating(true);
+      setDebugInfo((prev) => prev + `\n🚀 Création via assistant: "${payload.characterName}"\n`);
+      const newPlayer = await createCharacterFromCreatorPayload(session, payload);
+      setPlayers((prev) => [...prev, newPlayer]);
+      toast.success('Nouveau personnage créé !');
+      setShowCreator(false);
+      // Ouvrir directement le personnage
+      onCharacterSelect(newPlayer);
     } catch (error: any) {
-      setDebugInfo((prev) => prev + `💥 ÉCHEC TOTAL: ${error.message}\n`);
-      console.error('Erreur lors de la création du personnage:', error);
-
+      console.error('Erreur création via assistant:', error);
+      setDebugInfo((prev) => prev + `💥 ÉCHEC assistant: ${error.message}\n`);
       if (error.message?.includes('Session invalide') || error.message?.includes('non authentifié')) {
         toast.error('Session expirée. Veuillez vous reconnecter.');
         await supabase.auth.signOut();
-      } else if (error.code === 'PGRST202') {
-        toast.error('Fonction de création non disponible. Réessayez plus tard.');
-      } else if (error.code === '23505' || error.message?.includes('duplicate key')) {
-        toast.error('Un personnage existe déjà avec ces paramètres.');
-      } else if (error.code === '42501' || error.message?.includes('policy')) {
-        toast.error('Problème de permissions. Reconnectez-vous et réessayez.');
       } else {
-        toast.error('Impossible de créer le personnage. Veuillez contacter le support.');
+        toast.error("Impossible de créer le personnage depuis l'assistant.");
       }
-
       setShowDebug(true);
     } finally {
       setCreating(false);
@@ -399,7 +340,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Pour confirmer, tapez exactement :{' '}
+                      Pour confirmer, tapez exactement:{' '}
                       <span className="text-red-400 font-bold">Supprime</span>
                     </label>
                     <input
@@ -442,7 +383,8 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                 const maxHp = Math.max(0, Number(player.max_hp || 0));
                 const currHp = Math.max(0, Number(player.current_hp || 0));
                 const tempHp = Math.max(0, Number(player.temporary_hp || 0));
-                const ratio = maxHp > 0 ? Math.min(100, Math.max(0, ((currHp + tempHp) / maxHp) * 100)) : 0;
+                const ratio =
+                  maxHp > 0 ? Math.min(100, Math.max(0, ((currHp + tempHp) / maxHp) * 100)) : 0;
 
                 return (
                   <div
@@ -520,12 +462,12 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                 );
               })}
 
-              {/* Create New Character Card */}
+              {/* Create New Character Card -> Ouvre le wizard */}
               <div
-                onClick={() => setShowCreateForm(true)}
+                onClick={() => setShowCreator(true)}
                 className="w-full max-w-sm cursor-pointer hover:scale-[1.02] transition-all duration-200 bg-slate-800/40 backdrop-blur-sm border-dashed border-2 border-slate-600/50 hover:border-green-500/60 rounded-xl"
               >
-                <div className="p-6 flex items-center justify-center gap-6 min-h-[140px]">
+                <div className="p-6 flex items-center justify-center gap-6 min-h:[140px]">
                   <div className="w-16 h-16 bg-green-400/20 rounded-full flex items-center justify-center">
                     <Plus className="w-8 h-8 text-green-500" />
                   </div>
@@ -540,70 +482,8 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
             </div>
           </div>
 
-          {/* Create Character Modal */}
-          {showCreateForm && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-              <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-gray-100">Créer un nouveau personnage</h3>
-                  <button
-                    onClick={() => {
-                      setShowCreateForm(false);
-                      setNewCharacterName('');
-                    }}
-                    className="p-2 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 rounded-lg transition"
-                    aria-label="Fermer"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Nom du personnage
-                    </label>
-                    <input
-                      type="text"
-                      value={newCharacterName}
-                      onChange={(e) => setNewCharacterName(e.target.value)}
-                      className="input-dark w-full px-3 py-2 rounded-md"
-                      placeholder="Entrez le nom de votre personnage"
-                      autoFocus
-                      disabled={creating}
-                    />
-                  </div>
-
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      onClick={createNewCharacter}
-                      disabled={creating || !newCharacterName.trim()}
-                      className="btn-primary flex-1 px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                      {creating ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          Création...
-                        </>
-                      ) : (
-                        'Créer'
-                      )}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowCreateForm(false);
-                        setNewCharacterName('');
-                      }}
-                      disabled={creating}
-                      className="btn-secondary px-4 py-2 rounded-lg disabled:opacity-50"
-                    >
-                      Annuler
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* SUPPRIMÉ: ancien "Create Character Modal" basé sur un simple nom */}
+          {/* {showCreateForm && ( ... )} */}
         </div>
       </div>
 
@@ -619,6 +499,13 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
           </button>
         </div>
       </div>
+
+      {/* AJOUT: Modal qui héberge le wizard du Character Creator */}
+      <CharacterCreatorModal
+        open={showCreator}
+        onClose={() => setShowCreator(false)}
+        onComplete={handleCreatorComplete}
+      />
     </div>
   );
 }
