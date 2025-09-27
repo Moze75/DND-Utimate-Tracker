@@ -278,9 +278,6 @@ export function PlayerProfileSettingsModal({
   const [characterHistory, setCharacterHistory] = useState(player.character_history || '');
   const [level, setLevel] = useState(player.level);
   const [hitDice, setHitDice] = useState(player.hit_dice || { total: player.level, used: 0 });
-  const [maxHp, setMaxHp] = useState(player.max_hp);
-  const [currentHp, setCurrentHp] = useState(player.current_hp);
-  const [tempHp, setTempHp] = useState(player.temporary_hp);
 
   // champs d'édition permissifs
   const [acField, setAcField] = useState<string>('');
@@ -321,9 +318,6 @@ export function PlayerProfileSettingsModal({
     setDirty(false);
 
     setLevel(player.level);
-    setMaxHp(player.max_hp);
-    setCurrentHp(player.current_hp);
-    setTempHp(player.temporary_hp);
     setHitDice(player.hit_dice || { total: player.level, used: 0 });
 
     setAdventurerName(player.adventurer_name || '');
@@ -522,12 +516,6 @@ export function PlayerProfileSettingsModal({
         background: (selectedBackground as string) || null,
         alignment: selectedAlignment || null,
         languages: selectedLanguages,
-        max_hp: maxHp,
-        current_hp: Math.max(0, Math.min(maxHp, currentHp)),
-        temporary_hp: Math.max(0, tempHp),
-        age: age.trim() || null,
-        gender: gender.trim() || null,
-        character_history: characterHistory.trim() || null,
         level: level,
         hit_dice: {
           total: level,
@@ -773,150 +761,52 @@ export function PlayerProfileSettingsModal({
             </div>
           </div>
 
-          {/* Points de vie et Dés de vie (replié par défaut) */}
-          <CollapsibleCard title="Points de vie et Dés de vie" defaultCollapsed>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">PV max</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={maxHp}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value, 10);
-                      if (!isNaN(v)) {
-                        setMaxHp(Math.max(1, v));
-                        setDirty(true);
-                      }
-                    }}
-                    onBlur={() => {
-                      // Clamp current HP si dépasse PV max
-                      if (currentHp > maxHp) {
-                        setCurrentHp(maxHp);
-                        setDirty(true);
-                      }
-                    }}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                    placeholder="PV maximum"
-                  />
-                </div>
+          {/* Dés de vie (replié par défaut) */}
+          <CollapsibleCard title="Dés de vie" defaultCollapsed>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
+                  onClick={() => {
+                    // Consommer un dé de vie => used + 1 si restants > 0
+                    setHitDice((prev) => {
+                      const used = Math.max(0, Math.min((prev?.used ?? 0) + 1, level));
+                      return { total: level, used };
+                    });
+                    setDirty(true);
+                  }}
+                  aria-label="Consommer un dé de vie"
+                  title="Consommer un dé de vie"
+                >
+                  −
+                </button>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">PV actuels</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={currentHp}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value, 10);
-                      if (!isNaN(v)) {
-                        setCurrentHp(v);
-                        setDirty(true);
+                <span className="text-gray-200 font-medium tabular-nums">
+                  {Math.max(0, level - (hitDice?.used ?? 0))} / {level}
+                </span>
+
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
+                  onClick={() => {
+                    // Ajouter un dé de vie (réduire used) => used - 1 si restants < total
+                    setHitDice((prev) => {
+                      const remaining = Math.max(0, level - (prev?.used ?? 0));
+                      // si restants < total => on peut "ajouter" (donc used--)
+                      if (remaining < level) {
+                        const used = Math.max(0, Math.min((prev?.used ?? 0) - 1, level));
+                        return { total: level, used };
                       }
-                    }}
-                    onBlur={() => {
-                      const clamped = Math.max(0, Math.min(maxHp, currentHp));
-                      if (clamped !== currentHp) {
-                        setCurrentHp(clamped);
-                        setDirty(true);
-                      }
-                    }}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                    placeholder="PV actuels"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">PV temporaires</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={tempHp}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value, 10);
-                      if (!isNaN(v)) {
-                        setTempHp(Math.max(0, v));
-                        setDirty(true);
-                      }
-                    }}
-                    className="input-dark w-full px-3 py-2 rounded-md"
-                    placeholder="PV temporaires"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Dés de vie (total)</label>
-                  <input
-                    type="number"
-                    value={level}
-                    readOnly
-                    className="input-dark w-full px-3 py-2 rounded-md bg-gray-800/50 text-gray-400 cursor-not-allowed"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">Égal au niveau</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Dés de vie utilisés</label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="px-2 py-2 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
-                      onClick={() => {
-                        setHitDice((prev) => {
-                          const used = Math.max(0, Math.min((prev?.used ?? 0) - 1, level));
-                          return { total: level, used };
-                        });
-                        setDirty(true);
-                      }}
-                      aria-label="Décrémenter dés de vie utilisés"
-                    >
-                      −
-                    </button>
-                    <input
-                      type="number"
-                      min={0}
-                      max={level}
-                      value={hitDice?.used ?? 0}
-                      onChange={(e) => {
-                        const v = parseInt(e.target.value, 10);
-                        if (!isNaN(v)) {
-                          const used = Math.max(0, Math.min(v, level));
-                          setHitDice({ total: level, used });
-                          setDirty(true);
-                        }
-                      }}
-                      className="input-dark w-full px-3 py-2 rounded-md"
-                      placeholder="0"
-                    />
-                    <button
-                      type="button"
-                      className="px-2 py-2 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
-                      onClick={() => {
-                        setHitDice((prev) => {
-                          const used = Math.max(0, Math.min((prev?.used ?? 0) + 1, level));
-                          return { total: level, used };
-                        });
-                        setDirty(true);
-                      }}
-                      aria-label="Incrémenter dés de vie utilisés"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Dés de vie restants</label>
-                  <input
-                    type="text"
-                    value={`${Math.max(0, level - (hitDice?.used ?? 0))} / ${level}`}
-                    readOnly
-                    className="input-dark w-full px-3 py-2 rounded-md bg-gray-800/50 text-gray-400 cursor-not-allowed"
-                  />
-                </div>
+                      return { total: level, used: Math.max(0, Math.min(prev?.used ?? 0, level)) };
+                    });
+                    setDirty(true);
+                  }}
+                  aria-label="Ajouter un dé de vie"
+                  title="Ajouter un dé de vie"
+                >
+                  +
+                </button>
               </div>
             </div>
           </CollapsibleCard>
