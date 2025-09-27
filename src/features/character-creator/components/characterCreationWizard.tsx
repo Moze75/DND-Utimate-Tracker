@@ -14,18 +14,7 @@ import { calculateArmorClass, calculateHitPoints, calculateModifier } from '../u
 import { races } from '../data/races';
 import { classes } from '../data/classes';
 import { backgrounds } from '../data/backgrounds';
-import { CharacterExportPayload } from '../../../types/characterCreator';
-
-/* ===========================================================
-   Utilitaires
-   =========================================================== */
-
-// Convertit ft -> m en arrondissant au 0,5 m (30 ft → 9 m)
-const feetToMeters = (ft?: number) => {
-  const n = Number(ft);
-  if (!Number.isFinite(n)) return 9; // fallback raisonnable
-  return Math.round(n * 0.3048 * 2) / 2;
-};
+import { CharacterExportPayload } from '../../../types/CharacterExport';
 
 /* ===========================================================
    Étapes
@@ -37,6 +26,36 @@ type WizardProps = {
   onFinish: (payload: CharacterExportPayload) => void;
   onCancel: () => void;
 };
+
+/* ===========================================================
+   Helpers
+   =========================================================== */
+
+function getHitDieForClass(cls?: string): 'd6' | 'd8' | 'd10' | 'd12' {
+  switch (cls) {
+    case 'Barbare':
+      return 'd12';
+    case 'Guerrier':
+    case 'Paladin':
+    case 'Rôdeur':
+      return 'd10';
+    case 'Barde':
+    case 'Clerc':
+    case 'Druide':
+    case 'Moine':
+    case 'Occultiste':
+    case 'Roublard':
+      return 'd8';
+    case 'Ensorceleur':
+    case 'Magicien':
+    default:
+      return 'd6';
+  }
+}
+
+/* ===========================================================
+   Composant principal
+   =========================================================== */
 
 export default function CharacterCreationWizard({ onFinish, onCancel }: WizardProps) {
   // Étape courante
@@ -56,12 +75,12 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
 
   // Caractéristiques (base) et “effectives” (base + historique)
   const [abilities, setAbilities] = useState<Record<string, number>>({
-    'Force': 8,
-    'Dextérité': 8,
-    'Constitution': 8,
-    'Intelligence': 8,
-    'Sagesse': 8,
-    'Charisme': 8,
+    Force: 8,
+    Dextérité: 8,
+    Constitution: 8,
+    Intelligence: 8,
+    Sagesse: 8,
+    Charisme: 8,
   });
   const [effectiveAbilities, setEffectiveAbilities] = useState<Record<string, number>>(abilities);
 
@@ -93,7 +112,7 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
     const raceData = races.find((r) => r.name === selectedRace);
     const classData = classes.find((c) => c.name === selectedClass);
 
-    // Partir des “abilities effectives” (base + historique) calculées dans AbilityScores
+    // Partir des “abilities effectives” (base + historique)
     const finalAbilities = { ...effectiveAbilities };
 
     // Appliquer les bonus raciaux si présents
@@ -110,24 +129,33 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
     const armorClass = calculateArmorClass(finalAbilities['Dextérité'] || 10);
     const initiative = calculateModifier(finalAbilities['Dextérité'] || 10);
 
-    // Vitesse (conserve les ft pour cohérence payload; conversion dispo si besoin UI)
+    // Vitesse: on reste en pieds (service convertira en mètres)
     const speedFeet = raceData?.speed || 30;
-    // const speedMeters = feetToMeters(speedFeet);
 
     // Équipement d’historique selon Option A/B
     const bgEquip =
       backgroundEquipmentOption === 'A'
         ? selectedBackgroundObj?.equipmentOptions?.optionA ?? []
         : backgroundEquipmentOption === 'B'
-          ? selectedBackgroundObj?.equipmentOptions?.optionB ?? []
-          : [];
+        ? selectedBackgroundObj?.equipmentOptions?.optionB ?? []
+        : [];
 
     // Maîtrises (classe + historique)
     const proficientSkills = Array.from(
       new Set([...(selectedClassSkills || []), ...((selectedBackgroundObj?.skillProficiencies ?? []))])
     );
 
-    // Payload minimal et robuste (l’insertion DB se fait dans CharacterSelectionPage)
+    // Champs optionnels (si vos datasets les exposent)
+    const backgroundFeat = (selectedBackgroundObj as any)?.feat as string | undefined;
+    const gold = (selectedBackgroundObj as any)?.startingGold ?? (classData as any)?.startingGold;
+
+    // Dés de vie (total = niveau, 0 utilisé)
+    const hitDice = {
+      die: getHitDieForClass(selectedClass as string),
+      total: 1,
+      used: 0,
+    };
+
     const payload: CharacterExportPayload = {
       characterName: characterName.trim(),
       selectedRace,
@@ -142,6 +170,9 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
       armorClass,
       initiative,
       speed: speedFeet,
+      backgroundFeat,
+      gold: typeof gold === 'number' ? gold : undefined,
+      hitDice,
     };
 
     onFinish(payload);
@@ -252,7 +283,7 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
   };
 
   /* ===========================================================
-     Layout général (identique à votre version)
+     Layout général (conservé)
      =========================================================== */
   return (
     <div className="min-h-screen bg-fantasy relative">
