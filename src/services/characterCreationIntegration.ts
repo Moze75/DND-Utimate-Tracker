@@ -1,12 +1,9 @@
 import { supabase } from '../lib/supabase';
 import { Player } from '../types/dnd';
-import { CharacterExportPayload } from '../types/characterCreator';
+import { CharacterExportPayload } from '../types/CharacterExport';
 
-// Skills utilisés par StatsTab (orthographe/fr exacte)
-const SKILL_GROUPS: Record<
-  'Force' | 'Dextérité' | 'Constitution' | 'Intelligence' | 'Sagesse' | 'Charisme',
-  string[]
-> = {
+// Skills utilisés par StatsTab (orthographe FR)
+const SKILL_GROUPS: Record<'Force' | 'Dextérité' | 'Constitution' | 'Intelligence' | 'Sagesse' | 'Charisme', string[]> = {
   Force: ['Athlétisme'],
   Dextérité: ['Acrobaties', 'Discrétion', 'Escamotage'],
   Constitution: [],
@@ -15,7 +12,6 @@ const SKILL_GROUPS: Record<
   Charisme: ['Intimidation', 'Persuasion', 'Représentation', 'Tromperie'],
 };
 
-// Synonymes éventuels venant du creator -> noms canoniques StatsTab
 const SKILL_NAME_MAP: Record<string, string> = {
   Furtivité: 'Discrétion',
   Performance: 'Représentation',
@@ -44,22 +40,11 @@ function feetToMeters(ft?: number): number {
   return Math.round(n * 0.3048 * 2) / 2;
 }
 
-function buildAbilitiesForTracker(
-  finalAbilities: Record<string, number>,
-  proficientSkillsRaw: string[],
-  level: number
-) {
+function buildAbilitiesForTracker(finalAbilities: Record<string, number>, proficientSkillsRaw: string[], level: number) {
   const proficiency = getProficiencyBonusForLevel(level);
   const profSet = new Set(proficientSkillsRaw.map(normalizeSkillForTracker));
 
-  const ORDER: Array<keyof typeof finalAbilities> = [
-    'Force',
-    'Dextérité',
-    'Constitution',
-    'Intelligence',
-    'Sagesse',
-    'Charisme',
-  ];
+  const ORDER: Array<keyof typeof finalAbilities> = ['Force', 'Dextérité', 'Constitution', 'Intelligence', 'Sagesse', 'Charisme'];
 
   return ORDER.map((abilityName) => {
     const score = Number(finalAbilities[abilityName] ?? 10);
@@ -75,13 +60,7 @@ function buildAbilitiesForTracker(
 
     const savingThrow = modifier;
 
-    return {
-      name: abilityName,
-      score,
-      modifier,
-      savingThrow,
-      skills: skillsDetails,
-    };
+    return { name: abilityName, score, modifier, savingThrow, skills: skillsDetails };
   });
 }
 
@@ -91,7 +70,7 @@ export async function createCharacterFromCreatorPayload(
 ): Promise<Player> {
   if (!session?.user?.id) throw new Error('Session invalide');
 
-  // 1) Créer une ligne de base via la RPC existante (retourne l'id)
+  // 1) Création de base (retourne l'id)
   const { data: playerId, error: rpcError } = await supabase.rpc('create_player_with_defaults', {
     p_user_id: session.user.id,
     p_name: payload.characterName,
@@ -99,44 +78,43 @@ export async function createCharacterFromCreatorPayload(
   });
   if (rpcError) throw rpcError;
 
-  // 2) Construire abilities (array) + stats (json) + champs simples
+  // 2) Construction des données
   const level = Math.max(1, payload.level ?? 1);
   const proficiency_bonus = getProficiencyBonusForLevel(level);
 
-  const abilitiesArray = buildAbilitiesForTracker(
-    payload.finalAbilities || {},
-    payload.proficientSkills || [],
-    level
-  );
+  const abilitiesArray = buildAbilitiesForTracker(payload.finalAbilities || {}, payload.proficientSkills || [], level);
 
-  // Feats (don d'historique) + monnaie initiale
+  // Don d’historique → feats.origins/origin (compat PlayerProfileSettingsModal)
   const feats: any = {
     origins: payload.backgroundFeat ? [payload.backgroundFeat] : [],
   };
-  if (feats.origins.length > 0) {
-    feats.origin = feats.origins[0]; // rétrocompat pour PlayerProfileSettingsModal
-  }
+  if (feats.origins.length > 0) feats.origin = feats.origins[0];
 
-  const coins = {
-    gp: Number(payload.gold ?? 0) || 0,
-    sp: 0,
-    cp: 0,
-  };
+  // Argent: ton UI lit player.gold/silver/copper dans EquipmentTab
+  // On initialise top-level gold et, pour compat future, stats.coins.gp aussi.
+  const initialGold =
+    typeof payload.gold === 'number'
+      ? Math.max(0, payload.gold)
+      : payload.selectedBackgroundEquipmentOption === 'A'
+      ? 50
+      : payload.selectedBackgroundEquipmentOption === 'B'
+      ? 15
+      : 0;
+
+  const coins = { gp: initialGold, sp: 0, cp: 0 };
 
   const stats = {
     armor_class: payload.armorClass ?? 10,
-    initiative:
-      payload.initiative ??
-      getModifier((payload.finalAbilities || {})['Dextérité'] ?? 10),
-    speed: feetToMeters(payload.speed ?? 30), // en mètres
+    initiative: payload.initiative ?? getModifier((payload.finalAbilities || {})['Dextérité'] ?? 10),
+    speed: feetToMeters(payload.speed ?? 30), // mètres (SettingsModal)
     proficiency_bonus,
     inspirations: 0,
     feats,
-    coins,
-    gold: coins.gp, // compat si un ancien composant lit stats.gold
+    coins, // compat (non utilisé par EquipmentTab aujourd’hui)
+    gold: initialGold, // compat éventuelle si lu dans stats.gold
   };
 
-  // 3) Mise à jour minimale et robuste sur des colonnes existantes
+  // 3) Update robuste sur des colonnes existantes
   const { error: updError } = await supabase
     .from('players')
     .update({
@@ -146,16 +124,21 @@ export async function createCharacterFromCreatorPayload(
       background: payload.selectedBackground || null,
       max_hp: payload.hitPoints,
       current_hp: payload.hitPoints,
-      abilities: abilitiesArray, // JSONB tableau attendu par StatsTab
-      stats,                     // JSONB objet attendu par Settings/Equipment tabs
+      abilities: abilitiesArray,
+      stats,
       hit_dice: payload.hitDice
         ? { total: payload.hitDice.total, used: payload.hitDice.used, die: payload.hitDice.die }
-        : { total: level, used: 0 }, // rétrocompat
+        : { total: level, used: 0 },
+
+      // Argent top-level (utilisé par EquipmentTab)
+      gold: initialGold,
+      silver: 0,
+      copper: 0,
     })
     .eq('id', playerId);
   if (updError) throw updError;
 
-  // 4) Récupérer et retourner le player créé (avec toutes les données)
+  // 4) Retourne le player complet
   const { data: newPlayer, error: fetchError } = await supabase
     .from('players')
     .select('*')
