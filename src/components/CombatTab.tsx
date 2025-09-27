@@ -694,15 +694,6 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
               <p className={`text-sm font-medium ${getWoundColor()}`}>{getWoundLevel()}</p>
             </div>
           </div>
-          <button
-            onClick={() => {
-              setNewMaxHp(player.max_hp.toString());
-              setShowMaxHpModal(true);
-            }}
-            className="p-2 text-gray-400 hover:text-gray-300 hover:bg-gray-700/50 rounded-lg transition-colors flex items-center justify-center"
-          >
-            <Settings size={20} />
-          </button>
         </div>
         <div className="p-4">
           <div className="space-y-4">
