@@ -279,6 +279,8 @@ export function PlayerProfileSettingsModal({
   const [level, setLevel] = useState(player.level);
   const [hitDice, setHitDice] = useState(player.hit_dice || { total: player.level, used: 0 });
   const [maxHp, setMaxHp] = useState(player.max_hp);
+  const [currentHp, setCurrentHp] = useState(player.current_hp);
+  const [tempHp, setTempHp] = useState(player.temporary_hp);
 
   // champs d'édition permissifs
   const [acField, setAcField] = useState<string>('');
@@ -320,6 +322,8 @@ export function PlayerProfileSettingsModal({
 
     setLevel(player.level);
     setMaxHp(player.max_hp);
+    setCurrentHp(player.current_hp);
+    setTempHp(player.temporary_hp);
     setHitDice(player.hit_dice || { total: player.level, used: 0 });
 
     setAdventurerName(player.adventurer_name || '');
@@ -519,6 +523,11 @@ export function PlayerProfileSettingsModal({
         alignment: selectedAlignment || null,
         languages: selectedLanguages,
         max_hp: Math.max(1, maxHp),
+        current_hp: Math.max(0, Math.min(maxHp, currentHp)),
+        temporary_hp: Math.max(0, tempHp),
+        age: age.trim() || null,
+        gender: gender.trim() || null,
+        character_history: characterHistory.trim() || null,
         level: level,
         hit_dice: {
           total: level,
@@ -766,10 +775,10 @@ export function PlayerProfileSettingsModal({
 
           {/* PV max et Dés de vie (replié par défaut) */}
           <CollapsibleCard title="PV max et Dés de vie" defaultCollapsed>
-            <div className="flex items-center justify-between gap-4">
-              {/* PV max */}
+            <div className="space-y-3">
+              {/* Ligne 1: PV max */}
               <div className="flex items-center gap-3">
-                <label className="block text-sm font-medium text-gray-300">PV max</label>
+                <label className="block text-sm font-medium text-gray-300 min-w-[70px]">PV max</label>
                 <input
                   type="number"
                   min={1}
@@ -786,9 +795,9 @@ export function PlayerProfileSettingsModal({
                 />
               </div>
 
-              {/* Dés de vie sur 1 ligne */}
+              {/* Ligne 2: Dés de vie (sur 1 seule ligne) */}
               <div className="flex items-center gap-3">
-                <label className="block text-sm font-medium text-gray-300">Dés de vie</label>
+                <label className="block text-sm font-medium text-gray-300 min-w-[70px]">Dés de vie</label>
                 <button
                   type="button"
                   className="px-3 py-2 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
@@ -814,7 +823,7 @@ export function PlayerProfileSettingsModal({
                   type="button"
                   className="px-3 py-2 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
                   onClick={() => {
-                    // Ajouter un dé de vie (rendre) => used - 1
+                    // Rendre un dé de vie => used - 1
                     setHitDice((prev) => {
                       const used = Math.max(0, Math.min((prev?.used ?? 0) - 1, level));
                       return { total: level, used };
