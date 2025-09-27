@@ -278,6 +278,7 @@ export function PlayerProfileSettingsModal({
   const [characterHistory, setCharacterHistory] = useState(player.character_history || '');
   const [level, setLevel] = useState(player.level);
   const [hitDice, setHitDice] = useState(player.hit_dice || { total: player.level, used: 0 });
+  const [maxHp, setMaxHp] = useState(player.max_hp);
 
   // champs d'édition permissifs
   const [acField, setAcField] = useState<string>('');
@@ -318,6 +319,7 @@ export function PlayerProfileSettingsModal({
     setDirty(false);
 
     setLevel(player.level);
+    setMaxHp(player.max_hp);
     setHitDice(player.hit_dice || { total: player.level, used: 0 });
 
     setAdventurerName(player.adventurer_name || '');
@@ -516,6 +518,7 @@ export function PlayerProfileSettingsModal({
         background: (selectedBackground as string) || null,
         alignment: selectedAlignment || null,
         languages: selectedLanguages,
+        max_hp: Math.max(1, maxHp),
         level: level,
         hit_dice: {
           total: level,
@@ -761,15 +764,36 @@ export function PlayerProfileSettingsModal({
             </div>
           </div>
 
-          {/* Dés de vie (replié par défaut) */}
-          <CollapsibleCard title="Dés de vie" defaultCollapsed>
-            <div className="flex items-center justify-between">
+          {/* PV max et Dés de vie (replié par défaut) */}
+          <CollapsibleCard title="PV max et Dés de vie" defaultCollapsed>
+            <div className="flex items-center justify-between gap-4">
+              {/* PV max */}
               <div className="flex items-center gap-3">
+                <label className="block text-sm font-medium text-gray-300">PV max</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={maxHp}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!isNaN(v)) {
+                      setMaxHp(Math.max(1, v));
+                      setDirty(true);
+                    }
+                  }}
+                  className="input-dark w-28 px-3 py-2 rounded-md"
+                  placeholder="PV max"
+                />
+              </div>
+
+              {/* Dés de vie sur 1 ligne */}
+              <div className="flex items-center gap-3">
+                <label className="block text-sm font-medium text-gray-300">Dés de vie</label>
                 <button
                   type="button"
                   className="px-3 py-2 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
                   onClick={() => {
-                    // Consommer un dé de vie => used + 1 si restants > 0
+                    // Consommer un dé de vie => used + 1
                     setHitDice((prev) => {
                       const used = Math.max(0, Math.min((prev?.used ?? 0) + 1, level));
                       return { total: level, used };
@@ -790,15 +814,10 @@ export function PlayerProfileSettingsModal({
                   type="button"
                   className="px-3 py-2 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
                   onClick={() => {
-                    // Ajouter un dé de vie (réduire used) => used - 1 si restants < total
+                    // Ajouter un dé de vie (rendre) => used - 1
                     setHitDice((prev) => {
-                      const remaining = Math.max(0, level - (prev?.used ?? 0));
-                      // si restants < total => on peut "ajouter" (donc used--)
-                      if (remaining < level) {
-                        const used = Math.max(0, Math.min((prev?.used ?? 0) - 1, level));
-                        return { total: level, used };
-                      }
-                      return { total: level, used: Math.max(0, Math.min(prev?.used ?? 0, level)) };
+                      const used = Math.max(0, Math.min((prev?.used ?? 0) - 1, level));
+                      return { total: level, used };
                     });
                     setDirty(true);
                   }}
