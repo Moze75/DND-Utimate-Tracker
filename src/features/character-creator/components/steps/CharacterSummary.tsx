@@ -1,426 +1,173 @@
-import React, { useState, useMemo } from 'react';
-import Button from '../ui/Button';
-import Card, { CardContent, CardHeader } from '../ui/Card';
-import Input from '../ui/Input';
-import { calculateHitPoints, calculateArmorClass, calculateModifier } from '../../utils/dndCalculations';
+import React, { useState } from 'react';
 import { races } from '../../data/races';
-import { classes } from '../../data/classes';
-import { backgrounds } from '../../data/backgrounds';
-import { DndClass } from '../../types/character';
-import { User, Heart, Shield, Zap, Users, BookOpen, Package, Scroll, Star } from 'lucide-react';
+import Card, { CardContent, CardHeader } from '../ui/Card';
+import Button from '../ui/Button';
+import { Users, Zap, Shield, Star, ChevronDown, Eye, Heart } from 'lucide-react';
 
-interface CharacterSummaryProps {
-  characterName: string;
-  onCharacterNameChange: (name: string) => void;
+interface RaceSelectionProps {
   selectedRace: string;
-  selectedClass: DndClass;
-  selectedBackground: string;
-  abilities: Record<string, number>;
-  onFinish: () => void;
-  onPrevious: () => void;
-
-  // Optionnel: compétences choisies dans ClassSelection (si vous avez branché cette étape)
-  selectedClassSkills?: string[];
-
-  // Optionnel: si vous avez ajouté la sélection A/B d'équipement d'historique
-  selectedBackgroundEquipmentOption?: 'A' | 'B' | '';
+  onRaceSelect: (race: string) => void;
+  onNext: () => void;
 }
 
-// Liste canonique des compétences (FR)
-const ALL_SKILLS = [
-  'Acrobaties',
-  'Athlétisme',
-  'Arcanes',
-  'Histoire',
-  'Intuition',
-  'Investigation',
-  'Médecine',
-  'Nature',
-  'Perception',
-  'Représentation',
-  'Persuasion',
-  'Tromperie',
-  'Intimidation',
-  'Escamotage',
-  'Discrétion',
-  'Survie',
-  'Dressage',
-  'Religion',
-] as const;
+export default function RaceSelection({ selectedRace, onRaceSelect, onNext }: RaceSelectionProps) {
+  const [expanded, setExpanded] = useState<string | null>(null);
 
-type SkillName = typeof ALL_SKILLS[number];
-
-// Synonymes -> Canonique pour le calcul
-const SKILL_SYNONYMS: Record<string, SkillName> = {
-  'Furtivité': 'Discrétion',
-  'Perspicacité': 'Intuition',
-  'Performance': 'Représentation',
-};
-
-function normalizeSkill(name: string): SkillName | string {
-  const direct = ALL_SKILLS.find((s) => s.toLowerCase() === name.toLowerCase());
-  if (direct) return direct;
-  const synKey = Object.keys(SKILL_SYNONYMS).find((k) => k.toLowerCase() === name.toLowerCase());
-  if (synKey) return SKILL_SYNONYMS[synKey];
-  return name; // si inconnu, on le laisse tel quel
-}
-
-// Map compétence -> caractéristique
-const SKILL_ABILITY_MAP: Record<SkillName, keyof Record<string, number>> = {
-  'Acrobaties': 'Dextérité',
-  'Athlétisme': 'Force',
-  'Arcanes': 'Intelligence',
-  'Histoire': 'Intelligence',
-  'Intuition': 'Sagesse',
-  'Investigation': 'Intelligence',
-  'Médecine': 'Sagesse',
-  'Nature': 'Intelligence',
-  'Perception': 'Sagesse',
-  'Représentation': 'Charisme',
-  'Persuasion': 'Charisme',
-  'Tromperie': 'Charisme',
-  'Intimidation': 'Charisme',
-  'Escamotage': 'Dextérité',
-  'Discrétion': 'Dextérité',
-  'Survie': 'Sagesse',
-  'Dressage': 'Sagesse',
-  'Religion': 'Intelligence',
-};
-
-// Convertit ft -> m en arrondissant au 0,5 m (30 ft → 9 m)
-const feetToMeters = (ft?: number) => {
-  const n = Number(ft);
-  if (!Number.isFinite(n)) return 9; // fallback raisonnable
-  return Math.round(n * 0.3048 * 2) / 2;
-};
-
-export default function CharacterSummary({ 
-  characterName, 
-  onCharacterNameChange, 
-  selectedRace, 
-  selectedClass, 
-  selectedBackground, 
-  abilities, 
-  onFinish, 
-  onPrevious,
-  selectedClassSkills = [],
-  selectedBackgroundEquipmentOption = '',
-}: CharacterSummaryProps) {
-  const [nameError, setNameError] = useState('');
-
-  const raceData = races.find(r => r.name === selectedRace);
-  const classData = classes.find(c => c.name === selectedClass);
-  const backgroundData = backgrounds.find(b => b.name === selectedBackground);
-
-  // Caracs finales = base + bonus historique déjà appliqués en amont
-  // On ajoute ici les bonus raciaux
-  const finalAbilities = useMemo(() => {
-    const fa = { ...abilities };
-    if (raceData?.abilityScoreIncrease) {
-      Object.entries(raceData.abilityScoreIncrease).forEach(([ability, bonus]) => {
-        if (fa[ability] != null) fa[ability] += bonus;
-      });
-    }
-    return fa;
-  }, [abilities, raceData]);
-
-  const hitPoints = calculateHitPoints(finalAbilities['Constitution'] || 10, selectedClass);
-  const armorClass = calculateArmorClass(finalAbilities['Dextérité'] || 10);
-  const initiative = calculateModifier(finalAbilities['Dextérité'] || 10);
-
-  // Maîtrises: union des compétences de classe sélectionnées + de l'historique
-  const backgroundSkills = useMemo<string[]>(() => {
-    const arr = backgroundData?.skillProficiencies ?? [];
-    return Array.from(new Set(arr.map((s) => String(normalizeSkill(s)))));
-  }, [backgroundData]);
-
-  const proficientSet = useMemo<Set<string>>(() => {
-    const set = new Set<string>();
-    selectedClassSkills.forEach((s) => set.add(String(normalizeSkill(s))));
-    backgroundSkills.forEach((s) => set.add(String(normalizeSkill(s))));
-    return set;
-  }, [selectedClassSkills, backgroundSkills]);
-
-  const proficiencyBonus = 2; // niveau 1
-
-  // Équipement historique (si vous avez défini equipmentOptions dans backgrounds)
-  const bgEquip =
-    selectedBackgroundEquipmentOption === 'A'
-      ? backgroundData?.equipmentOptions?.optionA ?? []
-      : selectedBackgroundEquipmentOption === 'B'
-        ? backgroundData?.equipmentOptions?.optionB ?? []
-        : [];
-
-  const handleFinish = () => {
-    if (!characterName.trim()) {
-      setNameError('Le nom du personnage est requis');
-      return;
-    }
-    setNameError('');
-    onFinish();
+  // Conversion pieds -> mètres (les données sont déjà en pieds dans le nouveau système)
+  const feetToMeters = (ft?: number) => {
+    if (!ft && ft !== 0) return '';
+    return Math.round(ft * 0.3048 * 2) / 2;
   };
 
-  // Calcul du bonus de compétence
-  const getSkillBonus = (skillLabel: SkillName): number => {
-    const abilityKey = SKILL_ABILITY_MAP[skillLabel] || 'Dextérité';
-    const score = finalAbilities[abilityKey] ?? 10;
-    const mod = Math.floor((score - 10) / 2);
-    const proficient = proficientSet.has(skillLabel);
-    return mod + (proficient ? proficiencyBonus : 0);
+  const handleClick = (raceName: string) => {
+    onRaceSelect(raceName);
+    setExpanded((prev) => (prev === raceName ? null : raceName));
+  };
+
+  const getRaceIcon = (raceName: string) => {
+    if (raceName === 'Elfe' || raceName === 'Demi-Elfe') {
+      return <Star className="w-5 h-5 text-green-400" />;
+    }
+    if (raceName === 'Nain') {
+      return <Shield className="w-5 h-5 text-orange-400" />;
+    }
+    if (raceName === 'Halfelin') {
+      return <Heart className="w-5 h-5 text-yellow-400" />;
+    }
+    if (raceName === 'Drakéide') {
+      return <Zap className="w-5 h-5 text-red-400" />;
+    }
+    if (raceName === 'Gnome') {
+      return <Star className="w-5 h-5 text-purple-400" />;
+    }
+    if (raceName.includes('Orc')) {
+      return <Shield className="w-5 h-5 text-red-500" />;
+    }
+    if (raceName === 'Tieffelin') {
+      return <Zap className="w-5 h-5 text-purple-500" />;
+    }
+    if (raceName === 'Aasimar') {
+      return <Star className="w-5 h-5 text-blue-300" />;
+    }
+    if (raceName === 'Goliath') {
+      return <Shield className="w-5 h-5 text-gray-400" />;
+    }
+    if (raceName === 'Humain') {
+      return <Users className="w-5 h-5 text-blue-400" />;
+    }
+    return <Users className="w-5 h-5 text-gray-400" />;
+  };
+
+  const hasVisionInDark = (traits: string[]) => {
+    return traits.some(trait => trait.includes('Vision dans le noir'));
   };
 
   return (
     <div className="wizard-step space-y-6">
       <div className="text-center">
-        <h2 className="text-2xl font-bold text-white mb-2">Résumé de votre personnage</h2>
-        <p className="text-gray-400">Vérifiez les détails avant de créer votre personnage</p>
+        <h2 className="text-2xl font-bold text-white mb-2">Choisissez votre espèce</h2>
+        <p className="text-gray-400">Votre race détermine vos capacités innées et votre héritage</p>
       </div>
 
-      <div className="max-w-md mx-auto">
-        <Input
-          label="Nom du personnage"
-          value={characterName}
-          onChange={(e) => onCharacterNameChange(e.target.value)}
-          error={nameError}
-          placeholder="Entrez le nom de votre personnage"
-        />
-      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {races.map((race) => {
+          const isSelected = selectedRace === race.name;
+          const isExpanded = expanded === race.name;
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center">
-              <User className="w-5 h-5 text-blue-400 mr-2" />
-              <h3 className="text-lg font-semibold text-white">Informations de base</h3>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-gray-400">Race:</span>
-              <span className="text-white font-medium">{selectedRace}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Classe:</span>
-              <span className="text-white font-medium">{selectedClass}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Historique:</span>
-              <span className="text-white font-medium">{selectedBackground}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Niveau:</span>
-              <span className="text-white font-medium">1</span>
-            </div>
-            {/* Nouveau: Don d'historique */}
-            {backgroundData?.feat && (
-              <div className="flex justify-between items-center border-t border-gray-700/50 pt-3 mt-3">
-                <div className="flex items-center">
-                  <Scroll className="w-4 h-4 text-purple-400 mr-2" />
-                  <span className="text-gray-400">Don:</span>
-                </div>
-                <span className="text-purple-300 font-medium text-sm">{backgroundData.feat}</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center">
-              <Heart className="w-5 h-5 text-red-400 mr-2" />
-              <h3 className="text-lg font-semibold text-white">Statistiques de combat</h3>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-gray-400">Points de vie:</span>
-              <span className="text-white font-medium">{hitPoints}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Classe d'armure:</span>
-              <span className="text-white font-medium">{armorClass}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Initiative:</span>
-              <span className="text-white font-medium">
-                {initiative >= 0 ? '+' : ''}{initiative}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Vitesse:</span>
-              <span className="text-white font-medium">{feetToMeters(raceData?.speed || 30)} m</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center">
-            <Zap className="w-5 h-5 text-yellow-400 mr-2" />
-            <h3 className="text-lg font-semibold text-white">Caractéristiques</h3>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {Object.entries(finalAbilities || {}).map(([ability, score]) => (
-              <div key={ability} className="text-center">
-                <div className="ability-score">
-                  <div className="font-medium text-white text-sm">{ability}</div>
-                  <div className="text-2xl font-bold text-white">{score}</div>
-                  <div className="text-sm text-gray-400">
-                    {calculateModifier(score) >= 0 ? '+' : ''}{calculateModifier(score)}
+          return (
+            <Card
+              key={race.name}
+              selected={isSelected}
+              onClick={() => handleClick(race.name)}
+              className="h-full"
+            >
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-white">{race.name}</h3>
+                  <div className="flex items-center gap-2">
+                    {getRaceIcon(race.name)}
+                    <ChevronDown
+                      className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                    />
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Synthèse des compétences */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center">
-            <Star className="w-5 h-5 text-yellow-400 mr-2" />
-            <h3 className="text-lg font-semibold text-white">Compétences</h3>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="text-xs text-gray-400 mb-3">
-            Bonus de maîtrise: +{proficiencyBonus} | Maîtrises: classe + historique
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-2 gap-x-4">
-            {ALL_SKILLS.map((skill) => {
-              const bonus = getSkillBonus(skill);
-              const proficient = proficientSet.has(skill);
-              const sign = bonus >= 0 ? '+' : '';
-              return (
-                <div key={skill} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-300">
-                    {skill} {proficient && <span className="text-xs text-red-400">[M]</span>}
-                  </span>
-                  <span className="text-white font-medium">{sign}{bonus}</span>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-300 text-sm mb-3">{race.description}</p>
+                <div className="space-y-2">
+                  <div className="flex items-center text-sm text-gray-400">
+                    <Zap className="w-4 h-4 mr-2 text-yellow-400" />
+                    <span>Vitesse: {feetToMeters(race.speed)} m</span>
+                  </div>
+                  <div className="flex items-center text-sm text-gray-400">
+                    <Shield className="w-4 h-4 mr-2 text-blue-400" />
+                    <span>Taille: {race.size}</span>
+                  </div>
+                  {hasVisionInDark(race.traits) && (
+                    <div className="flex items-center text-sm text-gray-400">
+                      <Eye className="w-4 h-4 mr-2 text-purple-400" />
+                      <span>Vision dans le noir</span>
+                    </div>
+                  )}
+                  {race.languages && race.languages.length > 0 && (
+                    <div className="flex items-center text-sm text-gray-400">
+                      <Star className="w-4 h-4 mr-2 text-green-400" />
+                      <span>
+                        Langues: {race.languages.slice(0, 2).join(', ')}
+                        {race.languages.length > 2 ? '...' : ''}
+                      </span>
+                    </div>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Section Don d'historique */}
-      {backgroundData?.feat && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center">
-              <Scroll className="w-5 h-5 text-purple-400 mr-2" />
-              <h3 className="text-lg font-semibold text-white">Don d'historique</h3>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-400">Don acquis:</span>
-              <span className="text-white font-medium">{backgroundData.feat}</span>
-            </div>
-            <div className="text-xs text-gray-400 mt-2">
-              Accordé par l'historique {selectedBackground} - Voir chapitre 5 pour les détails
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                {isExpanded && (
+                  <div className="mt-4 border-t border-gray-700/50 pt-4 animate-fade-in">
+                    <div className="grid grid-cols-1 gap-4">
+                      <div>
+                        <h4 className="font-medium text-white mb-2">Langues</h4>
+                        <p className="text-gray-300 text-sm">
+                          {race.languages && race.languages.length > 0 ? race.languages.join(', ') : '—'}
+                        </p>
+                      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Traits raciaux + espèce */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <Users className="w-5 h-5 text-purple-400 mr-2" />
-                <h3 className="text-lg font-semibold text-white">Traits</h3>
-              </div>
-              <div className="text-xs text-gray-400">
-                Espèce: <span className="text-gray-200">{selectedRace}</span>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ul className="text-gray-300 text-sm space-y-1">
-              {raceData?.traits?.map((trait, index) => (
-                <li key={index}>• {trait}</li>
-              )) || <li className="text-gray-500">Aucun trait disponible</li>}
-            </ul>
-          </CardContent>
-        </Card>
+                      {race.proficiencies && race.proficiencies.length > 0 && (
+                        <div>
+                          <h4 className="font-medium text-white mb-2">Compétences</h4>
+                          <p className="text-gray-300 text-sm">
+                            {race.proficiencies.join(', ')}
+                          </p>
+                        </div>
+                      )}
 
-        {/* Capacités de classe + classe choisie */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <BookOpen className="w-5 h-5 text-green-400 mr-2" />
-                <h3 className="text-lg font-semibold text-white">Capacités de classe</h3>
-              </div>
-              <div className="text-xs text-gray-400">
-                Classe: <span className="text-gray-200">{selectedClass}</span>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ul className="text-gray-300 text-sm space-y-1">
-              {classData?.features?.map((feature, index) => (
-                <li key={index}>• {feature}</li>
-              )) || <li className="text-gray-500">Aucune capacité de classe disponible</li>}
-            </ul>
-          </CardContent>
-        </Card>
+                      {race.traits && race.traits.length > 0 && (
+                        <div>
+                          <h4 className="font-medium text-white mb-2">Traits raciaux</h4>
+                          <div className="max-h-32 overflow-y-auto">
+                            <ul className="text-gray-300 text-sm space-y-1">
+                              {race.traits.map((trait, index) => (
+                                <li key={index} className="leading-relaxed">• {trait}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
-      {/* Équipement de départ (classe + historique, si applicable) */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center">
-            <Package className="w-5 h-5 text-yellow-400 mr-2" />
-            <h3 className="text-lg font-semibold text-white">Équipement de départ</h3>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h4 className="font-medium text-white mb-2">De classe</h4>
-              <ul className="text-gray-300 text-sm space-y-1">
-                {classData?.equipment?.map((item, i) => (
-                  <li key={`class-eq-${i}`}>• {item}</li>
-                )) || <li className="text-gray-500">—</li>}
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-medium text-white mb-2">
-                D'historique {selectedBackgroundEquipmentOption ? `(Option ${selectedBackgroundEquipmentOption})` : ''}
-              </h4>
-              <ul className="text-gray-300 text-sm space-y-1">
-                {bgEquip.length > 0
-                  ? bgEquip.map((item, i) => <li key={`bg-eq-${i}`}>• {item}</li>)
-                  : <li className="text-gray-500">Aucune option sélectionnée</li>}
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex justify-between pt-6">
+      <div className="flex justify-center pt-6">
         <Button
-          onClick={onPrevious}
-          variant="secondary"
-          size="lg"
-        >
-          Précédent
-        </Button>
-        <Button
-          onClick={handleFinish}
+          onClick={onNext}
+          disabled={!selectedRace}
           size="lg"
           className="min-w-[200px]"
         >
-          Créer le personnage
+          Continuer
         </Button>
       </div>
     </div>
