@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { Player } from '../types/dnd';
@@ -12,15 +12,21 @@ import {
   AlertCircle,
   RefreshCw,
   Trash2,
-  X,
 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { authService } from '../services/authService';
 
-// AJOUTS: imports pour l'intégration du Character Creator
-import { CharacterCreatorModal } from '../components/CharacterCreatorModal';
+// Intégration Character Creator (wizard)
 import { CharacterExportPayload } from '../types/characterCreator';
 import { createCharacterFromCreatorPayload } from '../services/characterCreationIntegration';
+
+// Lazy import direct du wizard à son emplacement réel.
+// Gère export par défaut OU export nommé.
+const CharacterCreationWizard = React.lazy(() =>
+  import('../features/character-creator/components/characterCreationWizard').then((m: any) => ({
+    default: m.default ?? m.CharacterCreationWizard,
+  }))
+);
 
 interface CharacterSelectionPageProps {
   session: any;
@@ -32,21 +38,50 @@ const BG_URL =
   (import.meta as any)?.env?.VITE_SELECTION_BG_URL ||
   'https://yumzqyyogwzrmlcpvnky.supabase.co/storage/v1/object/public/static/tmpoofee5sh.png';
 
+type CreatorModalProps = {
+  open: boolean;
+  onClose: () => void;
+  onComplete: (payload: CharacterExportPayload) => void;
+};
+
+// Modal plein écran qui charge le wizard
+function CreatorModal({ open, onClose, onComplete }: CreatorModalProps) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center">
+      <div className="relative w-full h-full md:h-[92vh] md:w-[1100px] bg-gray-900 border border-gray-800 rounded-none md:rounded-xl overflow-hidden">
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 z-10 bg-gray-800/80 hover:bg-gray-700 text-white px-3 py-1 rounded"
+          aria-label="Fermer"
+        >
+          Fermer
+        </button>
+        <div className="w-full h-full">
+          <Suspense
+            fallback={
+              <div className="w-full h-full flex items-center justify-center text-gray-300">
+                Chargement de l’assistant de création...
+              </div>
+            }
+          >
+            {/* Adapte les props à celles du wizard: onFinish(payload) + onCancel */}
+            <CharacterCreationWizard onFinish={onComplete} onCancel={onClose} />
+          </Suspense>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CharacterSelectionPage({ session, onCharacterSelect }: CharacterSelectionPageProps) {
   const [loading, setLoading] = useState(true);
   const [players, setPlayers] = useState<Player[]>([]);
-
-  // SUPPRESSION de l'ancien flux "nom simple" et REMPLACEMENT par le wizard
-  // const [showCreateForm, setShowCreateForm] = useState(false);
-  // const [newCharacterName, setNewCharacterName] = useState('');
-
   const [creating, setCreating] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [showDebug, setShowDebug] = useState(false);
   const [deletingCharacter, setDeletingCharacter] = useState<Player | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
-
-  // AJOUT: état pour afficher le wizard Character Creator
   const [showCreator, setShowCreator] = useState(false);
 
   useEffect(() => {
@@ -109,10 +144,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
     }
   };
 
-  // SUPPRESSION: ancien flux de création par simple nom
-  // const createNewCharacter = async () => { ... }
-
-  // AJOUT: création depuis le payload exporté par le wizard
+  // Création à partir du payload renvoyé par le wizard
   const handleCreatorComplete = async (payload: CharacterExportPayload) => {
     if (creating) return;
     try {
@@ -122,7 +154,6 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
       setPlayers((prev) => [...prev, newPlayer]);
       toast.success('Nouveau personnage créé !');
       setShowCreator(false);
-      // Ouvrir directement le personnage
       onCharacterSelect(newPlayer);
     } catch (error: any) {
       console.error('Erreur création via assistant:', error);
@@ -236,7 +267,6 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
     <div
       className="character-selection-page min-h-screen"
       style={{
-        // Image de fond sur le wrapper principal (et pas de fond uni opaque)
         backgroundImage: `url(${BG_URL})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
@@ -467,7 +497,7 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
                 onClick={() => setShowCreator(true)}
                 className="w-full max-w-sm cursor-pointer hover:scale-[1.02] transition-all duration-200 bg-slate-800/40 backdrop-blur-sm border-dashed border-2 border-slate-600/50 hover:border-green-500/60 rounded-xl"
               >
-                <div className="p-6 flex items-center justify-center gap-6 min-h:[140px]">
+                <div className="p-6 flex items-center justify-center gap-6 min-h-[140px]">
                   <div className="w-16 h-16 bg-green-400/20 rounded-full flex items-center justify-center">
                     <Plus className="w-8 h-8 text-green-500" />
                   </div>
@@ -481,9 +511,6 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
               </div>
             </div>
           </div>
-
-          {/* SUPPRIMÉ: ancien "Create Character Modal" basé sur un simple nom */}
-          {/* {showCreateForm && ( ... )} */}
         </div>
       </div>
 
@@ -500,8 +527,8 @@ export function CharacterSelectionPage({ session, onCharacterSelect }: Character
         </div>
       </div>
 
-      {/* AJOUT: Modal qui héberge le wizard du Character Creator */}
-      <CharacterCreatorModal
+      {/* Modal du wizard du Character Creator (pointe sur components/characterCreationWizard.tsx) */}
+      <CreatorModal
         open={showCreator}
         onClose={() => setShowCreator(false)}
         onComplete={handleCreatorComplete}
