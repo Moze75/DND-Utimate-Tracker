@@ -23,4 +23,4 @@ export function CharacterCreatorHost({ onComplete, onCancel }: CharacterCreatorH
       <CreatorApp onComplete={onComplete} onCancel={onCancel} />
     </Suspense>
   );
-}
+} 
