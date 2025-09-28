@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
 
 import ProgressBar from './ui/ProgressBar';
 import RaceSelection from './steps/RaceSelection';
@@ -8,264 +8,393 @@ import BackgroundSelection from './steps/BackgroundSelection';
 import AbilityScores from './steps/AbilityScores';
 import CharacterSummary from './steps/CharacterSummary';
 
-import { getClassImageUrl } from '../utils/classImages';
-import type { CharacterExportPayload } from '../types/CharacterExport';
-
 import { DndClass } from '../types/character';
+import { supabase } from '../lib/supabase';
 import { calculateArmorClass, calculateHitPoints, calculateModifier } from '../utils/dndCalculations';
 
 import { races } from '../data/races';
 import { classes } from '../data/classes';
 import { backgrounds } from '../data/backgrounds';
-import { CharacterExportPayload } from '../../../types/CharacterExport';
 
-// Map nom de classe -> fichier dans public/*.png
-export function getImageBaseForClass(className: DndClass): string | null {
+/* ===========================================================
+   Utilitaires
+   =========================================================== */
+
+// Convertit ft -> m en arrondissant au 0,5 m (30 ft → 9 m)
+const feetToMeters = (ft?: number) => {
+  const n = Number(ft);
+  if (!Number.isFinite(n)) return 9; // fallback raisonnable
+  return Math.round(n * 0.3048 * 2) / 2;
+};
+
+// Mappe une classe vers une image publique placée dans /public/*.png
+// Assurez-vous d'avoir ces fichiers:
+// - /Guerrier.png
+// - /Magicien.png
+// - /Voleur.png
+// - /Clerc.png
+// - /Rodeur.png      (sans accent)
+// - /Barbare.png
+// - /Barde.png
+// - /Druide.png
+// - /Moine.png
+// - /Paladin.png
+// - /Ensorceleur.png
+// - /Occultiste.png
+function getClassImageUrlLocal(className: DndClass | string | undefined | null): string | null {
+  if (!className) return null;
   switch (className) {
-    case 'Guerrier': return 'Guerrier';
-    case 'Magicien': return 'Magicien';
-    case 'Roublard': return 'Voleur';     // Voleur.png
-    case 'Clerc': return 'Clerc';
-    case 'Rôdeur': return 'Rodeur';       // sans accent
-    case 'Barbare': return 'Barbare';
-    case 'Barde': return 'Barde';
-    case 'Druide': return 'Druide';
-    case 'Moine': return 'Moine';
-    case 'Paladin': return 'Paladin';
-    case 'Ensorceleur': return 'Ensorceleur';
-    case 'Occultiste': return 'Occultiste';
-    default: return null;
+    case 'Guerrier': return '/Guerrier.png';
+    case 'Magicien': return '/Magicien.png';
+    case 'Roublard': return '/Voleur.png';   // fichier Voleur.png
+    case 'Clerc': return '/Clerc.png';
+    case 'Rôdeur': return '/Rodeur.png';     // sans accent dans le nom de fichier
+    case 'Barbare': return '/Barbare.png';
+    case 'Barde': return '/Barde.png';
+    case 'Druide': return '/Druide.png';
+    case 'Moine': return '/Moine.png';
+    case 'Paladin': return '/Paladin.png';
+    case 'Ensorceleur': return '/Ensorceleur.png';
+    case 'Occultiste': return '/Occultiste.png';
+    default:
+      // Normalisation basique (accents/majuscules) si une autre valeur arrive
+      const normalized = String(className)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+      if (normalized.includes('guerrier')) return '/Guerrier.png';
+      if (normalized.includes('magicien')) return '/Magicien.png';
+      if (normalized.includes('roublard') || normalized.includes('voleur')) return '/Voleur.png';
+      if (normalized.includes('clerc')) return '/Clerc.png';
+      if (normalized.includes('rodeur') || normalized.includes('rôdeur')) return '/Rodeur.png';
+      if (normalized.includes('barbare')) return '/Barbare.png';
+      if (normalized.includes('barde')) return '/Barde.png';
+      if (normalized.includes('druide')) return '/Druide.png';
+      if (normalized.includes('moine')) return '/Moine.png';
+      if (normalized.includes('paladin')) return '/Paladin.png';
+      if (normalized.includes('ensorceleur')) return '/Ensorceleur.png';
+      if (normalized.includes('occultiste')) return '/Occultiste.png';
+      return null;
   }
 }
 
-export function getClassImageUrl(className: DndClass): string | null {
-  const base = getImageBaseForClass(className);
-  return base ? `/${base}.png` : null; // public root
+// Tente d'uploader une image (URL publique ou data URL) dans le bucket Supabase "avatars"
+// et retourne l'URL publique Supabase. En cas d'échec, retourne null.
+async function tryUploadAvatarFromUrl(playerId: string, url: string): Promise<string | null> {
+  try {
+    // fetch sur même origine pour /Guerrier.png, etc. (public/)
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+
+    // Déterminer content-type et extension
+    const contentType = blob.type || 'image/png';
+    const ext = (() => {
+      const t = contentType.split('/')[1]?.toLowerCase();
+      if (t === 'jpeg') return 'jpg';
+      return t || 'png';
+    })();
+
+    const fileName = `class-${Date.now()}.${ext}`;
+    const filePath = `${playerId}/${fileName}`;
+
+    // Upload dans le bucket "avatars"
+    const { error: uploadErr } = await supabase.storage
+      .from('avatars')
+      .upload(filePath, blob, { upsert: true, contentType });
+
+    if (uploadErr) throw uploadErr;
+
+    // URL publique
+    const { data: { publicUrl } } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(filePath);
+
+    return publicUrl || null;
+  } catch (e) {
+    console.warn('Upload avatar depuis URL/dataURL impossible (fallback sur URL directe):', e);
+    return null;
+  }
 }
+
+// Notifie le parent (iframe/opener) qu’un personnage a été créé
+type CreatedEvent = {
+  type: 'creator:character_created';
+  payload: { playerId: string; player?: any };
+};
+const notifyParentCreated = (playerId: string, player?: any) => {
+  const msg: CreatedEvent = { type: 'creator:character_created', payload: { playerId, player } };
+  try { window.parent?.postMessage(msg, '*'); } catch {}
+  try { (window as any).opener?.postMessage(msg, '*'); } catch {}
+  try { window.postMessage(msg, '*'); } catch {}
+};
+
+/* ===========================================================
+   Étapes (sans sous-classe)
+   =========================================================== */
 
 const steps = ['Race', 'Classe', 'Historique', 'Caractéristiques', 'Résumé'];
 
-type WizardProps = {
-  onFinish: (payload: CharacterExportPayload) => void;
-  onCancel: () => void;
-};
-
-function getHitDieForClass(cls?: string): 'd6' | 'd8' | 'd10' | 'd12' {
-  switch (cls) {
-    case 'Barbare':
-      return 'd12';
-    case 'Guerrier':
-    case 'Paladin':
-    case 'Rôdeur':
-      return 'd10';
-    case 'Barde':
-    case 'Clerc':
-    case 'Druide':
-    case 'Moine':
-    case 'Occultiste':
-    case 'Roublard':
-      return 'd8';
-    case 'Ensorceleur':
-    case 'Magicien':
-    default:
-      return 'd6';
-  }
-}
-
-export default function CharacterCreationWizard({ onFinish, onCancel }: WizardProps) {
+export default function CharacterCreationWizard() {
+  // Étape courante
   const [currentStep, setCurrentStep] = useState(0);
 
+  // Identité
   const [characterName, setCharacterName] = useState('');
+
+  // Choix principaux
   const [selectedRace, setSelectedRace] = useState('');
   const [selectedClass, setSelectedClass] = useState<DndClass | ''>('');
   const [selectedBackground, setSelectedBackground] = useState('');
 
+  // Choix dépendants
   const [backgroundEquipmentOption, setBackgroundEquipmentOption] = useState<'A' | 'B' | ''>('');
-  const [selectedClassSkills, setSelectedClassSkills] = useState<string[]>([]);
+  const [selectedClassSkills, setSelectedClassSkills] = useState<string[]>([]); // normalisées (ex: "Discrétion")
 
+  // Caractéristiques (base) et “effectives” (base + historique)
   const [abilities, setAbilities] = useState<Record<string, number>>({
-    Force: 8,
-    Dextérité: 8,
-    Constitution: 8,
-    Intelligence: 8,
-    Sagesse: 8,
-    Charisme: 8,
+    'Force': 8,
+    'Dextérité': 8,
+    'Constitution': 8,
+    'Intelligence': 8,
+    'Sagesse': 8,
+    'Charisme': 8,
   });
   const [effectiveAbilities, setEffectiveAbilities] = useState<Record<string, number>>(abilities);
 
+  // Objet d'historique sélectionné
   const selectedBackgroundObj = useMemo(
     () => backgrounds.find((b) => b.name === selectedBackground) || null,
     [selectedBackground]
   );
 
+  // Resets cohérents
   useEffect(() => {
+    // Si la classe change, réinitialiser les compétences de classe choisies
     setSelectedClassSkills([]);
   }, [selectedClass]);
 
   useEffect(() => {
+    // Si l’historique change, réinitialiser le choix d’équipement A/B
     setBackgroundEquipmentOption('');
   }, [selectedBackground]);
 
+  // Navigation
   const nextStep = () => setCurrentStep((s) => Math.min(s + 1, steps.length - 1));
   const previousStep = () => setCurrentStep((s) => Math.max(s - 1, 0));
 
-  const handleFinish = () => {
-    const raceData = races.find((r) => r.name === selectedRace);
-    const classData = classes.find((c) => c.name === selectedClass);
+  /* ===========================================================
+     Finalisation / Enregistrement
+     =========================================================== */
+  const handleFinish = async () => {
+    try {
+      const { data: auth, error: authErr } = await supabase.auth.getUser();
+      if (authErr) throw authErr;
+      const user = auth?.user;
+      if (!user) {
+        toast.error('Vous devez être connecté pour créer un personnage');
+        return;
+      }
 
-    const finalAbilities = { ...effectiveAbilities };
-    if (raceData?.abilityScoreIncrease) {
-      Object.entries(raceData.abilityScoreIncrease).forEach(([ability, bonus]) => {
-        if (finalAbilities[ability] != null) {
-          finalAbilities[ability] += bonus;
+      const raceData = races.find((r) => r.name === selectedRace);
+      const classData = classes.find((c) => c.name === selectedClass);
+
+      // Partir des “abilities effectives” (base + historique) calculées dans AbilityScores
+      const finalAbilities = { ...effectiveAbilities };
+
+      // Appliquer les bonus raciaux si présents
+      if (raceData?.abilityScoreIncrease) {
+        Object.entries(raceData.abilityScoreIncrease).forEach(([ability, bonus]) => {
+          if (finalAbilities[ability] != null) {
+            finalAbilities[ability] += bonus;
+          }
+        });
+      }
+
+      // Dérivés de combat
+      const hitPoints = calculateHitPoints(finalAbilities['Constitution'] || 10, selectedClass as DndClass);
+      const armorClass = calculateArmorClass(finalAbilities['Dextérité'] || 10);
+      const initiative = calculateModifier(finalAbilities['Dextérité'] || 10);
+
+      // Vitesse en mètres
+      const speedMeters = feetToMeters(raceData?.speed || 30);
+
+      // Équipement d’historique selon Option A/B
+      const bgEquip =
+        backgroundEquipmentOption === 'A'
+          ? selectedBackgroundObj?.equipmentOptions?.optionA ?? []
+          : backgroundEquipmentOption === 'B'
+            ? selectedBackgroundObj?.equipmentOptions?.optionB ?? []
+            : [];
+
+      // Données minimales compatibles (le Tracker saura enrichir/éditer ensuite)
+      const characterData = {
+        user_id: user.id,
+        name: characterName.trim(),
+        // Optionnel: on peut dupliquer dans adventurer_name
+        adventurer_name: characterName.trim(),
+        level: 1,
+        current_hp: hitPoints,
+        max_hp: hitPoints,
+        class: selectedClass || null,
+        subclass: null, // pas de sous-classe au niveau 1
+        race: selectedRace || null,
+        background: selectedBackground || null,
+        stats: {
+          armor_class: armorClass,
+          initiative: initiative,
+          speed: speedMeters,            // stockée en mètres
+          proficiency_bonus: 2,
+          inspirations: 0,
+          // On peut stocker des métadonnées souples
+          feats: {},
+        },
+        // Le Tracker affichera par défaut s’il n’a pas d’abilities[]
+        abilities: null as any,
+        equipment: {
+          starting_equipment: classData?.equipment || [],
+          background_equipment_option: backgroundEquipmentOption || null,
+          background_equipment_items: bgEquip,
+        },
+        // Garde une trace des maîtrises choisies (utile pour migration ultérieure)
+        proficiencies: {
+          skills_from_class: selectedClassSkills,
+          skills_from_background: selectedBackgroundObj?.skillProficiencies ?? [],
+          saving_throws: classData?.savingThrows ?? [],
+        },
+        created_at: new Date().toISOString(),
+      };
+
+      const { data: inserted, error } = await supabase
+        .from('players')
+        .insert([characterData])
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('Error creating character:', error);
+        toast.error('Erreur lors de la création du personnage');
+        return;
+      }
+
+      // Avatar de classe: upload dans Supabase Storage et mise à jour de players.avatar_url
+      let finalPlayer = inserted;
+      if (inserted?.id && selectedClass) {
+        const classImageUrl = getClassImageUrlLocal(selectedClass);
+        if (classImageUrl) {
+          try {
+            const uploaded = await tryUploadAvatarFromUrl(inserted.id, classImageUrl);
+            const finalUrl = uploaded ?? classImageUrl;
+
+            const { data: updatedPlayer, error: avatarErr } = await supabase
+              .from('players')
+              .update({ avatar_url: finalUrl })
+              .eq('id', inserted.id)
+              .select('*')
+              .single();
+
+            if (avatarErr) {
+              console.warn('Impossible de fixer avatar_url (fallback affichage direct):', avatarErr);
+              // Ne bloque pas le flux: on garde inserted comme finalPlayer
+            } else if (updatedPlayer) {
+              finalPlayer = updatedPlayer as typeof inserted;
+            }
+          } catch (e) {
+            console.warn('Echec de la mise à jour de l’avatar (upload/DB):', e);
+          }
         }
+      }
+
+      // Notifier l’app parente (pour l’intégration avec le Tracker)
+      if (inserted?.id) {
+        notifyParentCreated(inserted.id, finalPlayer);
+      }
+
+      toast.success('Personnage créé avec succès !');
+
+      // Reset complet
+      setCurrentStep(0);
+      setCharacterName('');
+      setSelectedRace('');
+      setSelectedClass('');
+      setSelectedBackground('');
+      setBackgroundEquipmentOption('');
+      setSelectedClassSkills([]);
+      setAbilities({
+        'Force': 8,
+        'Dextérité': 8,
+        'Constitution': 8,
+        'Intelligence': 8,
+        'Sagesse': 8,
+        'Charisme': 8,
       });
+      setEffectiveAbilities({
+        'Force': 8,
+        'Dextérité': 8,
+        'Constitution': 8,
+        'Intelligence': 8,
+        'Sagesse': 8,
+        'Charisme': 8,
+      });
+    } catch (err) {
+      console.error('Error creating character:', err);
+      toast.error('Erreur lors de la création du personnage');
     }
-
-    const hitPoints = calculateHitPoints(finalAbilities['Constitution'] || 10, selectedClass as DndClass);
-    const armorClass = calculateArmorClass(finalAbilities['Dextérité'] || 10);
-    const initiative = calculateModifier(finalAbilities['Dextérité'] || 10);
-    const speedFeet = raceData?.speed || 30;
-
-    const bgEquip =
-      backgroundEquipmentOption === 'A'
-        ? selectedBackgroundObj?.equipmentOptions?.optionA ?? []
-        : backgroundEquipmentOption === 'B'
-          ? selectedBackgroundObj?.equipmentOptions?.optionB ?? []
-          : [];
-
-    const proficientSkills = Array.from(
-      new Set([...(selectedClassSkills || []), ...((selectedBackgroundObj?.skillProficiencies ?? []))])
-    );
-
-    const handleFinish = () => {
-  const payload: CharacterExportPayload = {
-    characterName,
-    selectedRace,
-    selectedClass,            // de type DndClass
-    selectedBackground,
-    level,
-    finalAbilities,
-    proficientSkills,
-    equipment,
-    selectedBackgroundEquipmentOption,
-    hitPoints,
-    armorClass,
-    initiative,
-    speed,
-    // champs optionnels existants...
-    backgroundFeat,
-    gold,
-    hitDice,
-    // NOUVEAU: image d’avatar dérivée de la classe
-    avatarImageUrl: getClassImageUrl(selectedClass) ?? undefined,
   };
 
-  onFinish(payload);
-};
-
-    // Don d’historique et OR initial:
-    // - OR demandé: A = 50 po, B = 15 po
-    const backgroundFeat = (selectedBackgroundObj as any)?.feat as string | undefined;
-    const gold = backgroundEquipmentOption === 'A' ? 50 : backgroundEquipmentOption === 'B' ? 15 : 0;
-
-    const hitDice = {
-      die: getHitDieForClass(selectedClass as string),
-      total: 1,
-      used: 0,
-    };
-
-    const payload: CharacterExportPayload = {
-      characterName: characterName.trim(),
-      selectedRace,
-      selectedClass: (selectedClass as string) || '',
-      selectedBackground,
-      level: 1,
-      finalAbilities,
-      proficientSkills,
-      equipment: [...(classData?.equipment ?? []), ...bgEquip],
-      selectedBackgroundEquipmentOption: backgroundEquipmentOption,
-      hitPoints,
-      armorClass,
-      initiative,
-      speed: speedFeet,
-      backgroundFeat,
-      gold,
-      hitDice,
-    };
-
-    onFinish(payload);
-  };
-
+  /* ===========================================================
+     Rendu des étapes
+     =========================================================== */
   const renderStep = () => {
     switch (currentStep) {
       case 0:
         return (
           <RaceSelection
             selectedRace={selectedRace}
-            onRaceSelect={(race: string) => setSelectedRace(race)}
-            onSelectRace={(race: string) => setSelectedRace(race)}
+            onRaceSelect={setSelectedRace}
             onNext={nextStep}
           />
         );
+
       case 1:
         return (
           <ClassSelection
             selectedClass={selectedClass}
-            onClassSelect={(cls: DndClass | '') => {
-              setSelectedClass(cls);
-              setSelectedClassSkills([]);
-            }}
-            onSelectClass={(cls: DndClass | '') => {
-              setSelectedClass(cls);
-              setSelectedClassSkills([]);
-            }}
+            onClassSelect={setSelectedClass}
+            // Compétences cliquables dans la classe
             selectedSkills={selectedClassSkills}
-            onSelectedSkillsChange={(skills: string[]) => setSelectedClassSkills(skills)}
-            onToggleSkill={(skill: string, allowed?: number) => {
-              setSelectedClassSkills((prev) => {
-                const exists = prev.includes(skill);
-                if (exists) return prev.filter((s) => s !== skill);
-                if (allowed != null && prev.length >= allowed) return prev;
-                return [...prev, skill];
-              });
-            }}
+            onSelectedSkillsChange={setSelectedClassSkills}
             onNext={nextStep}
             onPrevious={previousStep}
-            onPrev={previousStep}
           />
         );
+
       case 2:
         return (
           <BackgroundSelection
             selectedBackground={selectedBackground}
-            onBackgroundSelect={(bg: string) => {
-              setSelectedBackground(bg);
-              setBackgroundEquipmentOption('');
-            }}
-            onSelectBackground={(bg: string) => {
-              setSelectedBackground(bg);
-              setBackgroundEquipmentOption('');
-            }}
+            onBackgroundSelect={setSelectedBackground}
+            // Option A / B d’équipement d’historique
             selectedEquipmentOption={backgroundEquipmentOption}
-            onEquipmentOptionChange={(opt: 'A' | 'B' | '') => setBackgroundEquipmentOption(opt)}
+            onEquipmentOptionChange={setBackgroundEquipmentOption}
             onNext={nextStep}
             onPrevious={previousStep}
-            onPrev={previousStep}
           />
         );
+
       case 3:
         return (
           <AbilityScores
             abilities={abilities}
-            onAbilitiesChange={(next: Record<string, number>) => setAbilities(next)}
+            onAbilitiesChange={setAbilities}
             selectedBackground={selectedBackgroundObj}
-            onEffectiveAbilitiesChange={(next: Record<string, number>) => setEffectiveAbilities(next)}
+            // Remonte “base + historique” pour tout le reste du process
+            onEffectiveAbilitiesChange={setEffectiveAbilities}
             onNext={nextStep}
             onPrevious={previousStep}
-            onPrev={previousStep}
           />
         );
+
       case 4:
         return (
           <CharacterSummary
@@ -275,17 +404,22 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
             selectedClass={selectedClass as DndClass}
             selectedBackground={selectedBackground}
             abilities={effectiveAbilities}
+            // Affichage des compétences (si implémenté) + équipement historique
             selectedClassSkills={selectedClassSkills}
             selectedBackgroundEquipmentOption={backgroundEquipmentOption}
             onFinish={handleFinish}
             onPrevious={previousStep}
           />
         );
+
       default:
         return null;
     }
   };
 
+  /* ===========================================================
+     Layout général
+     =========================================================== */
   return (
     <div className="min-h-screen bg-fantasy relative">
       <Toaster
@@ -295,14 +429,25 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
           duration: 4000,
         }}
       />
+
       <div className="container mx-auto px-4 py-8">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Créateur de Personnage D&D</h1>
-          <p className="text-gray-400">Créez votre héros pour vos aventures dans les Donjons et Dragons</p>
-        </div>
         <div className="max-w-6xl mx-auto">
-          <ProgressBar currentStep={currentStep} totalSteps={steps.length - 1} steps={steps} />
-          <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 md:p-8 mt-6">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold text-white mb-2">
+              Créateur de Personnage D&D
+            </h1>
+            <p className="text-gray-400">
+              Créez votre héros pour vos aventures dans les Donjons et Dragons
+            </p>
+          </div>
+
+          <ProgressBar
+            currentStep={currentStep}
+            totalSteps={steps.length - 1}
+            steps={steps}
+          />
+
+          <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 md:p-8">
             {renderStep()}
           </div>
         </div>
