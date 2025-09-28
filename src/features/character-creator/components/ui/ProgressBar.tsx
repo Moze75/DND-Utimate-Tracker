@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface ProgressBarProps {
   currentStep: number;
@@ -10,8 +10,92 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
   const total = Math.max(1, totalSteps); // évite la division par 0 si jamais
   const percent = Math.max(0, Math.min(100, (currentStep / total) * 100));
 
+  // === Lecture musicale (Skyrim 8-bit) ===
+  const MUSIC_SRC = '/Music/Skyrim8bits.mp3';
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [autoPlayBlocked, setAutoPlayBlocked] = useState(false);
+  const [hasTriedAutoStart, setHasTriedAutoStart] = useState(false);
+
+  // Détecte l'étape "Race" (français/variantes courantes)
+  const raceStepIndex = steps.findIndex((s) => {
+    const t = (s || '').toLowerCase();
+    return (
+      t.includes('race') || // ex: "Race", "Choix de la race"
+      t.includes('peuple') || // parfois utilisé
+      t.includes('ancestr') // "Ancestry/Ancestral" si jamais
+    );
+  });
+
+  // On tente de démarrer la musique automatiquement dès l'étape "Race"
+  const shouldAutoStart = raceStepIndex !== -1 && currentStep === raceStepIndex;
+
+  useEffect(() => {
+    if (!shouldAutoStart || hasTriedAutoStart) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    setHasTriedAutoStart(true);
+    audio.loop = true;
+    audio.volume = 0.35; // volume modéré par défaut
+    audio.play()
+      .then(() => {
+        setIsPlaying(true);
+        setAutoPlayBlocked(false);
+      })
+      .catch(() => {
+        // La politique d'autoplay du navigateur a probablement bloqué
+        setIsPlaying(false);
+        setAutoPlayBlocked(true);
+      });
+  }, [shouldAutoStart, hasTriedAutoStart]);
+
+  // Nettoyage à l'unmount
+  useEffect(() => {
+    return () => {
+      const a = audioRef.current;
+      if (a) {
+        a.pause();
+        a.currentTime = 0;
+      }
+    };
+  }, []);
+
+  const togglePlayback = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      audio.pause();
+      setIsPlaying(false);
+    } else {
+      try {
+        await audio.play();
+        setIsPlaying(true);
+        setAutoPlayBlocked(false);
+      } catch {
+        setAutoPlayBlocked(true);
+      }
+    }
+  };
+
   return (
     <div className="w-full mb-8">
+      {/* Contrôles musique */}
+      <div className="mb-2 flex items-center justify-end">
+        <button
+          type="button"
+          onClick={togglePlayback}
+          className={`text-xs sm:text-sm px-3 py-1.5 rounded-md border transition-colors
+            ${isPlaying ? 'border-red-600 text-red-200 hover:bg-red-900/30' : 'border-gray-600 text-gray-300 hover:bg-gray-800/60'}
+          `}
+          title={autoPlayBlocked && !isPlaying ? "Cliquez pour activer la musique" : (isPlaying ? "Arrêter la musique" : "Lire la musique")}
+        >
+          {isPlaying ? '⏸ Arrêter la musique' : '▶️ Lire la musique'}
+        </button>
+        {/* Elément audio caché */}
+        <audio ref={audioRef} src={MUSIC_SRC} preload="auto" loop />
+      </div>
+
       {/* Barre de progression */}
       <div className="w-full bg-gray-800 rounded-full h-2" aria-hidden="true">
         <div
@@ -56,6 +140,13 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
           })}
         </ol>
       </div>
+
+      {/* Alerte discrète si l'autoplay a été bloqué */}
+      {autoPlayBlocked && !isPlaying && (
+        <div className="mt-2 text-[11px] sm:text-xs text-gray-500">
+          Astuce: l’autoplay a été bloqué par votre navigateur. Cliquez sur “Lire la musique” pour l’activer.
+        </div>
+      )}
     </div>
   );
-} 
+}
