@@ -19,6 +19,25 @@ import { classes } from '../data/classes';
 import { backgrounds } from '../data/backgrounds';
 import { CharacterExportPayload } from '../../../types/CharacterExport';
 
+// Map nom de classe -> fichier dans public/*.png
+export function getImageBaseForClass(className: DndClass): string | null {
+  switch (className) {
+    case 'Guerrier': return 'Guerrier';
+    case 'Magicien': return 'Magicien';
+    case 'Roublard': return 'Voleur';     // Voleur.png
+    case 'Clerc': return 'Clerc';
+    case 'Rôdeur': return 'Rodeur';       // sans accent
+    case 'Barbare': return 'Barbare';
+    case 'Barde': return 'Barde';
+    case 'Druide': return 'Druide';
+    case 'Moine': return 'Moine';
+    case 'Paladin': return 'Paladin';
+    case 'Ensorceleur': return 'Ensorceleur';
+    case 'Occultiste': return 'Occultiste';
+    default: return null;
+  }
+}
+
 const steps = ['Race', 'Classe', 'Historique', 'Caractéristiques', 'Résumé'];
 
 type WizardProps = {
