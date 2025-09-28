@@ -246,16 +246,7 @@ export default function CharacterSummary({
               <span className="text-gray-400">Niveau:</span>
               <span className="text-white font-medium">1</span>
             </div>
-            {/* Nouveau: Don d'historique */}
-            {backgroundData?.feat && (
-              <div className="flex justify-between items-center border-t border-gray-700/50 pt-3 mt-3">
-                <div className="flex items-center">
-                  <Scroll className="w-4 h-4 text-purple-400 mr-2" />
-                  <span className="text-gray-400">Don:</span>
-                </div>
-                <span className="text-purple-300 font-medium text-sm">{backgroundData.feat}</span>
-              </div>
-            )}
+            {/* Don d'historique supprimé ici */}
           </CardContent>
         </Card>
 
