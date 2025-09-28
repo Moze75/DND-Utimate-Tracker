@@ -187,7 +187,7 @@ export default function RaceSelection({ selectedRace, onRaceSelect, onNext }: Ra
                       {race.traits && race.traits.length > 0 && (
                         <div>
                           <h4 className="font-medium text-white mb-2">Traits raciaux</h4>
-                          <div className="max-h-32 overflow-y-auto">
+                        <div>
                             <ul className="text-gray-300 text-sm space-y-1">
                               {race.traits.map((trait, index) => (
                                 <li key={index} className="leading-relaxed">• {trait}</li>
