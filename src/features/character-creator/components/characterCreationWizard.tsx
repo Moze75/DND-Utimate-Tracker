@@ -8,6 +8,9 @@ import BackgroundSelection from './steps/BackgroundSelection';
 import AbilityScores from './steps/AbilityScores';
 import CharacterSummary from './steps/CharacterSummary';
 
+import { getClassImageUrl } from '../utils/classImages';
+import type { CharacterExportPayload } from '../types/CharacterExport';
+
 import { DndClass } from '../types/character';
 import { calculateArmorClass, calculateHitPoints, calculateModifier } from '../utils/dndCalculations';
 
