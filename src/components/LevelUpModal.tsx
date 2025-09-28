@@ -223,8 +223,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
   const [showSubclassModal, setShowSubclassModal] = useState(false);
   const [selectedSubclass, setSelectedSubclass] = useState<string | null>(null);
 
-  if (!isOpen) return null;
-
   const hitDieSize = getHitDieSize(player.class);
   const averageHpGain = getAverageHpGain(hitDieSize);
   const constitutionModifier = player.abilities?.find(a => (a.name || a.abbr)?.toString().toLowerCase() === 'constitution')?.modifier || 0;
@@ -239,10 +237,12 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
 
   // Affiche automatiquement le modal sous-classe si nécessaire
   useEffect(() => {
-    if (newLevel === 3 && !currentSubclass && !showSubclassModal) {
+    if (isOpen && newLevel === 3 && !currentSubclass && !showSubclassModal) {
       setShowSubclassModal(true);
     }
-  }, [newLevel, currentSubclass, showSubclassModal]);
+  }, [isOpen, newLevel, currentSubclass, showSubclassModal]);
+
+  if (!isOpen) return null;
 
   // Handler pour choisir la sous-classe
   const handleSelectSubclass = async (subclassName: string) => {
