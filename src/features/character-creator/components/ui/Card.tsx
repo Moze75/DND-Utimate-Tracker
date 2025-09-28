@@ -197,49 +197,48 @@ export default function Card({
     >
       {selected && (
         <>
-          {/* Liseré principal avec rotation magique */}
+          {/* Liseré principal sobre avec pulse subtil */}
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 rounded-xl will-change-transform"
             style={{
               padding: '2px',
-              background: `conic-gradient(from 0deg, ${config.colors.primary}, ${config.colors.secondary}, ${config.colors.tertiary}, ${config.colors.primary})`,
+              background: `linear-gradient(135deg, ${config.colors.primary}, ${config.colors.secondary})`,
               WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
               WebkitMaskComposite: 'xor' as any,
               maskComposite: 'exclude' as any,
-              animation: `card-border-rotation 4s linear infinite, card-border-pulse 2.2s ease-in-out infinite`,
+              animation: `card-border-pulse 2.5s ease-in-out infinite`,
               borderRadius: '0.75rem',
-              filter: `brightness(${1 + (intensity - 1) * 0.3}) saturate(${1 + (intensity - 1) * 0.2})`,
+              filter: `brightness(${1 + (intensity - 1) * 0.2}) saturate(${1 + (intensity - 1) * 0.1})`,
             }}
           />
 
-          {/* Halo extérieur intense */}
+          {/* Halo extérieur subtil */}
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 rounded-xl"
             style={{
               boxShadow: `
-                0 0 ${20 * intensity}px ${config.colors.primary}40,
-                0 0 ${40 * intensity}px ${config.colors.secondary}30,
-                0 0 ${80 * intensity}px ${config.colors.tertiary}20
+                0 0 ${15 * intensity}px ${config.colors.primary}25,
+                0 0 ${25 * intensity}px ${config.colors.secondary}15
               `,
-              animation: 'outer-glow-pulse 2s ease-in-out infinite',
+              animation: 'outer-glow-subtle 3s ease-in-out infinite',
               borderRadius: '0.75rem',
             }}
           />
 
-          {/* Halo intérieur avec ondulation */}
+          {/* Halo intérieur discret */}
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 rounded-xl"
             style={{
               boxShadow: `
-                inset 0 0 ${30 * intensity}px ${config.colors.primary}20,
-                inset 0 0 ${60 * intensity}px ${config.colors.secondary}15
+                inset 0 0 ${20 * intensity}px ${config.colors.primary}12,
+                inset 0 0 ${35 * intensity}px ${config.colors.secondary}08
               `,
-              border: `1px solid ${config.colors.primary}60`,
+              border: `1px solid ${config.colors.primary}35`,
               borderRadius: '0.75rem',
-              animation: 'card-inner-ripple 3s ease-in-out infinite',
+              animation: 'card-inner-subtle 4s ease-in-out infinite',
             }}
           />
 
@@ -254,8 +253,8 @@ export default function Card({
             />
           )}
 
-          {/* Effets spéciaux selon le type */}
-          {(effectType === 'particles' || effectType === 'all') && (
+          {/* Effets spéciaux discrets selon le type */}
+          {(effectType === 'particles' || effectType === 'all') && isHovered && (
             <FloatingParticles isActive={selected} color={config.particleColor} />
           )}
           
@@ -283,76 +282,61 @@ export default function Card({
         {children}
       </div>
 
-      {/* Keyframes CSS intégrés */}
-      <style>{`
-        @keyframes card-border-rotation {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        
+      {/* Keyframes CSS modernes et sobres */}
+      <style>{`        
         @keyframes card-border-pulse {
           0%   { 
-            opacity: 0.70; 
-            filter: brightness(1) saturate(1); 
+            opacity: 0.6; 
+            filter: brightness(1); 
             box-shadow: 
-              0 0 12px ${config.colors.primary}30,
-              0 0 28px ${config.colors.secondary}25;
+              0 0 8px ${config.colors.primary}20,
+              0 0 16px ${config.colors.secondary}15;
           }
           50%  { 
-            opacity: 1.00; 
-            filter: brightness(1.2) saturate(1.1); 
-            box-shadow: 
-              0 0 20px ${config.colors.primary}40,
-              0 0 45px ${config.colors.secondary}35;
-          }
-          100% { 
-            opacity: 0.70; 
-            filter: brightness(1) saturate(1); 
+            opacity: 0.9; 
+            filter: brightness(1.1); 
             box-shadow: 
               0 0 12px ${config.colors.primary}30,
-              0 0 28px ${config.colors.secondary}25;
-          }
-        }
-        
-        @keyframes card-inner-ripple {
-          0%   { 
-            box-shadow: 
-              inset 0 0 ${25 * intensity}px ${config.colors.primary}15,
-              inset 0 0 ${50 * intensity}px ${config.colors.secondary}10;
-          }
-          33%  { 
-            box-shadow: 
-              inset 0 0 ${35 * intensity}px ${config.colors.primary}25,
-              inset 0 0 ${70 * intensity}px ${config.colors.secondary}18;
-          }
-          66%  { 
-            box-shadow: 
-              inset 0 0 ${30 * intensity}px ${config.colors.primary}20,
-              inset 0 0 ${60 * intensity}px ${config.colors.secondary}15;
+              0 0 24px ${config.colors.secondary}20;
           }
           100% { 
+            opacity: 0.6; 
+            filter: brightness(1); 
             box-shadow: 
-              inset 0 0 ${25 * intensity}px ${config.colors.primary}15,
-              inset 0 0 ${50 * intensity}px ${config.colors.secondary}10;
+              0 0 8px ${config.colors.primary}20,
+              0 0 16px ${config.colors.secondary}15;
           }
         }
         
-        @keyframes outer-glow-pulse {
-          0%, 100% { transform: scale(1); opacity: 0.8; }
-          50% { transform: scale(1.05); opacity: 1; }
+        @keyframes card-inner-subtle {
+          0%, 100%   { 
+            box-shadow: 
+              inset 0 0 ${18 * intensity}px ${config.colors.primary}10,
+              inset 0 0 ${32 * intensity}px ${config.colors.secondary}06;
+          }
+          50%  { 
+            box-shadow: 
+              inset 0 0 ${24 * intensity}px ${config.colors.primary}15,
+              inset 0 0 ${42 * intensity}px ${config.colors.secondary}10;
+          }
+        }
+        
+        @keyframes outer-glow-subtle {
+          0%, 100% { opacity: 0.7; }
+          50% { opacity: 1; }
         }
         
         @keyframes selection-burst {
           0% { 
-            transform: scale(0.8); 
-            opacity: 1; 
+            transform: scale(0.95); 
+            opacity: 0.8; 
           }
-          50% { 
-            transform: scale(1.1); 
-            opacity: 0.7; 
+          30% { 
+            transform: scale(1.02); 
+            opacity: 0.4; 
           }
           100% { 
-            transform: scale(1.3); 
+            transform: scale(1.1); 
             opacity: 0; 
           }
         }
@@ -432,16 +416,16 @@ export function CardDemo() {
         </div>
 
         <div className="mt-8 p-4 bg-gray-800/50 rounded-lg">
-          <h3 className="text-white font-semibold mb-2">Fonctionnalités Gaming :</h3>
+          <h3 className="text-white font-semibold mb-2">Fonctionnalités Gaming Sobres :</h3>
           <ul className="text-gray-300 text-sm space-y-1">
-            <li>• Bordures rotatives avec dégradé magique</li>
-            <li>• Particules flottantes animées</li>
-            <li>• Effets de scan et de glitch</li>
-            <li>• Animation explosive lors de la sélection</li>
-            <li>• Variants de rareté (default, epic, legendary, mythic)</li>
-            <li>• Intensité réglable des effets</li>
-            <li>• Hover effects avec transformation 3D</li>
-            <li>• Backdrop blur et effets de profondeur</li>
+            <li>• Bordures avec pulse subtil et dégradé moderne</li>
+            <li>• Particules au survol uniquement (discret)</li>
+            <li>• Effets de glow doux et élégants</li>
+            <li>• Animation de sélection rapide et fluide</li>
+            <li>• Variants de rareté avec palettes sophistiquées</li>
+            <li>• Micro-interactions au hover</li>
+            <li>• Design moderne et épuré</li>
+            <li>• Pas d'effets rotatifs ou "bling-bling"</li>
           </ul>
         </div>
       </div>
