@@ -313,6 +313,12 @@ export function PlayerProfileSettingsModal({
     [fightingStyles]
   );
 
+  // Discret: parse "10,5" -> 10.5
+  const parseDecimal = (s: string): number => {
+    const n = parseFloat((s || '').replace(',', '.'));
+    return Number.isFinite(n) ? n : NaN;
+  };
+
   // Sync local state quand la modale s'ouvre ou quand le player change
   useEffect(() => {
     if (!open) return;
@@ -358,7 +364,8 @@ export function PlayerProfileSettingsModal({
 
     setAcField(acInitial > 0 ? String(acInitial) : String(10 + dexMod));
     setInitField(initInitial !== undefined && initInitial !== null ? String(initInitial) : String(dexMod));
-    setSpeedField(speedInitial > 0 ? String(speedInitial) : String(9));
+    // Affiche avec virgule si besoin
+    setSpeedField(speedInitial > 0 ? String(speedInitial).replace('.', ',') : String(9));
     setProfField(profInitial > 0 ? String(profInitial) : String(profAuto));
 
     // Dons: lecture depuis stats.feats
@@ -481,7 +488,7 @@ export function PlayerProfileSettingsModal({
 
       const acVal = parseInt(acField, 10);
       const initVal = parseInt(initField, 10);
-      const speedVal = parseInt(speedField, 10);
+      const speedVal = parseDecimal(speedField);
       const profVal = parseInt(profField, 10);
 
       // Normalise les dons (filtre vides + valeurs autorisées)
@@ -509,6 +516,7 @@ export function PlayerProfileSettingsModal({
         ...player.stats,
         armor_class: Number.isFinite(acVal) && acVal > 0 ? acVal : 10 + dexMod,
         initiative: Number.isFinite(initVal) ? initVal : dexMod,
+        // Accepte décimales pour vitesse
         speed: Number.isFinite(speedVal) && speedVal > 0 ? speedVal : 9,
         proficiency_bonus: Number.isFinite(profVal) && profVal > 0 ? profVal : profAuto,
         feats: featsData,
@@ -1110,24 +1118,41 @@ export function PlayerProfileSettingsModal({
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">Vitesse (m)</label>
                   <input
-                    type="number"
+                    type="text"
                     value={speedField}
                     onChange={(e) => {
                       setSpeedField(e.target.value);
                       setDirty(true);
                     }}
                     onBlur={() => {
-                      if (speedField === '' || parseInt(speedField, 10) <= 0) {
-                        const next = '9';
-                        if (next !== speedField) {
-                          setSpeedField(next);
+                      if (speedField.trim() === '') {
+                        if (speedField !== '9') {
+                          setSpeedField('9');
+                          setDirty(true);
+                        }
+                        return;
+                      }
+                      const n = parseDecimal(speedField);
+                      if (!Number.isFinite(n) || n <= 0) {
+                        if (speedField !== '9') {
+                          setSpeedField('9');
+                          setDirty(true);
+                        }
+                      } else {
+                        const display = String(n).replace('.', ',');
+                        if (display !== speedField) {
+                          setSpeedField(display);
                           setDirty(true);
                         }
                       }
                     }}
                     className="input-dark w-full px-3 py-2 rounded-md"
-                    placeholder="Auto si vide: 9 m"
+                    placeholder="Ex: 9, 10,5, 12"
+                    inputMode="decimal"
+                    pattern="^[0-9]+([\\.,][0-9]+)?$"
+                    aria-describedby="speed-help"
                   />
+                  <p id="speed-help" className="text-xs text-gray-500 mt-1">Décimales autorisées: utilisez une virgule (ex: 10,5)</p>
                 </div>
 
                 <div>
