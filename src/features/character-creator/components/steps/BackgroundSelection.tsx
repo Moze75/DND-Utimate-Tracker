@@ -22,7 +22,7 @@ const backgroundsData = [
 name: "Acolyte",
 description: "Vous étiez au service d'un temple, accomplissant des rites religieux en l'honneur d'une divinité ou d'un panthéon.",
 abilityScores: ["Intelligence", "Sagesse", "Charisme"],
-feat: "Initié à la magie (Clerc)",
+feat: "Initié à la magie",
 skillProficiencies: ["Intuition", "Religion"],
 toolProficiencies: ["Matériel de calligraphie"],
 equipmentOptions: {
@@ -94,7 +94,7 @@ optionB: ["50 po"]
 name: "Criminel",
 description: "Vous gagniez votre pain dans les ruelles sombres, en coupant des bourses ou en cambriolant des échoppes.",
 abilityScores: ["Dextérité", "Constitution", "Intelligence"],
-feat: "Voleur",
+feat: "Doué",
 skillProficiencies: ["Discrétion", "Escamotage"],
 toolProficiencies: ["Outils de voleur"],
 equipmentOptions: {
@@ -175,7 +175,7 @@ optionB: ["50 po"]
 name: "Guide",
 description: "Vous avez grandi en pleine nature sauvage, apprenant à explorer et canaliser la magie naturelle.",
 abilityScores: ["Dextérité", "Constitution", "Sagesse"],
-feat: "Initié à la magie (Druide)",
+feat: "Initié à la magie",
 skillProficiencies: ["Discrétion", "Survie"],
 toolProficiencies: ["Outils de cartographe"],
 equipmentOptions: {
@@ -247,7 +247,7 @@ optionB: ["50 po"]
 name: "Sage",
 description: "Vos années ont été consacrées à l'étude, engrangeant le savoir du multivers et des rudiments de magie.",
 abilityScores: ["Constitution", "Intelligence", "Sagesse"],
-feat: "Initié à la magie (Magicien)",
+feat: "Initié à la magie",
 skillProficiencies: ["Arcanes", "Histoire"],
 toolProficiencies: ["Matériel de calligraphie"],
 equipmentOptions: {
@@ -484,4 +484,3 @@ return ( <div className="wizard-step space-y-6"> <div className="text-center"> <
 </div>
 );
 }
-
