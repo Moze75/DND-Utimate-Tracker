@@ -38,6 +38,11 @@ export function getImageBaseForClass(className: DndClass): string | null {
   }
 }
 
+export function getClassImageUrl(className: DndClass): string | null {
+  const base = getImageBaseForClass(className);
+  return base ? `/${base}.png` : null; // public root
+}
+
 const steps = ['Race', 'Classe', 'Historique', 'Caractéristiques', 'Résumé'];
 
 type WizardProps = {
