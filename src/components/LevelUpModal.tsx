@@ -221,6 +221,10 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
   const [hpGain, setHpGain] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
 
+ // === AJOUT État sous-classe ===
+  const [showSubclassModal, setShowSubclassModal] = useState(false);
+  const [selectedSubclass, setSelectedSubclass] = useState<string | null>(null);
+
   if (!isOpen) return null;
 
   const hitDieSize = getHitDieSize(player.class);
@@ -228,6 +232,95 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
   const constitutionModifier = player.abilities?.find(a => (a.name || a.abbr)?.toString().toLowerCase() === 'constitution')?.modifier || 0;
   const theoreticalHpGain = averageHpGain + constitutionModifier;
   const newLevel = player.level + 1;
+
+  // === AJOUT effet pour ouvrir le modal sous-classe au niveau 3 ===
+  useEffect(() => {
+    if (isOpen && newLevel === 3 && !player.subclass && !showSubclassModal) {
+      setShowSubclassModal(true);
+    }
+  }, [isOpen, newLevel, player.subclass, showSubclassModal]);
+
+  // === SOUS-CLASSES disponibles ===
+  const subclasses = getSubclassesForClass(player.class);
+
+  // === AJOUT handler pour choisir la sous-classe ===
+  const handleSelectSubclass = async (subclassName: string) => {
+    setIsProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('players')
+        .update({ subclass: subclassName })
+        .eq('id', player.id);
+
+      if (error) throw error;
+
+      setSelectedSubclass(subclassName);
+      onUpdate({
+        ...player,
+        subclass: subclassName
+      });
+      setShowSubclassModal(false);
+      toast.success(`Sous-classe choisie : ${subclassName}`);
+    } catch (err) {
+      toast.error("Erreur lors de la sélection de la sous-classe.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // === Blocage passage niveau si sous-classe non choisie au niveau 3 ===
+  const blockLevelUp = newLevel === 3 && !player.subclass && !selectedSubclass;
+
+  // === MODAL SOUS-CLASSE ===
+  const subclassModal =
+    showSubclassModal && (
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl shadow-2xl max-w-md w-full border border-gray-700/50 overflow-hidden">
+          <div className="bg-gradient-to-r from-purple-600/20 to-emerald-600/20 border-b border-gray-700/50 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Layers className="w-6 h-6 text-purple-400" />
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-100">Choix de sous-classe</h3>
+                  <p className="text-sm text-gray-400">Niveau 3 requis</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSubclassModal(false)}
+                className="p-2 text-gray-400 hover:text-gray-300 hover:bg-gray-700/50 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+          <div className="p-6 space-y-4">
+            <div className="text-center mb-2">
+              <h4 className="text-xl font-bold text-gray-100 mb-2">{canonicalClass(player.class)}</h4>
+              <p className="text-gray-400 text-sm">Sélectionnez une sous-classe pour votre personnage</p>
+            </div>
+            <div className="space-y-2">
+              {subclasses.map(opt => (
+                <button
+                  key={opt.key}
+                  disabled={isProcessing}
+                  onClick={() => handleSelectSubclass(opt.label)}
+                  className={`w-full px-4 py-3 rounded-lg border border-gray-700/50 bg-gray-800/60 hover:bg-purple-800/30 text-white font-medium transition-colors ${
+                    selectedSubclass === opt.label ? 'ring-2 ring-purple-500' : ''
+                  }`}
+                >
+                  <div className="flex flex-col items-start">
+                    <span className="text-lg font-bold">{opt.label}</span>
+                  </div>
+                </button>
+              ))}
+              {subclasses.length === 0 && (
+                <div className="text-center text-gray-400 text-sm">Aucune sous-classe disponible pour cette classe</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
 
   const handleLevelUpWithAutoSave = async () => {
     const hpGainValue = parseInt(hpGain) || 0;
