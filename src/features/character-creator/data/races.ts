@@ -71,7 +71,7 @@ export const races: DndRace[] = [
     ]
   },
   {
-    name: 'Drakéide',
+    name: 'Drakeide',
     description: 'Descendants des dragons, les drakéides possèdent des pouvoirs draconiques.',
     size: 'Moyen',
     speed: 30,
