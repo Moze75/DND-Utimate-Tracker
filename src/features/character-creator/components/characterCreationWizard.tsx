@@ -219,7 +219,7 @@ export default function CharacterCreationWizard() {
       // Vitesse en mètres
       const speedMeters = feetToMeters(raceData?.speed || 30);
 
-      // Équipement d’historique selon Option A/B
+      // Équipement d’historique selon Option A/B (on le conserve en meta)
       const bgEquip =
         backgroundEquipmentOption === 'A'
           ? selectedBackgroundObj?.equipmentOptions?.optionA ?? []
@@ -227,17 +227,16 @@ export default function CharacterCreationWizard() {
             ? selectedBackgroundObj?.equipmentOptions?.optionB ?? []
             : [];
 
-      // Données minimales compatibles (le Tracker saura enrichir/éditer ensuite)
-      const characterData = {
+      // Données minimales compatibles (uniquement colonnes existantes dans players)
+      const characterData: any = {
         user_id: user.id,
         name: characterName.trim(),
-        // Optionnel: on peut dupliquer dans adventurer_name
         adventurer_name: characterName.trim(),
         level: 1,
         current_hp: hitPoints,
         max_hp: hitPoints,
         class: selectedClass || null,
-        subclass: null, // pas de sous-classe au niveau 1
+        subclass: null,
         race: selectedRace || null,
         background: selectedBackground || null,
         stats: {
@@ -246,25 +245,21 @@ export default function CharacterCreationWizard() {
           speed: speedMeters,            // stockée en mètres
           proficiency_bonus: 2,
           inspirations: 0,
-          // On peut stocker des métadonnées souples
           feats: {},
+          // On stocke ici les infos non supportées par le schéma pour ne rien perdre
+          creator_meta: {
+            class_skills: selectedClassSkills,
+            background_skillProficiencies: selectedBackgroundObj?.skillProficiencies ?? [],
+            background_equipment_option: backgroundEquipmentOption || null,
+            background_equipment_items: bgEquip,
+          },
         },
-        // Le Tracker affichera par défaut s’il n’a pas d’abilities[]
-        abilities: null as any,
-        equipment: {
-          starting_equipment: classData?.equipment || [],
-          background_equipment_option: backgroundEquipmentOption || null,
-          background_equipment_items: bgEquip,
-        },
-        // Garde une trace des maîtrises choisies (utile pour migration ultérieure)
-        proficiencies: {
-          skills_from_class: selectedClassSkills,
-          skills_from_background: selectedBackgroundObj?.skillProficiencies ?? [],
-          saving_throws: classData?.savingThrows ?? [],
-        },
+        // abilities peut être null si vous ne voulez pas initialiser
+        abilities: null,
         created_at: new Date().toISOString(),
       };
 
+      // IMPORTANT: ne pas inclure des colonnes absentes du schéma comme "proficiencies" ou "equipment"
       const { data: inserted, error } = await supabase
         .from('players')
         .insert([characterData])
@@ -295,7 +290,7 @@ export default function CharacterCreationWizard() {
 
             if (avatarErr) {
               console.warn('Impossible de fixer avatar_url (fallback affichage direct):', avatarErr);
-              // Ne bloque pas le flux: on garde inserted comme finalPlayer
+              // Ne bloque pas le flux
             } else if (updatedPlayer) {
               finalPlayer = updatedPlayer as typeof inserted;
             }
