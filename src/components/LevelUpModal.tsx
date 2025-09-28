@@ -78,14 +78,6 @@ function mapClassForRpc(pClass: DndClass | null | undefined): string | null | un
 }
 
 /* ============================ Tables “sorts à ajouter” ============================ */
-/*
-  Règles d’après le tableau fourni par l’utilisateur.
-  - Barde, Ensorceleur, (Occultiste/Sorcier): listes “connus”
-  - Clerc, Druide: préparation quotidienne (Niveau + Sag), cantrips par paliers
-  - Magicien: préparation (Niveau + Int), cantrips par paliers (standard 5e)
-  - Paladin, Rôdeur: “sorts connus” d’après le tableau fourni (pas de cantrips)
-  NB: Les tableaux ci-dessous sont indexés dès 1 (index 0 inutilisé).
-*/
 
 const clampLevel = (n: number) => Math.max(1, Math.min(20, n));
 
@@ -95,31 +87,31 @@ const BARD_KNOWN    = [0, 4,5,6,7,8,9,10,11,12,14,15,15,16,18,19,19,20,22,22,22]
 const SORCERER_CANTRIPS = [0, 4,4,4,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,6,6];
 const SORCERER_KNOWN    = [0, 2,3,4,5,6,7,8,9,10,11,12,12,13,13,14,14,15,15,15,15];
 
-// Occultiste (Warlock) — dans le code, la classe est “Sorcier”
+// Occultiste (Warlock)
 const WARLOCK_CANTRIPS = [0, 2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4];
 const WARLOCK_KNOWN    = [0, 2,3,4,5,6,7,8,9,10,10,11,11,12,12,13,13,14,14,15,15];
 
-// Paladin (table fournie)
+// Paladin
 const PALADIN_KNOWN = [0, 0,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11];
 
-// Rôdeur (table fournie)
+// Rôdeur
 const RANGER_KNOWN = [0, 0,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11];
 
-// Clerc — cantrips par paliers, préparation: niveau + Sagesse
+// Clerc — cantrips par paliers
 const getClericCantrips = (lvl: number) => {
   if (lvl >= 10) return 5;
   if (lvl >= 4) return 4;
   return 3;
 };
 
-// Druide — cantrips par paliers, préparation: niveau + Sagesse
+// Druide — cantrips par paliers
 const getDruidCantrips = (lvl: number) => {
   if (lvl >= 8) return 4;
   if (lvl >= 4) return 3;
   return 2;
 };
 
-// Magicien — cantrips standard 5e: 3 (niv 1) / 4 (niv 4) / 5 (niv 10)
+// Magicien — cantrips standard 5e
 const getWizardCantrips = (lvl: number) => {
   if (lvl >= 10) return 5;
   if (lvl >= 4) return 4;
@@ -154,7 +146,7 @@ const getSpellKnowledgeInfo = (player: Player, newLevel: number): SpellInfo => {
         note: 'Valeurs totales au nouveau niveau'
       };
     }
-    case 'Occultiste': {   // nom de classe utilisé dans le code (Warlock)
+    case 'Occultiste': {
       return {
         kind: 'known',
         cantrips: WARLOCK_CANTRIPS[lvl],
@@ -389,7 +381,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
           }
           case 'Clerc':
             resources.channel_divinity = level >= 6 ? 2 : 1;
-            // on garde used_channel_divinity tel quel
             break;
           case 'Druide':
             resources.wild_shape = 2;
@@ -433,7 +424,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
       const newSpellSlots = getSpellSlotsByLevel(player.class, newLevel);
       const newClassResources = getClassResourcesByLevel(player.class, newLevel);
 
-      // Détermine la sous-classe à sauvegarder (uniquement si niveau 3 ou déjà existante)
       const nextSubclass =
         newLevel === 3
           ? (selectedSubclass || player.subclass || null)
@@ -693,10 +683,18 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
   const isCaster = spellInfo.kind !== 'none';
 
   const modalContent = (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl shadow-2xl max-w-md w-full border border-gray-700/50 overflow-hidden">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-green-600/20 to-emerald-600/20 border-b border-gray-700/50 p-4">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overscroll-contain">
+      <div
+        className="
+          bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl shadow-2xl
+          max-w-md w-full border border-gray-700/50 overflow-hidden
+          flex flex-col max-h-[90vh]
+        "
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* Header (non scrollable) */}
+        <div className="bg-gradient-to-r from-green-600/20 to-emerald-600/20 border-b border-gray-700/50 p-4 shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <TrendingUp className="w-6 h-6 text-green-400" />
@@ -718,8 +716,8 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
           </div>
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-6">
+        {/* Content (scrollable) */}
+        <div className="p-6 space-y-6 overflow-y-auto flex-1">
           {/* Character Info */}
           <div className="text-center">
             <h4 className="text-xl font-bold text-gray-100 mb-2">
@@ -883,8 +881,8 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="p-4 border-t border-gray-700/50">
+        {/* Action Buttons (non scrollable) */}
+        <div className="p-4 border-t border-gray-700/50 shrink-0">
           <div className="flex gap-3">
             <button
               onClick={handleLevelUpWithAutoSave}
