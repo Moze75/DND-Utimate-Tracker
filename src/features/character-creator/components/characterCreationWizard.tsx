@@ -9,6 +9,7 @@ import AbilityScores from './steps/AbilityScores';
 import CharacterSummary from './steps/CharacterSummary';
 
 import { DndClass } from '../types/character';
+import type { CharacterExportPayload } from '../types/CharacterExport';
 import { supabase } from '../lib/supabase';
 import { calculateArmorClass, calculateHitPoints, calculateModifier } from '../utils/dndCalculations';
 
@@ -117,7 +118,7 @@ async function tryUploadAvatarFromUrl(playerId: string, url: string): Promise<st
   }
 }
 
-// Notifie le parent (iframe/opener) qu’un personnage a été créé
+// Notifie le parent (iframe/opener) qu’un personnage a été créé (fallback autonome)
 type CreatedEvent = {
   type: 'creator:character_created';
   payload: { playerId: string; player?: any };
@@ -135,7 +136,12 @@ const notifyParentCreated = (playerId: string, player?: any) => {
 
 const steps = ['Race', 'Classe', 'Historique', 'Caractéristiques', 'Résumé'];
 
-export default function CharacterCreationWizard() {
+interface WizardProps {
+  onFinish?: (payload: CharacterExportPayload) => void; // mode intégré (recommandé)
+  onCancel?: () => void; // fermeture par l'hôte
+}
+
+export default function CharacterCreationWizard({ onFinish, onCancel }: WizardProps) {
   // Étape courante
   const [currentStep, setCurrentStep] = useState(0);
 
@@ -185,24 +191,18 @@ export default function CharacterCreationWizard() {
 
   /* ===========================================================
      Finalisation / Enregistrement
+     Deux modes:
+     - Mode intégré (onFinish fourni): on construit un payload complet puis onFinish(payload)
+     - Fallback autonome: on insère en base ici (comme avant), + upload avatar, puis onCancel()
      =========================================================== */
   const handleFinish = async () => {
     try {
-      const { data: auth, error: authErr } = await supabase.auth.getUser();
-      if (authErr) throw authErr;
-      const user = auth?.user;
-      if (!user) {
-        toast.error('Vous devez être connecté pour créer un personnage');
-        return;
-      }
-
+      // Données référentielles
       const raceData = races.find((r) => r.name === selectedRace);
       const classData = classes.find((c) => c.name === selectedClass);
 
-      // Partir des “abilities effectives” (base + historique) calculées dans AbilityScores
+      // Abilities finales (base + historique)
       const finalAbilities = { ...effectiveAbilities };
-
-      // Appliquer les bonus raciaux si présents
       if (raceData?.abilityScoreIncrease) {
         Object.entries(raceData.abilityScoreIncrease).forEach(([ability, bonus]) => {
           if (finalAbilities[ability] != null) {
@@ -215,11 +215,9 @@ export default function CharacterCreationWizard() {
       const hitPoints = calculateHitPoints(finalAbilities['Constitution'] || 10, selectedClass as DndClass);
       const armorClass = calculateArmorClass(finalAbilities['Dextérité'] || 10);
       const initiative = calculateModifier(finalAbilities['Dextérité'] || 10);
+      const speedFeet = raceData?.speed || 30;
 
-      // Vitesse en mètres
-      const speedMeters = feetToMeters(raceData?.speed || 30);
-
-      // Équipement d’historique selon Option A/B (on le conserve en meta)
+      // Équipement d’historique selon Option A/B
       const bgEquip =
         backgroundEquipmentOption === 'A'
           ? selectedBackgroundObj?.equipmentOptions?.optionA ?? []
@@ -227,7 +225,73 @@ export default function CharacterCreationWizard() {
             ? selectedBackgroundObj?.equipmentOptions?.optionB ?? []
             : [];
 
-      // Données minimales compatibles (uniquement colonnes existantes dans players)
+      // Proficient skills (classe + historique)
+      const backgroundSkills = selectedBackgroundObj?.skillProficiencies ?? [];
+      const proficientSkills = Array.from(new Set([...(selectedClassSkills || []), ...backgroundSkills]));
+
+      // Équipement combiné (classe + historique sélectionné)
+      const equipment = [
+        ...(classData?.equipment || []),
+        ...bgEquip,
+      ];
+
+      // Image de classe par défaut
+      const avatarImageUrl = getClassImageUrlLocal(selectedClass) ?? undefined;
+
+      // MODE INTÉGRÉ (recommandé): remonter un CharacterExportPayload au parent
+      if (typeof onFinish === 'function') {
+        const payload: CharacterExportPayload = {
+          characterName: characterName.trim() || 'Héros sans nom',
+          selectedRace: selectedRace || '',
+          selectedClass: (selectedClass as DndClass) || '',
+          selectedBackground: selectedBackground || '',
+          level: 1,
+
+          finalAbilities,
+          proficientSkills,
+
+          equipment,
+          selectedBackgroundEquipmentOption: backgroundEquipmentOption || '',
+
+          hitPoints,
+          armorClass,
+          initiative,
+          speed: speedFeet, // le service d’intégration convertit en m
+
+          // champs optionnels utiles au tracker
+          backgroundFeat: undefined,
+          gold: undefined,
+          hitDice: {
+            die:
+              (selectedClass === 'Magicien' || selectedClass === 'Ensorceleur')
+                ? 'd6'
+                : (selectedClass === 'Barde' || selectedClass === 'Clerc' || selectedClass === 'Druide' || selectedClass === 'Moine' || selectedClass === 'Rôdeur' || selectedClass === 'Roublard' || selectedClass === 'Occultiste')
+                ? 'd8'
+                : (selectedClass === 'Guerrier' || selectedClass === 'Paladin')
+                ? 'd10'
+                : 'd12', // Barbare
+            total: 1,
+            used: 0,
+          },
+
+          // NOUVEAU: image/portrait sélectionné (par défaut: image de classe)
+          avatarImageUrl,
+        };
+
+        // Appelle l’hôte: il fera la création (createCharacterFromCreatorPayload), fermera la modale, etc.
+        onFinish(payload);
+        return;
+      }
+
+      // FALLBACK AUTONOME (si aucun onFinish n’est fourni): insert direct en base + avatar
+      const { data: auth, error: authErr } = await supabase.auth.getUser();
+      if (authErr) throw authErr;
+      const user = auth?.user;
+      if (!user) {
+        toast.error('Vous devez être connecté pour créer un personnage');
+        return;
+      }
+
       const characterData: any = {
         user_id: user.id,
         name: characterName.trim(),
@@ -242,24 +306,22 @@ export default function CharacterCreationWizard() {
         stats: {
           armor_class: armorClass,
           initiative: initiative,
-          speed: speedMeters,            // stockée en mètres
+          speed: feetToMeters(speedFeet), // stock en mètres
           proficiency_bonus: 2,
           inspirations: 0,
           feats: {},
-          // On stocke ici les infos non supportées par le schéma pour ne rien perdre
+          // Meta pour ne rien perdre côté schéma
           creator_meta: {
             class_skills: selectedClassSkills,
-            background_skillProficiencies: selectedBackgroundObj?.skillProficiencies ?? [],
+            background_skillProficiencies: backgroundSkills,
             background_equipment_option: backgroundEquipmentOption || null,
             background_equipment_items: bgEquip,
           },
         },
-        // abilities peut être null si vous ne voulez pas initialiser
         abilities: null,
         created_at: new Date().toISOString(),
       };
 
-      // IMPORTANT: ne pas inclure des colonnes absentes du schéma comme "proficiencies" ou "equipment"
       const { data: inserted, error } = await supabase
         .from('players')
         .insert([characterData])
@@ -274,40 +336,42 @@ export default function CharacterCreationWizard() {
 
       // Avatar de classe: upload dans Supabase Storage et mise à jour de players.avatar_url
       let finalPlayer = inserted;
-      if (inserted?.id && selectedClass) {
-        const classImageUrl = getClassImageUrlLocal(selectedClass);
-        if (classImageUrl) {
-          try {
-            const uploaded = await tryUploadAvatarFromUrl(inserted.id, classImageUrl);
-            const finalUrl = uploaded ?? classImageUrl;
+      if (inserted?.id && avatarImageUrl) {
+        try {
+          const uploaded = await tryUploadAvatarFromUrl(inserted.id, avatarImageUrl);
+          const finalUrl = uploaded ?? avatarImageUrl;
 
-            const { data: updatedPlayer, error: avatarErr } = await supabase
-              .from('players')
-              .update({ avatar_url: finalUrl })
-              .eq('id', inserted.id)
-              .select('*')
-              .single();
+          const { data: updatedPlayer, error: avatarErr } = await supabase
+            .from('players')
+            .update({ avatar_url: finalUrl })
+            .eq('id', inserted.id)
+            .select('*')
+            .single();
 
-            if (avatarErr) {
-              console.warn('Impossible de fixer avatar_url (fallback affichage direct):', avatarErr);
-              // Ne bloque pas le flux
-            } else if (updatedPlayer) {
-              finalPlayer = updatedPlayer as typeof inserted;
-            }
-          } catch (e) {
-            console.warn('Echec de la mise à jour de l’avatar (upload/DB):', e);
+          if (avatarErr) {
+            console.warn('Impossible de fixer avatar_url (fallback affichage direct):', avatarErr);
+          } else if (updatedPlayer) {
+            finalPlayer = updatedPlayer as typeof inserted;
           }
+        } catch (e) {
+          console.warn('Echec de la mise à jour de l’avatar (upload/DB):', e);
         }
       }
 
-      // Notifier l’app parente (pour l’intégration avec le Tracker)
+      // Notifier l’app parente (si elle écoute) + fermer la modale si possible
       if (inserted?.id) {
         notifyParentCreated(inserted.id, finalPlayer);
       }
 
       toast.success('Personnage créé avec succès !');
 
-      // Reset complet
+      // Fermer si on a un onCancel fourni par l’hôte
+      if (typeof onCancel === 'function') {
+        onCancel();
+        return;
+      }
+
+      // Sinon, reset local (reste sur l’écran du wizard)
       setCurrentStep(0);
       setCharacterName('');
       setSelectedRace('');
@@ -399,7 +463,7 @@ export default function CharacterCreationWizard() {
             selectedClass={selectedClass as DndClass}
             selectedBackground={selectedBackground}
             abilities={effectiveAbilities}
-            // Affichage des compétences (si implémenté) + équipement historique
+            // Affichage des compétences + équipement historique
             selectedClassSkills={selectedClassSkills}
             selectedBackgroundEquipmentOption={backgroundEquipmentOption}
             onFinish={handleFinish}
