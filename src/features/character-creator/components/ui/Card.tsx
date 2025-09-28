@@ -207,7 +207,7 @@ export default function Card({
               WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
               WebkitMaskComposite: 'xor' as any,
               maskComposite: 'exclude' as any,
-              animation: `card-border-pulse 2.5s ease-in-out infinite`,
+              animation: `card-border-pulse 1.8s ease-in-out infinite`,
               borderRadius: '0.75rem',
               filter: `brightness(${1 + (intensity - 1) * 0.2}) saturate(${1 + (intensity - 1) * 0.1})`,
             }}
@@ -286,25 +286,25 @@ export default function Card({
       <style>{`        
         @keyframes card-border-pulse {
           0%   { 
-            opacity: 0.6; 
-            filter: brightness(1); 
+            opacity: 0.4; 
+            filter: brightness(0.9); 
             box-shadow: 
-              0 0 8px ${config.colors.primary}20,
-              0 0 16px ${config.colors.secondary}15;
+              0 0 6px ${config.colors.primary}15,
+              0 0 12px ${config.colors.secondary}10;
           }
           50%  { 
-            opacity: 0.9; 
-            filter: brightness(1.1); 
+            opacity: 1; 
+            filter: brightness(1.3); 
             box-shadow: 
-              0 0 12px ${config.colors.primary}30,
-              0 0 24px ${config.colors.secondary}20;
+              0 0 18px ${config.colors.primary}40,
+              0 0 32px ${config.colors.secondary}30;
           }
           100% { 
-            opacity: 0.6; 
-            filter: brightness(1); 
+            opacity: 0.4; 
+            filter: brightness(0.9); 
             box-shadow: 
-              0 0 8px ${config.colors.primary}20,
-              0 0 16px ${config.colors.secondary}15;
+              0 0 6px ${config.colors.primary}15,
+              0 0 12px ${config.colors.secondary}10;
           }
         }
         
@@ -322,8 +322,14 @@ export default function Card({
         }
         
         @keyframes outer-glow-subtle {
-          0%, 100% { opacity: 0.7; }
-          50% { opacity: 1; }
+          0%, 100% { 
+            opacity: 0.5; 
+            transform: scale(1);
+          }
+          50% { 
+            opacity: 1.2; 
+            transform: scale(1.02);
+          }
         }
         
         @keyframes selection-burst {
