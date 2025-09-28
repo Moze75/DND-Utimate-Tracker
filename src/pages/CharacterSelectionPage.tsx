@@ -48,16 +48,20 @@ type CreatorModalProps = {
 function CreatorModal({ open, onClose, onComplete }: CreatorModalProps) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm overflow-y-auto">
-      <div className="min-h-full flex items-center justify-center py-6">
-        <div className="relative w-full md:w-[1100px] bg-gray-900 border border-gray-800 rounded-none md:rounded-xl max-h-[95vh] flex flex-col">
-          <button
-            onClick={onClose}
-            className="absolute top-3 right-3 z-10 bg-gray-800/80 hover:bg-gray-700 text-white px-3 py-1 rounded"
-            aria-label="Fermer"
-          >
-            Fermer
-          </button>
+    <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm">
+      {/* Conteneur plein écran */}
+      <div className="w-screen h-screen relative">
+        {/* En-tête optionnel: bouton fermer en overlay */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 z-10 bg-gray-800/80 hover:bg-gray-700 text-white px-3 py-1 rounded"
+          aria-label="Fermer"
+        >
+          Fermer
+        </button>
+
+        {/* Zone de contenu: prend toute la place, défile à l'intérieur */}
+        <div className="w-full h-full bg-gray-900 flex flex-col">
           <div className="flex-1 min-h-0 overflow-y-auto">
             <Suspense
               fallback={
