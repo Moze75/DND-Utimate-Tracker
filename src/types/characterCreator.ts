@@ -12,4 +12,5 @@ export interface CharacterExportPayload {
   armorClass: number;
   initiative: number;
   speed: number;
+  avatarImageUrl?: string;
 }
