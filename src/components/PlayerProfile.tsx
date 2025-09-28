@@ -536,7 +536,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
                 </>
               )}
             </div>
-            <div className="text-xs uppercase tracking-wide text-gray-500 -mt-1 text-center -ml-2">MAÎT</div>
+            <div className="text-xs uppercase tracking-wide text-gray-500 -mt-1 text-center -ml-4">MAÎT</div>
           </div>
         </div>
       </div>
