@@ -680,13 +680,17 @@ function ScreenRipple({
       <div className="space-y-4">
         <div className="bg-gradient-to-r from-violet-700/30 via-fuchsia-600/20 to-amber-600/20 border border-white/10 rounded-2xl px-4 py-3 ring-1 ring-black/5 shadow-md shadow-black/20">
           <div className="flex items-center justify-between">
-            {/* Libellé classe / sous-classe avec message si manquante */}
+            {/* Libellé classe / sous-classe avec message si manquante (à partir du niveau 3) */}
             <span className="text-sm font-semibold text-white">
               {hasClass ? displayClass : '—'}
               {hasClass && (
-                <span className={`ml-2 font-normal ${hasSubclass ? 'text-white/80' : 'text-red-400'}`}>
-                  {hasSubclass ? `- ${displaySubclass}` : 'Sélectionnez votre sous-classe dans les paramètres'}
-                </span>
+                <>
+                  {hasSubclass ? (
+                    <span className="ml-2 font-normal text-white/80">- {displaySubclass}</span>
+                  ) : finalLevel >= 3 ? (
+                    <span className="ml-2 font-normal text-red-400">Sélectionnez votre sous-classe dans les paramètres</span>
+                  ) : null}
+                </>
               )}
             </span>
 
