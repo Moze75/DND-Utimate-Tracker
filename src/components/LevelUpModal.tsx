@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, TrendingUp, Heart, Dices, BookOpen } from 'lucide-react';
+import { X, TrendingUp, Heart, Dices, BookOpen, Layers } from 'lucide-react';
 import { Player, DndClass } from '../types/dnd';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
+
+// === Ajout import pour sous-classes ===
+import { getSubclassesForClass, canonicalClass } from '../utils/subclassUtils';
 
 interface LevelUpModalProps {
   isOpen: boolean;
