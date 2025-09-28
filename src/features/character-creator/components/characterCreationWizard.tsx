@@ -79,16 +79,36 @@ function getClassImageUrlLocal(className: DndClass | string | undefined | null):
   }
 }
 
+// Normalise le don d’historique pour coller à la liste attendue par l’app
+// ex: "Initié à la magie (Clerc)" => "Initié à la magie"
+function normalizeBackgroundFeat(feat?: string | null): string | undefined {
+  if (!feat) return undefined;
+  const trimmed = feat.trim();
+  if (trimmed.toLowerCase().startsWith('initié à la magie')) {
+    return 'Initié à la magie';
+  }
+  return trimmed;
+}
+
+// Parse l’or (“X po”) dans la liste d’items d’équipement
+function parseGoldFromItems(items?: string[]): number | undefined {
+  if (!Array.isArray(items)) return undefined;
+  let total = 0;
+  for (const it of items) {
+    const m = String(it).match(/(\d+)\s*po\b/i);
+    if (m) total += parseInt(m[1], 10);
+  }
+  return total > 0 ? total : undefined;
+}
+
 // Tente d'uploader une image (URL publique ou data URL) dans le bucket Supabase "avatars"
 // et retourne l'URL publique Supabase. En cas d'échec, retourne null.
 async function tryUploadAvatarFromUrl(playerId: string, url: string): Promise<string | null> {
   try {
-    // fetch sur même origine pour /Guerrier.png, etc. (public/)
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const blob = await res.blob();
 
-    // Déterminer content-type et extension
     const contentType = blob.type || 'image/png';
     const ext = (() => {
       const t = contentType.split('/')[1]?.toLowerCase();
@@ -99,14 +119,12 @@ async function tryUploadAvatarFromUrl(playerId: string, url: string): Promise<st
     const fileName = `class-${Date.now()}.${ext}`;
     const filePath = `${playerId}/${fileName}`;
 
-    // Upload dans le bucket "avatars"
     const { error: uploadErr } = await supabase.storage
       .from('avatars')
       .upload(filePath, blob, { upsert: true, contentType });
 
     if (uploadErr) throw uploadErr;
 
-    // URL publique
     const { data: { publicUrl } } = supabase.storage
       .from('avatars')
       .getPublicUrl(filePath);
@@ -176,12 +194,10 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
 
   // Resets cohérents
   useEffect(() => {
-    // Si la classe change, réinitialiser les compétences de classe choisies
     setSelectedClassSkills([]);
   }, [selectedClass]);
 
   useEffect(() => {
-    // Si l’historique change, réinitialiser le choix d’équipement A/B
     setBackgroundEquipmentOption('');
   }, [selectedBackground]);
 
@@ -197,7 +213,6 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
      =========================================================== */
   const handleFinish = async () => {
     try {
-      // Données référentielles
       const raceData = races.find((r) => r.name === selectedRace);
       const classData = classes.find((c) => c.name === selectedClass);
 
@@ -225,7 +240,7 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
             ? selectedBackgroundObj?.equipmentOptions?.optionB ?? []
             : [];
 
-      // Proficient skills (classe + historique)
+      // Compétences maîtrisées
       const backgroundSkills = selectedBackgroundObj?.skillProficiencies ?? [];
       const proficientSkills = Array.from(new Set([...(selectedClassSkills || []), ...backgroundSkills]));
 
@@ -234,6 +249,19 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
         ...(classData?.equipment || []),
         ...bgEquip,
       ];
+
+      // Don d’historique (normalisé)
+      const backgroundFeat = normalizeBackgroundFeat(selectedBackgroundObj?.feat);
+
+      // Or initial: parser “X po” dans l’option choisie
+      const goldFromA = parseGoldFromItems(selectedBackgroundObj?.equipmentOptions?.optionA);
+      const goldFromB = parseGoldFromItems(selectedBackgroundObj?.equipmentOptions?.optionB);
+      const gold =
+        backgroundEquipmentOption === 'A'
+          ? goldFromA
+          : backgroundEquipmentOption === 'B'
+          ? goldFromB
+          : undefined;
 
       // Image de classe par défaut
       const avatarImageUrl = getClassImageUrlLocal(selectedClass) ?? undefined;
@@ -258,9 +286,11 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
           initiative,
           speed: speedFeet, // le service d’intégration convertit en m
 
-          // champs optionnels utiles au tracker
-          backgroundFeat: undefined,
-          gold: undefined,
+          // Ajouts pour l’export correct
+          backgroundFeat,
+          gold,
+
+          // Dés de vie
           hitDice: {
             die:
               (selectedClass === 'Magicien' || selectedClass === 'Ensorceleur')
@@ -274,11 +304,10 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
             used: 0,
           },
 
-          // NOUVEAU: image/portrait sélectionné (par défaut: image de classe)
+          // Avatar par défaut depuis la classe
           avatarImageUrl,
         };
 
-        // Appelle l’hôte: il fera la création (createCharacterFromCreatorPayload), fermera la modale, etc.
         onFinish(payload);
         return;
       }
@@ -291,6 +320,14 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
         toast.error('Vous devez être connecté pour créer un personnage');
         return;
       }
+
+      const featsData: any = {};
+      if (backgroundFeat) {
+        featsData.origins = [backgroundFeat];
+        featsData.origin = backgroundFeat;
+      }
+
+      const initialGold = gold ?? 0;
 
       const characterData: any = {
         user_id: user.id,
@@ -309,7 +346,9 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
           speed: feetToMeters(speedFeet), // stock en mètres
           proficiency_bonus: 2,
           inspirations: 0,
-          feats: {},
+          feats: featsData,
+          coins: { gp: initialGold, sp: 0, cp: 0 },
+          gold: initialGold, // compat éventuelle
           // Meta pour ne rien perdre côté schéma
           creator_meta: {
             class_skills: selectedClassSkills,
@@ -319,6 +358,10 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
           },
         },
         abilities: null,
+        // Si votre table a ces colonnes (comme dans l’app): écrivez l’or top-level
+        gold: initialGold,
+        silver: 0,
+        copper: 0,
         created_at: new Date().toISOString(),
       };
 
@@ -358,20 +401,18 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
         }
       }
 
-      // Notifier l’app parente (si elle écoute) + fermer la modale si possible
       if (inserted?.id) {
         notifyParentCreated(inserted.id, finalPlayer);
       }
 
       toast.success('Personnage créé avec succès !');
 
-      // Fermer si on a un onCancel fourni par l’hôte
       if (typeof onCancel === 'function') {
         onCancel();
         return;
       }
 
-      // Sinon, reset local (reste sur l’écran du wizard)
+      // Reset local si pas d’hôte
       setCurrentStep(0);
       setCharacterName('');
       setSelectedRace('');
@@ -420,7 +461,6 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
           <ClassSelection
             selectedClass={selectedClass}
             onClassSelect={setSelectedClass}
-            // Compétences cliquables dans la classe
             selectedSkills={selectedClassSkills}
             onSelectedSkillsChange={setSelectedClassSkills}
             onNext={nextStep}
@@ -433,7 +473,6 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
           <BackgroundSelection
             selectedBackground={selectedBackground}
             onBackgroundSelect={setSelectedBackground}
-            // Option A / B d’équipement d’historique
             selectedEquipmentOption={backgroundEquipmentOption}
             onEquipmentOptionChange={setBackgroundEquipmentOption}
             onNext={nextStep}
@@ -447,7 +486,6 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
             abilities={abilities}
             onAbilitiesChange={setAbilities}
             selectedBackground={selectedBackgroundObj}
-            // Remonte “base + historique” pour tout le reste du process
             onEffectiveAbilitiesChange={setEffectiveAbilities}
             onNext={nextStep}
             onPrevious={previousStep}
@@ -463,7 +501,6 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
             selectedClass={selectedClass as DndClass}
             selectedBackground={selectedBackground}
             abilities={effectiveAbilities}
-            // Affichage des compétences + équipement historique
             selectedClassSkills={selectedClassSkills}
             selectedBackgroundEquipmentOption={backgroundEquipmentOption}
             onFinish={handleFinish}
