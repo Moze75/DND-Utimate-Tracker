@@ -1,6 +1,6 @@
 import type { DndClass } from '../types/character';
 
-// Map nom de classe -> fichier dans public/*.png
+// Map nom de classe -> base de fichier (placez les images dans /public/*.png)
 export function getImageBaseForClass(className: DndClass): string | null {
   switch (className) {
     case 'Guerrier': return 'Guerrier';
@@ -21,5 +21,5 @@ export function getImageBaseForClass(className: DndClass): string | null {
 
 export function getClassImageUrl(className: DndClass): string | null {
   const base = getImageBaseForClass(className);
-  return base ? `/${base}.png` : null; // public root
+  return base ? `/${base}.png` : null; // racine du dossier public
 }
