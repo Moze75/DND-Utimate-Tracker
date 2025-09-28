@@ -5,6 +5,8 @@ import Button from '../ui/Button';
 import { Sword, Heart, Shield, Zap, BookOpen, ChevronDown, CheckSquare, Square } from 'lucide-react';
 import { DndClass } from '../../types/character';
 import { normalizeSkill } from '../../data/skills';
+import { getClassImageUrl } from '../../utils/classImages';
+const imageSrc = getClassImageUrl(dndClass.name);
 
 interface ClassSelectionProps {
   selectedClass: DndClass | '';
