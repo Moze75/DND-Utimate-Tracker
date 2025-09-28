@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dices, Edit2, Save, Dumbbell, Wind, Heart, Brain, Eye, Crown, Star } from 'lucide-react';
+import { Dices, Settings, Save, Dumbbell, Wind, Heart, Brain, Eye, Crown, Star } from 'lucide-react';
 import { Player, Ability } from '../types/dnd';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -285,7 +285,7 @@ export function StatsTab({ player, onUpdate }: StatsTabProps) {
               onClick={() => editing ? handleSave() : setEditing(true)}
               className="p-2 text-gray-400 hover:bg-gray-700/50 rounded-lg transition-colors flex items-center justify-center"
             >
-              {editing ? <Save size={20} /> : <Edit2 size={20} />}
+              {editing ? <Save size={20} /> : <Settings size={20} />}
             </button>
           </div>
         </div>
