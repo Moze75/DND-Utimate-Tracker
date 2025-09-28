@@ -32,4 +32,8 @@ export interface CharacterExportPayload {
     total: number; // généralement = level à la création
     used: number;  // 0 au départ
   };
+
+  // NOUVEAU: image/portrait sélectionné dans le créateur
+  // Peut être une data URL (data:image/png;base64,...) ou une URL publique
+  avatarImageUrl?: string;
 }
