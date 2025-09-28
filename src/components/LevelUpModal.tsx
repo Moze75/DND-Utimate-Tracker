@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, TrendingUp, Heart, Dices, BookOpen } from 'lucide-react';
 import { Player, DndClass } from '../types/dnd';
@@ -68,6 +68,14 @@ const getWisModFromPlayer = (player: Player): number =>
 
 const getIntModFromPlayer = (player: Player): number =>
   extractAbilityMod(player, ['intelligence', 'intellect', 'int']);
+
+/* ============================ Sous-classes (helpers) ============================ */
+
+// Canonicalisation minimale pour RPC (même logique que PlayerProfileSettingsModal)
+function mapClassForRpc(pClass: DndClass | null | undefined): string | null | undefined {
+  if (pClass === 'Occultiste') return 'Occultiste';
+  return pClass;
+}
 
 /* ============================ Tables “sorts à ajouter” ============================ */
 /*
@@ -218,6 +226,38 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
   const [hpGain, setHpGain] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Sous-classes (comme dans PlayerProfileSettingsModal)
+  const [availableSubclasses, setAvailableSubclasses] = useState<string[]>([]);
+  const [selectedSubclass, setSelectedSubclass] = useState<string>(player.subclass || '');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    // Init valeur choisie depuis le joueur
+    setSelectedSubclass(player.subclass || '');
+  }, [isOpen, player.subclass]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const loadSubclasses = async () => {
+      const cls = mapClassForRpc(player.class);
+      if (!cls) {
+        setAvailableSubclasses([]);
+        return;
+      }
+      try {
+        const { data, error } = await supabase.rpc('get_subclasses_by_class', {
+          p_class: cls,
+        });
+        if (error) throw error;
+        setAvailableSubclasses((data as any) || []);
+      } catch (error) {
+        console.error('Erreur lors du chargement des sous-classes:', error);
+        setAvailableSubclasses([]);
+      }
+    };
+    loadSubclasses();
+  }, [isOpen, player.class]);
+
   if (!isOpen) return null;
 
   const hitDieSize = getHitDieSize(player.class);
@@ -225,6 +265,8 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
   const constitutionModifier = player.abilities?.find(a => (a.name || a.abbr)?.toString().toLowerCase() === 'constitution')?.modifier || 0;
   const theoreticalHpGain = averageHpGain + constitutionModifier;
   const newLevel = player.level + 1;
+
+  const requiresSubclassSelection = newLevel === 3 && !player.subclass && availableSubclasses.length > 0;
 
   const handleLevelUpWithAutoSave = async () => {
     const hpGainValue = parseInt(hpGain) || 0;
@@ -239,6 +281,12 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
       return;
     }
 
+    // Sous-classe obligatoire à l'arrivée au niveau 3 (si non encore choisie et options dispo)
+    if (requiresSubclassSelection && !selectedSubclass) {
+      toast.error('Veuillez sélectionner une sous-classe pour le niveau 3.');
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
@@ -249,7 +297,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         used: player.hit_dice?.used || 0
       };
 
-      // Emplacements de sorts (inchangé)
       const getSpellSlotsByLevel = (playerClass: string | null | undefined, level: number) => {
         const slots: any = {};
         
@@ -258,7 +305,7 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         }
         
         const fullCasters = ['Magicien', 'Ensorceleur', 'Barde', 'Clerc', 'Druide'];
-        const halfCasters = ['Paladin', 'Rodeur'];
+        const halfCasters = ['Paladin', 'Rôdeur'];
         
         if (fullCasters.includes(playerClass || '')) {
           if (level >= 1) {
@@ -386,6 +433,12 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
       const newSpellSlots = getSpellSlotsByLevel(player.class, newLevel);
       const newClassResources = getClassResourcesByLevel(player.class, newLevel);
 
+      // Détermine la sous-classe à sauvegarder (uniquement si niveau 3 ou déjà existante)
+      const nextSubclass =
+        newLevel === 3
+          ? (selectedSubclass || player.subclass || null)
+          : (player.subclass || null);
+
       const { error } = await supabase
         .from('players')
         .update({
@@ -394,7 +447,8 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
           current_hp: newCurrentHp,
           hit_dice: newHitDice,
           spell_slots: newSpellSlots,
-          class_resources: newClassResources
+          class_resources: newClassResources,
+          subclass: nextSubclass,
         })
         .eq('id', player.id);
 
@@ -407,7 +461,8 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         current_hp: newCurrentHp,
         hit_dice: newHitDice,
         spell_slots: newSpellSlots,
-        class_resources: newClassResources
+        class_resources: newClassResources,
+        subclass: nextSubclass || undefined,
       });
 
       toast.success(`Félicitations ! Passage au niveau ${newLevel} (+${hpGainValue} PV)`);
@@ -439,6 +494,11 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
       return;
     }
 
+    if (requiresSubclassSelection && !selectedSubclass) {
+      toast.error('Veuillez sélectionner une sous-classe pour le niveau 3.');
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
@@ -449,7 +509,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         used: player.hit_dice?.used || 0
       };
 
-      // Emplacements de sorts (inchangé)
       const getSpellSlotsByLevel = (playerClass: string | null | undefined, level: number) => {
         const slots: any = {};
         
@@ -585,6 +644,11 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
       const newSpellSlots = getSpellSlotsByLevel(player.class, newLevel);
       const newClassResources = getClassResourcesByLevel(player.class, newLevel);
 
+      const nextSubclass =
+        newLevel === 3
+          ? (selectedSubclass || player.subclass || null)
+          : (player.subclass || null);
+
       const { error } = await supabase
         .from('players')
         .update({
@@ -593,7 +657,8 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
           current_hp: newCurrentHp,
           hit_dice: newHitDice,
           spell_slots: newSpellSlots,
-          class_resources: newClassResources
+          class_resources: newClassResources,
+          subclass: nextSubclass,
         })
         .eq('id', player.id);
 
@@ -606,7 +671,8 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         current_hp: newCurrentHp,
         hit_dice: newHitDice,
         spell_slots: newSpellSlots,
-        class_resources: newClassResources
+        class_resources: newClassResources,
+        subclass: nextSubclass || undefined,
       });
 
       toast.success(`Félicitations ! Passage au niveau ${newLevel} (+${hpGainValue} PV)`);
@@ -724,6 +790,44 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
             </div>
           </div>
 
+          {/* Sous-classe (niveau 3) */}
+          {newLevel === 3 && (
+            <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
+              <div className="flex items-center gap-2 mb-3">
+                <BookOpen className="w-5 h-5 text-amber-400" />
+                <h5 className="font-medium text-gray-200">Sous-classe</h5>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-300">Choisissez votre sous-classe</label>
+                <select
+                  value={selectedSubclass}
+                  onChange={(e) => setSelectedSubclass(e.target.value)}
+                  className="input-dark w-full px-3 py-2 rounded-md"
+                  disabled={availableSubclasses.length === 0}
+                >
+                  <option value="">{availableSubclasses.length ? 'Sélectionnez une sous-classe' : 'Aucune sous-classe disponible'}</option>
+                  {availableSubclasses.map((sub) => (
+                    <option key={sub} value={sub}>
+                      {sub}
+                    </option>
+                  ))}
+                </select>
+
+                {!player.subclass && availableSubclasses.length > 0 && (
+                  <p className="text-xs text-gray-500">
+                    La sous-classe est requise au niveau 3. Vous pourrez consulter vos nouvelles aptitudes dans l’onglet Classe.
+                  </p>
+                )}
+                {availableSubclasses.length === 0 && (
+                  <p className="text-xs text-gray-500">
+                    Impossible de charger les sous-classes pour {player.class}. Vous pourrez la définir plus tard dans les paramètres du personnage.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Sorts à ajouter (indicatif) */}
           {isCaster && (
             <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
@@ -784,9 +888,9 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
           <div className="flex gap-3">
             <button
               onClick={handleLevelUpWithAutoSave}
-              disabled={isProcessing || !hpGain || parseInt(hpGain) < 1}
+              disabled={isProcessing || !hpGain || parseInt(hpGain) < 1 || (requiresSubclassSelection && !selectedSubclass)}
               className={`flex-1 px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
-                isProcessing || !hpGain || parseInt(hpGain) < 1
+                isProcessing || !hpGain || parseInt(hpGain) < 1 || (requiresSubclassSelection && !selectedSubclass)
                   ? 'bg-gray-700 text-gray-300 cursor-not-allowed'
                   : 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white'
               }`}
