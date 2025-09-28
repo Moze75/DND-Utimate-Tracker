@@ -171,26 +171,14 @@ export async function createCharacterFromCreatorPayload(
     .eq('id', playerId);
   if (updError) throw updError;
 
-  // 3-bis) Avatar: si le créateur a fourni une image, tenter l’upload vers Supabase
   if (payload.avatarImageUrl) {
-    // 3-bis-1: essayer de copier l’image dans le bucket Supabase
     const uploaded = await tryUploadAvatarFromUrl(playerId as string, payload.avatarImageUrl);
-
-    if (uploaded) {
-      // Succès: on fixe avatar_url sur l’URL publique Supabase
-      const { error: avatarErr } = await supabase
-        .from('players')
-        .update({ avatar_url: uploaded })
-        .eq('id', playerId);
-      if (avatarErr) console.warn('Impossible de fixer avatar_url après upload:', avatarErr);
-    } else {
-      // Fallback: on stocke l’URL fournie telle quelle (affichage OK; upload manuel possible plus tard)
-      const { error: avatarErr } = await supabase
-        .from('players')
-        .update({ avatar_url: payload.avatarImageUrl })
-        .eq('id', playerId);
-      if (avatarErr) console.warn('Impossible de fixer avatar_url (fallback URL directe):', avatarErr);
-    }
+    const finalUrl = uploaded ?? payload.avatarImageUrl; // fallback: garder l’URL telle quelle
+    const { error: avatarErr } = await supabase
+      .from('players')
+      .update({ avatar_url: finalUrl })
+      .eq('id', playerId);
+    if (avatarErr) console.warn('Impossible de fixer avatar_url:', avatarErr);
   }
 
   // 4) Retourne le player complet
