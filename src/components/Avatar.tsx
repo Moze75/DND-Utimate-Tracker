@@ -23,6 +23,14 @@ export function Avatar({ url, playerId, onAvatarUpdate, size = 'md', editable = 
     lg: 'w-56 h-56'
   };
 
+  const extractSupabaseAvatarPath = (publicUrl: string): string | null => {
+    // Forme attendue: https://<project>.supabase.co/storage/v1/object/public/avatars/<playerId>/<file>
+    const marker = '/storage/v1/object/public/avatars/';
+    const i = publicUrl.indexOf(marker);
+    if (i === -1) return null;
+    return publicUrl.slice(i + marker.length); // => "<playerId>/<file>"
+  };
+
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -40,10 +48,10 @@ export function Avatar({ url, playerId, onAvatarUpdate, size = 'md', editable = 
     setIsUploading(true);
     try {
       if (url) {
-        const oldPath = url.split('/').slice(-2).join('/');
-        await supabase.storage
-          .from('avatars')
-          .remove([oldPath]);
+        const oldPath = extractSupabaseAvatarPath(url);
+        if (oldPath) {
+          await supabase.storage.from('avatars').remove([oldPath]);
+        }
       }
 
       const fileExt = file.name.split('.').pop();
