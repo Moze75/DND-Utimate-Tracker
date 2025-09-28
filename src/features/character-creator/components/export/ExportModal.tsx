@@ -2,7 +2,7 @@ import React from 'react';
 import Button from '../ui/Button';
 import Card, { CardContent, CardHeader } from '../ui/Card';
 import { CharacterExportPayload } from '../../types/CharacterExport';
-import { User, Heart, Shield, Zap, Users, Package } from 'lucide-react';
+import { User, Heart, Shield, Zap, Users, Package, Image as ImageIcon } from 'lucide-react';
 import { calculateModifier } from '../../utils/dndCalculations';
 
 interface ExportModalProps {
@@ -32,6 +32,27 @@ export function ExportModal({ open, payload, onClose, onConfirm }: ExportModalPr
         </div>
 
         <div className="p-5 overflow-y-auto max-h-[calc(90vh-120px)] space-y-6">
+          {/* Portrait / Avatar (si fourni) */}
+          {payload.avatarImageUrl && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center">
+                  <ImageIcon className="w-5 h-5 text-cyan-400 mr-2" />
+                  <h4 className="text-white font-semibold">Portrait</h4>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="w-full flex items-center justify-center">
+                  <img
+                    src={payload.avatarImageUrl}
+                    alt="Portrait du personnage"
+                    className="max-h-64 object-contain rounded-md border border-gray-800"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Informations de base */}
           <Card>
             <CardHeader>
