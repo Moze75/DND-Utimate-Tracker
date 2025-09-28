@@ -77,7 +77,6 @@ const getProficiencyBonusForLevel = (level: number): number => {
   if (level >= 5) return 3;
   return 2;
 };
-
 const getSpellcastingAbilityName = (
   cls?: string
 ): 'Charisme' | 'Sagesse' | 'Intelligence' | null => {
@@ -93,36 +92,14 @@ const getSpellcastingAbilityName = (
   if (c.includes('occultiste') || c.includes('warlock')) return 'Charisme';
   return null;
 };
-
-// PATCH: robuste aux formats abilities variés (array | map | null)
 const getAbilityModFromPlayer = (
   player: Player,
   abilityNameFr: 'Charisme' | 'Sagesse' | 'Intelligence'
 ): number => {
-  const abilities: any = (player as any).abilities;
-
-  // 1) Format tableau [{ name, score, modifier, ... }]
-  const fromArray =
-    Array.isArray(abilities)
-      ? abilities.find?.((a: any) => a?.name === abilityNameFr)
-      : undefined;
-
-  // 2) Format map: { "Sagesse": { score: 12 } } ou { "Sagesse": 12 }
-  let fromMap: any = undefined;
-  if (!fromArray && abilities && typeof abilities === 'object' && !Array.isArray(abilities)) {
-    const direct = abilities[abilityNameFr] ?? abilities[abilityNameFr.toLowerCase()];
-    if (typeof direct === 'number') {
-      fromMap = { score: direct };
-    } else if (direct && typeof direct === 'object') {
-      fromMap = direct;
-    }
-  }
-
-  const ability = fromArray ?? fromMap;
+  const ability = player.abilities?.find((a) => a.name === abilityNameFr);
   if (!ability) return 0;
-
-  if (typeof ability.modifier === 'number') return ability.modifier;
-  if (typeof ability.score === 'number') return getModifier(ability.score);
+  if (typeof (ability as any).modifier === 'number') return (ability as any).modifier;
+  if (typeof (ability as any).score === 'number') return getModifier((ability as any).score);
   return 0;
 };
 
@@ -842,7 +819,7 @@ export function KnownSpellsSection({ player, onUpdate }: KnownSpellsSectionProps
                     </div>
                   )}
                 </div>
-              ); 
+              );
             })}
           </div>
         )}
