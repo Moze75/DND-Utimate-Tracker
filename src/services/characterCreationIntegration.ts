@@ -64,6 +64,40 @@ function buildAbilitiesForTracker(finalAbilities: Record<string, number>, profic
   });
 }
 
+async function tryUploadAvatarFromUrl(playerId: string, url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+
+    // Déduire le content-type/extension
+    const contentType = blob.type || 'image/png';
+    const ext = (() => {
+      const t = contentType.split('/')[1]?.toLowerCase();
+      if (t === 'jpeg') return 'jpg';
+      return t || 'png';
+    })();
+
+    const fileName = `class-${Date.now()}.${ext}`;
+    const filePath = `${playerId}/${fileName}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from('avatars')
+      .upload(filePath, blob, { upsert: true, contentType });
+
+    if (uploadErr) throw uploadErr;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(filePath);
+
+    return publicUrl || null;
+  } catch (e) {
+    console.warn('Upload avatar depuis URL/dataURL impossible, fallback sur URL directe:', e);
+    return null;
+  }
+}
+
 export async function createCharacterFromCreatorPayload(
   session: any,
   payload: CharacterExportPayload
@@ -84,14 +118,13 @@ export async function createCharacterFromCreatorPayload(
 
   const abilitiesArray = buildAbilitiesForTracker(payload.finalAbilities || {}, payload.proficientSkills || [], level);
 
-  // Don d’historique → feats.origins/origin (compat PlayerProfileSettingsModal)
+  // Don d’historique → feats.origins/origin
   const feats: any = {
     origins: payload.backgroundFeat ? [payload.backgroundFeat] : [],
   };
   if (feats.origins.length > 0) feats.origin = feats.origins[0];
 
-  // Argent: ton UI lit player.gold/silver/copper dans EquipmentTab
-  // On initialise top-level gold et, pour compat future, stats.coins.gp aussi.
+  // Argent
   const initialGold =
     typeof payload.gold === 'number'
       ? Math.max(0, payload.gold)
@@ -110,8 +143,8 @@ export async function createCharacterFromCreatorPayload(
     proficiency_bonus,
     inspirations: 0,
     feats,
-    coins, // compat (non utilisé par EquipmentTab aujourd’hui)
-    gold: initialGold, // compat éventuelle si lu dans stats.gold
+    coins, // compat
+    gold: initialGold, // compat éventuelle
   };
 
   // 3) Update robuste sur des colonnes existantes
@@ -137,6 +170,28 @@ export async function createCharacterFromCreatorPayload(
     })
     .eq('id', playerId);
   if (updError) throw updError;
+
+  // 3-bis) Avatar: si le créateur a fourni une image, tenter l’upload vers Supabase
+  if (payload.avatarImageUrl) {
+    // 3-bis-1: essayer de copier l’image dans le bucket Supabase
+    const uploaded = await tryUploadAvatarFromUrl(playerId as string, payload.avatarImageUrl);
+
+    if (uploaded) {
+      // Succès: on fixe avatar_url sur l’URL publique Supabase
+      const { error: avatarErr } = await supabase
+        .from('players')
+        .update({ avatar_url: uploaded })
+        .eq('id', playerId);
+      if (avatarErr) console.warn('Impossible de fixer avatar_url après upload:', avatarErr);
+    } else {
+      // Fallback: on stocke l’URL fournie telle quelle (affichage OK; upload manuel possible plus tard)
+      const { error: avatarErr } = await supabase
+        .from('players')
+        .update({ avatar_url: payload.avatarImageUrl })
+        .eq('id', playerId);
+      if (avatarErr) console.warn('Impossible de fixer avatar_url (fallback URL directe):', avatarErr);
+    }
+  }
 
   // 4) Retourne le player complet
   const { data: newPlayer, error: fetchError } = await supabase
