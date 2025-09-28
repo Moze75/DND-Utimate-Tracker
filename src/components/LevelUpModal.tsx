@@ -914,4 +914,5 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
     </div>
   );
 
-  retu
+  return createPortal(modalContent, document.body);
+}
