@@ -823,7 +823,7 @@ function ScreenRipple({
           channel_divinity: 'Conduit divin',
           wild_shape: 'Forme sauvage',
           sorcery_points: 'Points de sorcellerie',
-          action_surge: "Sursaut d'action",
+          action_surge: "Second souffle",
           credo_points: 'Points de crédo',
           ki_points: 'Points de crédo',
           lay_on_hands: 'Imposition des mains',
