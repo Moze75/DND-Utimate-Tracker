@@ -40,6 +40,31 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
     inspirations: player.stats?.inspirations || 0,
   };
 
+  // NEW: helper pour convertir une valeur potentiellement "10,5" en nombre 10.5
+  const toNumber = (v: unknown): number => {
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') {
+      const n = parseFloat(v.replace(',', '.'));
+      return isNaN(n) ? 0 : n;
+    }
+    return 0;
+  };
+
+  // NEW: helper pour afficher avec une virgule si nécessaire (fr-FR)
+  const formatFr = (v: number | string | null | undefined): string => {
+    if (v == null) return '0';
+    if (typeof v === 'string') {
+      // si déjà avec virgule, on laisse tel quel
+      if (v.includes(',')) return v.trim();
+      // sinon, on remplace le point par la virgule (affichage uniquement)
+      return v.replace('.', ',').trim();
+    }
+    return v.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+  };
+
+  // NEW: valeur numérique fiable de la vitesse pour les calculs
+  const speedNum = toNumber(stats.speed);
+
   /* ============================ Repos court / long ============================ */
 
   const handleShortRest = async () => {
@@ -198,16 +223,14 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
 
   return (
     <>
-            {/* Zone de capture du swipe gauche->droite (bord d'écran) */}
+      {/* Zone de capture du swipe gauche->droite (bord d'écran) */}
       {/* Masquée sur desktop pour éviter les conflits, active surtout sur mobile */}
       <div className="fixed inset-y-0 left-0 w-4 sm:w-6 z-40 md:hidden">
-        <SwipeNavigator
-          threshold={45}
-          onSwipeRight={() => setEditing(true)}
-        >
+        <SwipeNavigator threshold={45} onSwipeRight={() => setEditing(true)}>
           <div className="w-full h-full" aria-hidden />
         </SwipeNavigator>
       </div>
+
       <div className="stat-card">
         <div className="stat-header flex items-start justify-between">
           <div className="flex flex-col gap-4 w-full">
@@ -229,41 +252,41 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
             )}
 
             {/* Carte avatar + actions */}
-    <div
-      className="grid items-start gap-3 sm:gap-4"
-      style={{ gridTemplateColumns: 'minmax(0,1fr) 8rem' }}
-    >
-      <div className="relative w-full min-w-0 aspect-[7/10] sm:aspect-[2/3] rounded-lg overflow-hidden bg-gray-800/50 flex items-center justify-center">
-        {/* Bouton paramètres en haut-gauche (icône hamburger) */}
-        <button
-          onClick={() => setEditing(true)}
-          className="absolute top-2 left-2 w-9 h-9 rounded-full bg-gray-900/40 backdrop-blur-sm text-white hover:bg-gray-800/50 hover:text-white flex items-center justify-center z-10 transition-colors"
-          title="Profil et caractéristiques"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
+            <div
+              className="grid items-start gap-3 sm:gap-4"
+              style={{ gridTemplateColumns: 'minmax(0,1fr) 8rem' }}
+            >
+              <div className="relative w-full min-w-0 aspect-[7/10] sm:aspect-[2/3] rounded-lg overflow-hidden bg-gray-800/50 flex items-center justify-center">
+                {/* Bouton paramètres en haut-gauche (icône hamburger) */}
+                <button
+                  onClick={() => setEditing(true)}
+                  className="absolute top-2 left-2 w-9 h-9 rounded-full bg-gray-900/40 backdrop-blur-sm text-white hover:bg-gray-800/50 hover:text-white flex items-center justify-center z-10 transition-colors"
+                  title="Profil et caractéristiques"
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
 
-    <Avatar
-      url={player.avatar_url || ''}
-      playerId={player.id}
-      size="lg"
-      editable={false}
-      onAvatarUpdate={() => {}}
-    />
+                <Avatar
+                  url={player.avatar_url || ''}
+                  playerId={player.id}
+                  size="lg"
+                  editable={false}
+                  onAvatarUpdate={() => {}}
+                />
 
-    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 pointer-events-none">
-      <div className="text-white">
-        <h3 className="text-lg font-bold text-white drop-shadow-lg">
-          {player.adventurer_name || player.name}
-        </h3>
-        {player.class && (
-          <p className="text-sm text-gray-200 drop-shadow-md">
-            {player.class} niveau {player.level}
-          </p>
-        )}
-      </div>
-    </div>
-  </div>
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 pointer-events-none">
+                  <div className="text-white">
+                    <h3 className="text-lg font-bold text-white drop-shadow-lg">
+                      {player.adventurer_name || player.name}
+                    </h3>
+                    {player.class && (
+                      <p className="text-sm text-gray-200 drop-shadow-md">
+                        {player.class} niveau {player.level}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
 
               {/* Colonne boutons (repos / inspirations / concentration) */}
               <div className="flex flex-col gap-3 sm:gap-4 items-stretch w-32 justify-start">
@@ -400,7 +423,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           {/* CA */}
           <div className="flex flex-col items-center">
             <div
-              className="relative w-10 h-10 -mt-2 -mb-1 group cursor-pointer"
+              className="relative w-12 h-10 -mt-2 -mb-1 group cursor-pointer" /* élargi de w-10 à w-12 */
               onClick={() => setActiveTooltip(activeTooltip === 'ac' ? null : 'ac')}
             >
               <Shield className="absolute inset-0 w-full h-full text-gray-400 stroke-[1.5] scale-125" />
@@ -410,7 +433,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               {activeTooltip === 'ac' && (
                 <>
                   <div className="fixed inset-0" onClick={() => setActiveTooltip(null)} />
-                  <div className="fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-lg border border-white/10">
+                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-xl border border-gray-700">
                     <h4 className="font-semibold text-gray-100 mb-1">Classe d'Armure</h4>
                     <p className="mb-2">Détermine la difficulté pour vous toucher en combat.</p>
                     <p className="text-gray-400">Calcul de base :</p>
@@ -429,23 +452,23 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           {/* Vitesse */}
           <div className="flex flex-col items-center">
             <div
-              className="relative w-12 h-10 -mt-2 -mb-1 group cursor-pointer"
+              className="relative w-16 h-10 -mt-2 -mb-1 group cursor-pointer" /* élargi de w-12 à w-16 */
               onClick={() => setActiveTooltip(activeTooltip === 'speed' ? null : 'speed')}
             >
-              <div className="text-lg font-bold text-gray-100">
-                {stats.speed} m
+              <div className="text-lg font-bold text-gray-100 whitespace-nowrap">
+                {formatFr(stats.speed)} m
               </div>
               {activeTooltip === 'speed' && (
                 <>
                   <div className="fixed inset-0" onClick={() => setActiveTooltip(null)} />
-                  <div className="fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-lg border border-white/10">
+                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-xl border border-gray-700">
                     <h4 className="font-semibold text-gray-100 mb-1">Vitesse</h4>
                     <p className="mb-2">Distance que vous pouvez parcourir en un tour.</p>
                     <div className="text-gray-400">
                       <p>Équivalences :</p>
                       <ul className="list-disc list-inside space-y-1">
-                        <li>{stats.speed} mètres = {Math.floor((stats.speed || 0) / 1.5)} cases</li>
-                        <li>Course : × 2 ({(stats.speed || 0) * 2} mètres)</li>
+                        <li>{formatFr(stats.speed)} mètres = {Math.floor(speedNum / 1.5)} cases</li>
+                        <li>Course : × 2 ({formatFr(speedNum * 2)} mètres)</li>
                       </ul>
                     </div>
                   </div>
@@ -458,7 +481,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           {/* Initiative */}
           <div className="flex flex-col items-center">
             <div
-              className="relative w-10 h-10 -mt-2 -mb-1 group cursor-pointer"
+              className="relative w-12 h-10 -mt-2 -mb-1 group cursor-pointer" /* élargi de w-10 à w-12 */
               onClick={() => setActiveTooltip(activeTooltip === 'initiative' ? null : 'initiative')}
             >
               <div className="text-lg font-bold text-gray-100">
@@ -467,7 +490,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               {activeTooltip === 'initiative' && (
                 <>
                   <div className="fixed inset-0" onClick={() => setActiveTooltip(null)} />
-                  <div className="fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-lg border border-white/10">
+                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-xl border border-gray-700">
                     <h4 className="font-semibold text-gray-100 mb-1">Initiative</h4>
                     <p className="mb-2">Détermine l'ordre d'action en combat.</p>
                     <div className="text-gray-400">
@@ -485,9 +508,9 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           </div>
 
           {/* Maîtrise */}
-        <div className="flex flex-col items-center">
+          <div className="flex flex-col items-center">
             <div
-              className="relative w-10 h-10 -mt-2 -mb-1 group cursor-pointer"
+              className="relative w-12 h-10 -mt-2 -mb-1 group cursor-pointer" /* élargi de w-10 à w-12 */
               onClick={() => setActiveTooltip(activeTooltip === 'proficiency' ? null : 'proficiency')}
             >
               <div className="text-lg font-bold text-gray-100">
@@ -496,7 +519,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               {activeTooltip === 'proficiency' && (
                 <>
                   <div className="fixed inset-0" onClick={() => setActiveTooltip(null)} />
-                  <div className="fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-lg border border-white/10">
+                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-xl border border-gray-700">
                     <h4 className="font-semibold text-gray-100 mb-1">Bonus de Maîtrise</h4>
                     <p>Représente votre expertise générale.</p>
                     <div className="text-gray-400">
