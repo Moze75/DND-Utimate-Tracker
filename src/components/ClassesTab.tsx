@@ -1424,7 +1424,7 @@ function ClassResourcesCard({
           <ResourceBlock
             key="action_surge"
             icon={<Swords size={20} />}
-            label="Sursaut d'action"
+            label="Second souffle"
             total={resources.action_surge}
             used={resources.used_action_surge || 0}
             onUse={() => onUpdateResource('used_action_surge', (resources.used_action_surge || 0) + 1)}
