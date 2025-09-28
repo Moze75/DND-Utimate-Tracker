@@ -530,10 +530,10 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-white mb-2">
-              Créateur de Personnage D&D
+              Créez votre personnage
             </h1>
             <p className="text-gray-400">
-              Créez votre héros pour vos aventures dans les Donjons et Dragons
+              Choisissez vite mais choisissez bien
             </p>
           </div>
 
