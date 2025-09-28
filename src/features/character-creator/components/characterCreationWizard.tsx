@@ -114,6 +114,32 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
       new Set([...(selectedClassSkills || []), ...((selectedBackgroundObj?.skillProficiencies ?? []))])
     );
 
+    const handleFinish = () => {
+  const payload: CharacterExportPayload = {
+    characterName,
+    selectedRace,
+    selectedClass,            // de type DndClass
+    selectedBackground,
+    level,
+    finalAbilities,
+    proficientSkills,
+    equipment,
+    selectedBackgroundEquipmentOption,
+    hitPoints,
+    armorClass,
+    initiative,
+    speed,
+    // champs optionnels existants...
+    backgroundFeat,
+    gold,
+    hitDice,
+    // NOUVEAU: image d’avatar dérivée de la classe
+    avatarImageUrl: getClassImageUrl(selectedClass) ?? undefined,
+  };
+
+  onFinish(payload);
+};
+
     // Don d’historique et OR initial:
     // - OR demandé: A = 50 po, B = 15 po
     const backgroundFeat = (selectedBackgroundObj as any)?.feat as string | undefined;
