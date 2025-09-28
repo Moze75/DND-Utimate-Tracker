@@ -179,7 +179,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   channel_divinity: 'Conduit divin',
   wild_shape: 'Forme sauvage',
   sorcery_points: 'Points de sorcellerie',
-  action_surge: "Sursaut d'action",
+  action_surge: "Second souggle",
   ki_points: 'Points de ki',
   lay_on_hands: 'Imposition des mains',
   favored_foe: 'Ennemi juré',
