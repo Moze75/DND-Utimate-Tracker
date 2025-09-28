@@ -572,7 +572,7 @@ useEffect(() => {
             <ResourceBlock
               key="action_surge"
               icon={<Swords size={20} />}
-              label="Sursaut d'action"
+              label="Second souffle"
               total={classResources.action_surge}
               used={classResources.used_action_surge || 0}
               onUse={() => updateClassResource('used_action_surge', (classResources.used_action_surge || 0) + 1)}
