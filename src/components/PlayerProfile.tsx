@@ -504,7 +504,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
                 </>
               )}
             </div>
-            <div className="text-xs uppercase tracking-wide text-gray-500 -mt-1 text-center -ml-3">INIT</div>
+            <div className="text-xs uppercase tracking-wide text-gray-500 -mt-1 text-center -ml-4">INIT</div>
           </div>
 
           {/* Maîtrise */}
