@@ -4,7 +4,7 @@ export const backgrounds: DndBackground[] = [
   {
     name: 'Acolyte',
     abilityScores: ['Intelligence', 'Sagesse', 'Charisme'],
-    feat: 'Initié à la magie (Clerc)',
+    feat: 'Initié à la magie',
     skillProficiencies: ['Intuition', 'Religion'],
     toolProficiencies: ['Matériel de calligraphie'],
     equipmentOptions: {
@@ -52,7 +52,7 @@ export const backgrounds: DndBackground[] = [
   {
     name: 'Criminel',
     abilityScores: ['Dextérité', 'Constitution', 'Intelligence'],
-    feat: 'Voleur',
+    feat: 'Doué',
     skillProficiencies: ['Discrétion', 'Escamotage'],
     toolProficiencies: ['Outils de voleur'],
     equipmentOptions: {
@@ -100,7 +100,7 @@ export const backgrounds: DndBackground[] = [
   {
     name: 'Guide',
     abilityScores: ['Dextérité', 'Constitution', 'Sagesse'],
-    feat: 'Initié à la magie (Druide)',
+    feat: 'Initié à la magie',
     skillProficiencies: ['Discrétion', 'Survie'],
     toolProficiencies: ['Outils de cartographe'],
     equipmentOptions: {
@@ -148,7 +148,7 @@ export const backgrounds: DndBackground[] = [
   {
     name: 'Sage',
     abilityScores: ['Constitution', 'Intelligence', 'Sagesse'],
-    feat: 'Initié à la magie (Magicien)',
+    feat: 'Initié à la magie',
     skillProficiencies: ['Arcanes', 'Histoire'],
     toolProficiencies: ['Matériel de calligraphie'],
     equipmentOptions: {
