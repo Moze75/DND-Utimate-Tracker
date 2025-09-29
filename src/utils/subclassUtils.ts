@@ -39,7 +39,7 @@ export const SUBCLASS_ALIASES: Record<string, string[]> = {
   // Magicien
   'abjurateur': ['Abjurateur', 'Abjuration', 'School of Abjuration'],
   'devin': ['Devin', 'Divination', 'School of Divination'],
-  'evocation': ['Évocation', 'Evocation', 'School of Evocation'],
+  'evocateur': ['Évocateur', 'Evocateur', 'School of Evocation'],
   'illusionniste': ['Illusionniste', 'Illusion', 'School of Illusion'],
 
   // Moine
