@@ -51,7 +51,7 @@ export const SUBCLASS_ALIASES: Record<string, string[]> = {
   // Occultiste (Warlock)
   'protecteur archifee': ['Protecteur Archifée', 'Archfey', 'The Archfey'],
   'protecteur celeste': ['Protecteur Céleste', 'Celeste', 'The Celestial', 'Celestial'],
-  'protecteur felon': ['Protecteur Félon', 'Protecteur Felon', 'The Fiend', 'Fiend'],
+  'protecteur fiélon': ['Protecteur Fiélon', 'Protecteur Fielon', 'The Fiend', 'Fiend'],
   'protecteur grand ancien': ['Protecteur Grand Ancien', 'The Great Old One', 'Great Old One'],
 
   // Paladin
