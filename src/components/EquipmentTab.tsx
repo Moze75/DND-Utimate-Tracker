@@ -11,6 +11,7 @@ import { Player, InventoryItem } from '../types/dnd';
 import { EquipmentListModal } from './modals/EquipmentListModal';
 import { CustomItemModal } from './modals/CustomItemModal';
 import { InventoryItemEditModal } from './modals/InventoryItemEditModal';
+import { WeaponsManageModal } from './modals/WeaponsManageModal';
 
 /* ====================== Types & helpers ====================== */
 
@@ -145,8 +146,9 @@ interface InfoBubbleProps {
   isEquipped?: boolean;
   onRequestOpenList?: () => void;
   onOpenEditFromSlot?: () => void;
+  onOpenWeaponsManage?: () => void;
 }
-const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onRequestOpenList, onOpenEditFromSlot }: InfoBubbleProps) => (
+const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onRequestOpenList, onOpenEditFromSlot, onOpenWeaponsManage }: InfoBubbleProps) => (
   <div className="fixed inset-0 z-[9999]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
     <div className="fixed inset-0 bg-black/50" onClick={onClose} />
     <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 text-sm text-gray-300 rounded-lg shadow-lg w-[min(32rem,95vw)] border border-gray-700/50">
@@ -159,6 +161,15 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
               className={`px-2 py-1 rounded text-xs border ${isEquipped ? 'border-green-500/40 text-green-300 bg-green-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'}`}
             >
               {isEquipped ? 'Équipé' : 'Non équipé'}
+            </button>
+          )}
+          {type === 'weapon' && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenWeaponsManage?.(); }}
+              className="px-2 py-1 rounded text-xs border border-red-500/40 text-red-300 bg-red-900/20 hover:border-red-400/60"
+              title="Gérer mes armes"
+            >
+              Gérer
             </button>
           )}
           <button
@@ -192,26 +203,10 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
 
           {type === 'weapon' && equipment.weapon_meta && (
             <div className="mt-1 text-sm text-gray-300 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-400">Dés</span>
-                <span className="font-medium text-gray-100">{equipment.weapon_meta.damageDice}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-400">Type</span>
-                <span className="font-medium text-gray-100">{equipment.weapon_meta.damageType}</span>
-              </div>
-              {equipment.weapon_meta.properties && (
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-400">Propriété</span>
-                  <span className="font-medium text-gray-100">{equipment.weapon_meta.properties}</span>
-                </div>
-              )}
-              {equipment.weapon_meta.range && (
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-400">Portée</span>
-                  <span className="font-medium text-gray-100">{equipment.weapon_meta.range}</span>
-                </div>
-              )}
+              <div className="flex items-center justify-between"><span className="text-gray-400">Dés</span><span className="font-medium text-gray-100">{equipment.weapon_meta.damageDice}</span></div>
+              <div className="flex items-center justify-between"><span className="text-gray-400">Type</span><span className="font-medium text-gray-100">{equipment.weapon_meta.damageType}</span></div>
+              {equipment.weapon_meta.properties && <div className="flex items-center justify-between"><span className="text-gray-400">Propriété</span><span className="font-medium text-gray-100">{equipment.weapon_meta.properties}</span></div>}
+              {equipment.weapon_meta.range && <div className="flex items-center justify-between"><span className="text-gray-400">Portée</span><span className="font-medium text-gray-100">{equipment.weapon_meta.range}</span></div>}
             </div>
           )}
         </div>
@@ -219,8 +214,11 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
         (type === 'armor' || type === 'shield' || type === 'weapon') && (
           <div className="text-sm text-gray-400">
             Aucun {type === 'armor' ? 'armure' : type === 'shield' ? 'bouclier' : 'arme'} équipé.
-            <div className="mt-3">
+            <div className="mt-3 flex gap-2">
               <button onClick={() => onRequestOpenList?.()} className="btn-primary px-3 py-2 rounded-lg">Équiper depuis la liste</button>
+              {type === 'weapon' && (
+                <button onClick={() => onOpenWeaponsManage?.()} className="px-3 py-2 rounded-lg border border-red-500/40 text-red-300 bg-red-900/20 hover:border-red-400/60">Gérer mes armes</button>
+              )}
             </div>
           </div>
         )
@@ -237,10 +235,11 @@ interface EquipmentSlotProps {
   onRequestOpenList: () => void;
   onToggleEquipFromSlot: () => void;
   onOpenEditFromSlot: () => void;
+  onOpenWeaponsManage?: () => void;
   isEquipped: boolean;
 }
 const EquipmentSlot = ({
-  icon, position, equipment, type, onRequestOpenList, onToggleEquipFromSlot, onOpenEditFromSlot, isEquipped
+  icon, position, equipment, type, onRequestOpenList, onToggleEquipFromSlot, onOpenEditFromSlot, onOpenWeaponsManage, isEquipped
 }: EquipmentSlotProps) => {
   const [showInfo, setShowInfo] = useState(false);
   return (
@@ -264,6 +263,7 @@ const EquipmentSlot = ({
           isEquipped={isEquipped}
           onRequestOpenList={onRequestOpenList}
           onOpenEditFromSlot={onOpenEditFromSlot}
+          onOpenWeaponsManage={onOpenWeaponsManage}
         />
       )}
     </>
@@ -305,40 +305,36 @@ const CurrencyInput = ({ currency, value, onAdd, onSpend }: {
 export function EquipmentTab({
   player, inventory, onPlayerUpdate, onInventoryUpdate
 }: EquipmentTabProps) {
-  // États locaux “sources de vérité” pour equipment (évite d'écraser des slots avec des props obsolètes)
+  // États locaux “sources de vérité”
   const [armor, setArmor] = useState<Equipment | null>(player.equipment?.armor || null);
-  const [weapon, setWeapon] = useState<Equipment | null>(player.equipment?.weapon || null);
+  const [weapon, setWeapon] = useState<Equipment | null>(player.equipment?.weapon || null); // “principale” pour l’aperçu
   const [shield, setShield] = useState<Equipment | null>(player.equipment?.shield || null);
   const [bag, setBag] = useState<Equipment | null>(player.equipment?.bag || null);
   const stableEquipmentRef = useRef<{ armor: Equipment | null; weapon: Equipment | null; shield: Equipment | null; bag: Equipment | null; } | null>(null);
 
+  const [showList, setShowList] = useState(false);
+  const [allowedKinds, setAllowedKinds] = useState<('armors' | 'shields' | 'weapons' | 'adventuring_gear' | 'tools')[] | null>(null);
+  const [showCustom, setShowCustom] = useState(false);
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [showWeaponsModal, setShowWeaponsModal] = useState(false);
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmPayload, setConfirmPayload] = useState<{ mode: 'equip' | 'unequip'; item: InventoryItem } | null>(null);
+
   useEffect(() => {
-    // Maj ref de snapshot local à chaque rendu pertinent
     stableEquipmentRef.current = { armor, weapon, shield, bag };
   }, [armor, weapon, shield, bag]);
 
-  // Si le parent met réellement à jour le player.equipment, on ne casse pas l'état local:
   useEffect(() => {
-    // Synchroniser UNIQUEMENT si l'information côté parent est plus récente (armes/bouclier/armure vides alors qu'on en a une localement -> on garde local)
     if (!armor && player.equipment?.armor) setArmor(player.equipment.armor);
     if (!shield && player.equipment?.shield) setShield(player.equipment.shield);
     if (!weapon && player.equipment?.weapon) setWeapon(player.equipment.weapon);
     if (!bag && player.equipment?.bag) setBag(player.equipment.bag);
   }, [player.equipment]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Modales
-  const [showList, setShowList] = useState(false);
-  const [allowedKinds, setAllowedKinds] = useState<('armors' | 'shields' | 'weapons' | 'adventuring_gear' | 'tools')[] | null>(null);
-  const [showCustom, setShowCustom] = useState(false);
-  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmPayload, setConfirmPayload] = useState<{ mode: 'equip' | 'unequip'; item: InventoryItem } | null>(null);
-
   const jewelryItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'jewelry'), [inventory]);
   const potionItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'potion'), [inventory]);
 
-  // Construit un snapshot cohérent de l'équipement à persister
   const buildEquipmentSnapshot = (override?: Partial<{ armor: Equipment | null; weapon: Equipment | null; shield: Equipment | null; bag: Equipment | null }>) => {
     const base = stableEquipmentRef.current || { armor, weapon, shield, bag };
     return {
@@ -346,7 +342,6 @@ export function EquipmentTab({
       weapon: override?.weapon !== undefined ? override.weapon : base.weapon,
       shield: override?.shield !== undefined ? override.shield : base.shield,
       bag: override?.bag !== undefined ? override.bag : base.bag,
-      // on conserve les autres champs éventuels (potions/bijoux) depuis le joueur
       potion: (player.equipment as any)?.potion ?? null,
       jewelry: (player.equipment as any)?.jewelry ?? null
     } as any;
@@ -357,7 +352,6 @@ export function EquipmentTab({
       const snapshot = buildEquipmentSnapshot({ [type]: equipment } as any);
       const { error } = await supabase.from('players').update({ equipment: snapshot }).eq('id', player.id);
       if (error) throw error;
-      // Mise à jour locale + parent
       if (type === 'armor') setArmor(equipment);
       if (type === 'weapon') setWeapon(equipment);
       if (type === 'shield') setShield(equipment);
@@ -373,7 +367,6 @@ export function EquipmentTab({
     const { data, error } = await supabase.from('inventory_items').select('*').eq('player_id', player.id);
     if (!error && data) {
       onInventoryUpdate(data);
-      // Réconciliation: si une arme est marquée "equipped" dans l'inventaire mais qu'aucun slot weapon n'est défini, on en projette une dans le slot
       if (!stableEquipmentRef.current?.weapon) {
         const firstEquippedWeapon = data.find((it) => (parseMeta(it.description)?.type === 'weapon') && parseMeta(it.description)?.equipped);
         if (firstEquippedWeapon) {
@@ -389,12 +382,7 @@ export function EquipmentTab({
               damageType: meta.weapon.damageType || 'Tranchant',
               properties: meta.weapon.properties || '',
               range: meta.weapon.range || 'Corps à corps',
-            } : {
-              damageDice: '1d6',
-              damageType: 'Tranchant',
-              properties: '',
-              range: 'Corps à corps',
-            }
+            } : { damageDice: '1d6', damageType: 'Tranchant', properties: '', range: 'Corps à corps' }
           };
           await saveEquipment('weapon', eq);
         }
@@ -452,7 +440,6 @@ export function EquipmentTab({
     if (error) throw error;
   };
 
-  // Unequip exclusifs pour armure/bouclier
   const unequipOthersOfType = async (type: 'armor' | 'shield', keepItemId?: string) => {
     const updates: Promise<any>[] = [];
     for (const it of inventory) {
@@ -469,7 +456,7 @@ export function EquipmentTab({
     if (updates.length) await Promise.allSettled(updates);
   };
 
-  // Equip/Unequip
+  // Equip/Unequip à partir d’un item (conserve multi-armes)
   const performToggle = async (item: InventoryItem, mode: 'equip' | 'unequip') => {
     const meta = parseMeta(item.description);
     if (!meta) return;
@@ -516,17 +503,15 @@ export function EquipmentTab({
       } else if (meta.type === 'weapon') {
         if (mode === 'unequip') {
           await updateItemMeta(item, { ...meta, equipped: false });
-          // Vider le slot seulement si c'était la même arme
           if (weapon?.inventory_item_id === item.id) {
             await saveEquipment('weapon', null);
           }
           await removeWeaponAttacksByName(item.name);
           toast.success('Arme déséquipée');
         } else if (mode === 'equip') {
-          // Marque l’arme “équipée” côté inventaire
           await updateItemMeta(item, { ...meta, equipped: true });
 
-          // Si aucune arme n’est visible dans le slot, on en projette une pour l’aperçu (multi-armes: une seule prévisualisée)
+          // S’il n’y a pas d’arme “principale” dans le slot, projeter celle-ci
           if (!stableEquipmentRef.current?.weapon) {
             const eq: Equipment = {
               name: item.name,
@@ -549,7 +534,6 @@ export function EquipmentTab({
         }
       }
 
-      // Rafraîchir l’inventaire (et réconcilier le slot si besoin)
       await refreshInventory();
     } catch (e) {
       console.error(e);
@@ -566,19 +550,18 @@ export function EquipmentTab({
     const equipped =
       (isArmor && armor?.inventory_item_id === item.id) ||
       (isShield && shield?.inventory_item_id === item.id) ||
-      (isWeapon && (meta.equipped === true || weapon?.inventory_item_id === item.id)); // corrigé: tient compte du slot weapon
+      (isWeapon && (meta.equipped === true || weapon?.inventory_item_id === item.id));
     setConfirmPayload({ mode: equipped ? 'unequip' : 'equip', item });
     setConfirmOpen(true);
   };
 
-  // Edition depuis slot
+  // Paramètres depuis slot
   const openEditFromSlot = (slot: 'armor' | 'shield' | 'weapon') => {
     const eq = slot === 'armor' ? armor : slot === 'shield' ? shield : weapon;
     if (!eq?.inventory_item_id) return;
     const item = inventory.find(i => i.id === eq.inventory_item_id);
     if (item) setEditingItem(item);
   };
-
   const toggleFromSlot = (slot: 'armor' | 'shield' | 'weapon') => {
     const eq = slot === 'armor' ? armor : slot === 'shield' ? shield : weapon;
     if (!eq) return;
@@ -588,7 +571,28 @@ export function EquipmentTab({
     setConfirmOpen(true);
   };
 
-  // Recherche / Filtres “Sac”
+  // Définir l’arme principale (slot) depuis le modal “Armes”
+  const setPrimaryWeaponFromItem = async (it: InventoryItem) => {
+    const meta = parseMeta(it.description);
+    if (!meta) return;
+    const eq: Equipment = {
+      name: it.name,
+      description: visibleDescription(it.description),
+      inventory_item_id: it.id,
+      armor_formula: null,
+      shield_bonus: null,
+      weapon_meta: meta.weapon ? {
+        damageDice: meta.weapon.damageDice || '1d6',
+        damageType: meta.weapon.damageType || 'Tranchant',
+        properties: meta.weapon.properties || '',
+        range: meta.weapon.range || 'Corps à corps',
+      } : { damageDice: '1d6', damageType: 'Tranchant', properties: '', range: 'Corps à corps' }
+    };
+    await saveEquipment('weapon', eq);
+    await refreshInventory();
+  };
+
+  /* Sac: filtres + recherche (liste à coches) */
   const [bagFilter, setBagFilter] = useState('');
   const [bagKinds, setBagKinds] = useState<Record<MetaType, boolean>>({
     armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true, tool: true
@@ -605,7 +609,6 @@ export function EquipmentTab({
       return name.includes(q) || desc.includes(q);
     });
   }, [inventory, bagFilter, bagKinds]);
-
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const toggleExpand = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -660,6 +663,7 @@ export function EquipmentTab({
               onRequestOpenList={() => { setAllowedKinds(['weapons']); setShowList(true); }}
               onToggleEquipFromSlot={() => toggleFromSlot('weapon')}
               onOpenEditFromSlot={() => openEditFromSlot('weapon')}
+              onOpenWeaponsManage={() => setShowWeaponsModal(true)}
               isEquipped={!!weapon}
             />
 
@@ -742,28 +746,35 @@ export function EquipmentTab({
         </div>
 
         <div className="p-4">
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <button onClick={() => { setAllowedKinds(null); setShowList(true); }} className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={20} /> Liste d’équipement</button>
-            <button onClick={() => setShowCustom(true)} className="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"><Plus size={18} /> Objet personnalisé</button>
+          <div className="flex flex-col lg:flex-row lg:items-end gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <button onClick={() => { setAllowedKinds(null); setShowList(true); }} className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={20} /> Liste d’équipement</button>
+              <button onClick={() => setShowCustom(true)} className="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"><Plus size={18} /> Objet personnalisé</button>
+            </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            {/* Liste à coches des catégories */}
+            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
               {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
-                <button
-                  key={k}
-                  onClick={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
-                  className={`px-2 py-1 rounded text-xs border ${bagKinds[k] ? 'border-red-500/40 text-red-300 bg-red-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-800/40'}`}
-                >
-                  {k === 'armor' ? 'Armure'
-                    : k === 'shield' ? 'Bouclier'
-                    : k === 'weapon' ? 'Arme'
-                    : k === 'potion' ? 'Potion/Poison'
-                    : k === 'jewelry' ? 'Bijoux'
-                    : k === 'tool' ? 'Outils' : 'Équipement'}
-                </button>
+                <label key={k} className="inline-flex items-center gap-2 text-xs text-gray-300 bg-gray-800/30 rounded px-2 py-1 border border-gray-700/50 hover:bg-gray-800/50 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={bagKinds[k]}
+                    onChange={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
+                    className="accent-red-500"
+                  />
+                  <span>
+                    {k === 'armor' ? 'Armure'
+                      : k === 'shield' ? 'Bouclier'
+                      : k === 'weapon' ? 'Arme'
+                      : k === 'potion' ? 'Potion/Poison'
+                      : k === 'jewelry' ? 'Bijoux'
+                      : k === 'tool' ? 'Outils' : 'Équipement'}
+                  </span>
+                </label>
               ))}
             </div>
 
-            <div className="ml-auto flex-1 min-w-[220px] flex items-center gap-2">
+            <div className="ml-auto min-w-[220px] flex items-center gap-2">
               <Search className="w-4 h-4 text-gray-400" />
               <input value={bagFilter} onChange={(e) => setBagFilter(e.target.value)} placeholder="Filtrer le sac…" className="input-dark px-3 py-2 rounded-md w-full" />
             </div>
@@ -776,11 +787,10 @@ export function EquipmentTab({
               const isArmor = meta?.type === 'armor';
               const isShield = meta?.type === 'shield';
               const isWeapon = meta?.type === 'weapon';
-
               const isEquipped =
                 (isArmor && armor?.inventory_item_id === item.id) ||
                 (isShield && shield?.inventory_item_id === item.id) ||
-                (isWeapon && (meta?.equipped === true || weapon?.inventory_item_id === item.id)); // corrigé
+                (isWeapon && (meta?.equipped === true || weapon?.inventory_item_id === item.id));
 
               return (
                 <div key={item.id} className="bg-gray-800/40 border border-gray-700/40 rounded-md">
@@ -900,6 +910,16 @@ export function EquipmentTab({
           item={editingItem}
           onClose={() => setEditingItem(null)}
           onSaved={refreshInventory}
+        />
+      )}
+      {showWeaponsModal && (
+        <WeaponsManageModal
+          inventory={inventory}
+          primaryWeaponItemId={weapon?.inventory_item_id || null}
+          onClose={() => setShowWeaponsModal(false)}
+          onEquip={async (it) => { await performToggle(it, 'equip'); }}
+          onUnequip={async (it) => { await performToggle(it, 'unequip'); }}
+          onSetPrimary={async (it) => { await setPrimaryWeaponFromItem(it); }}
         />
       )}
 
