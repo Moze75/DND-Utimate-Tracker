@@ -8,6 +8,11 @@ import { supabase } from '../lib/supabase';
 import { attackService } from '../services/attackService';
 import { Player, InventoryItem } from '../types/dnd';
 
+/* Import des 3 modales */
+import { EquipmentListModal } from './modals/EquipmentListModal';
+import { CustomItemModal } from './modals/CustomItemModal';
+import { InventoryItemEditModal } from './modals/InventoryItemEditModal';
+
 /* ====================== Types & helpers ====================== */
 
 interface Equipment {
@@ -74,7 +79,6 @@ function parseMeta(description: string | null | undefined): ItemMeta | null {
     return null;
   }
 }
-
 function injectMetaIntoDescription(desc: string | null | undefined, meta: ItemMeta): string {
   const base = (desc || '').trim();
   const noOldMeta = base
@@ -85,7 +89,6 @@ function injectMetaIntoDescription(desc: string | null | undefined, meta: ItemMe
   const metaLine = `${META_PREFIX}${JSON.stringify(meta)}`;
   return (noOldMeta ? `${noOldMeta}\n` : '') + metaLine;
 }
-
 function stripPriceParentheses(name: string): string {
   return name.replace(/\s*\((?:\d+|\w+|\s|,|\.|\/|-)+\s*p[oa]?\)\s*$/i, '').trim();
 }
@@ -101,113 +104,10 @@ function smartCapitalize(name: string): string {
 }
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
-/* ====================== Markdown renderer (tables + simple lists) ====================== */
-
-function isMarkdownTableLine(line: string) {
-  const l = line.trim();
-  return l.startsWith('|') && l.endsWith('|') && l.includes('|');
-}
-function parseMarkdownTables(md: string): string[][][] {
-  // Returns an array of tables, each table is an array of rows, each row is an array of cells
-  const tables: string[][][] = [];
-  const lines = md.split('\n');
-  let current: string[][] | null = null;
-
-  for (const raw of lines) {
-    const line = raw.trimRight();
-    if (isMarkdownTableLine(line)) {
-      const cells = line.substring(1, line.length - 1).split('|').map(c => c.trim());
-      // If this is a "separator" row (---), keep it so we can detect header, but don't push as a data row
-      if (!current) current = [];
-      current.push(cells);
-    } else {
-      if (current && current.length > 0) {
-        // finalize table
-        tables.push(current);
-      }
-      current = null;
-    }
-  }
-  if (current && current.length > 0) tables.push(current);
-  return tables;
-}
-
-function MarkdownLite({ text }: { text: string }) {
-  // Split into blocks separated by empty lines
-  const blocks = text.split(/\n{2,}/g).map(b => b.split('\n'));
-  return (
-    <div className="space-y-2">
-      {blocks.map((lines, idx) => {
-        // Table block
-        if (lines.length >= 2 && isMarkdownTableLine(lines[0])) {
-          // Collect contiguous table lines for this block
-          const tableLines: string[] = [];
-          for (const l of lines) {
-            if (isMarkdownTableLine(l)) tableLines.push(l);
-          }
-          const rows: string[][] = [];
-          for (const tl of tableLines) {
-            const cells = tl.substring(1, tl.length - 1).split('|').map(c => c.trim());
-            // ignore pure separator rows
-            if (cells.every(c => /^[-:\s]+$/.test(c))) continue;
-            rows.push(cells);
-          }
-          if (rows.length === 0) return null;
-          const header = rows[0];
-          const body = rows.slice(1);
-          return (
-            <div key={idx} className="overflow-x-auto">
-              <table className="w-full text-left text-sm border border-gray-700/50 rounded-md overflow-hidden">
-                <thead className="bg-gray-800/60">
-                  <tr>
-                    {header.map((c, i) => (
-                      <th key={i} className="px-2 py-1 border-b border-gray-700/50">{c}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {body.map((r, ri) => (
-                    <tr key={ri} className="odd:bg-gray-800/30">
-                      {r.map((c, ci) => (
-                        <td key={ci} className="px-2 py-1 align-top border-b border-gray-700/30">{c}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          );
-        }
-        // bullet lists (- ) basic
-        if (lines.every(l => l.trim().startsWith('- '))) {
-          return (
-            <ul key={idx} className="list-disc pl-5 space-y-1">
-              {lines.map((l, i) => <li key={i} className="text-sm text-gray-300">{l.replace(/^- /, '')}</li>)}
-            </ul>
-          );
-        }
-        // paragraph
-        return <p key={idx} className="text-sm text-gray-300 whitespace-pre-wrap">{lines.join('\n')}</p>;
-      })}
-    </div>
-  );
-}
-
 /* ====================== Popup de confirmation ====================== */
-
 function ConfirmEquipModal({
-  open,
-  mode, // 'equip' | 'unequip'
-  itemName,
-  onConfirm,
-  onCancel
-}: {
-  open: boolean;
-  mode: 'equip' | 'unequip';
-  itemName: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
+  open, mode, itemName, onConfirm, onCancel
+}: { open: boolean; mode: 'equip' | 'unequip'; itemName: string; onConfirm: () => void; onCancel: () => void; }) {
   if (!open) return null;
   const title = mode === 'equip' ? 'Équiper cet objet ?' : 'Déséquiper cet objet ?';
   const label = mode === 'equip' ? 'Équiper' : 'Déséquiper';
@@ -231,657 +131,7 @@ function ConfirmEquipModal({
   );
 }
 
-/* ====================== Liste d’équipement: fetch + parsing ====================== */
-
-type CatalogKind = 'armors' | 'shields' | 'weapons' | 'adventuring_gear' | 'tools';
-interface CatalogItem {
-  id: string;
-  kind: CatalogKind;
-  name: string;
-  description?: string;
-  armor?: ArmorMeta;
-  shield?: ShieldMeta;
-  weapon?: WeaponMeta;
-}
-
-const ULT_BASE = 'https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main/Equipements';
-const URLS = {
-  armors: `${ULT_BASE}/Armures.md`,
-  shields: `${ULT_BASE}/Boucliers.md`,
-  weapons: `${ULT_BASE}/Armes.md`,
-  adventuring_gear: `${ULT_BASE}/Equipements_daventurier.md`,
-  tools: `${ULT_BASE}/Outils.md`,
-};
-
-async function fetchText(url: string): Promise<string> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Fetch catalogue échoué: ${url}`);
-  return await res.text();
-}
-function parseMarkdownTable(md: string): string[][] {
-  const rows: string[][] = [];
-  const lines = md.split('\n');
-  for (const line of lines) {
-    const l = line.trim();
-    if (l.startsWith('|') && l.endsWith('|') && l.includes('|')) {
-      const cells = l.substring(1, l.length - 1).split('|').map(c => c.trim());
-      if (cells.every(c => /^[-:\s]+$/.test(c))) continue;
-      rows.push(cells);
-    }
-  }
-  return rows;
-}
-function looksLikeHeader(cellA: string, cellB: string, keyword: RegExp) {
-  return keyword.test(cellB || '') || /^nom$/i.test(cellA || '');
-}
-function parseArmors(md: string): CatalogItem[] {
-  const rows = parseMarkdownTable(md);
-  const items: CatalogItem[] = [];
-  for (const row of rows) {
-    if (row.length < 2) continue;
-    const [nomRaw, ca] = row;
-    if (!nomRaw) continue;
-    if (looksLikeHeader(nomRaw, ca, /classe d'armure|ca/i)) continue;
-    const nom = stripPriceParentheses(nomRaw);
-    let base = 10, addDex = false, dexCap: number | null = null;
-    const dexMatch = ca.match(/(\d+)\s*\+\s*modificateur\s*de\s*dex/i);
-    const capMatch = ca.match(/\(max\s*(\d+)\)/i);
-    if (dexMatch) {
-      base = +dexMatch[1];
-      addDex = true;
-      dexCap = capMatch ? +capMatch[1] : null;
-    } else {
-      const m = ca.match(/^\s*(\d+)\s*$/);
-      if (m) { base = +m[1]; addDex = false; dexCap = null; }
-    }
-    items.push({ id: `armor:${nom}`, kind: 'armors', name: nom, description: '', armor: { base, addDex, dexCap, label: ca } });
-  }
-  return items;
-}
-function parseShields(md: string): CatalogItem[] {
-  const rows = parseMarkdownTable(md);
-  const items: CatalogItem[] = [];
-  for (const row of rows) {
-    if (row.length < 2) continue;
-    const [nomRaw, ca] = row;
-    if (!nomRaw) continue;
-    if (looksLikeHeader(nomRaw, ca, /classe d'armure|ca/i)) continue;
-    const nom = stripPriceParentheses(nomRaw);
-    const m = ca.match(/\+?\s*(\d+)/);
-    const bonus = m ? +m[1] : 2;
-    items.push({ id: `shield:${nom}`, kind: 'shields', name: nom, description: '', shield: { bonus } });
-  }
-  return items;
-}
-function parseWeapons(md: string): CatalogItem[] {
-  const rows = parseMarkdownTable(md);
-  const items: CatalogItem[] = [];
-  for (const row of rows) {
-    if (row.length < 3) continue;
-    const [nomRaw, degats, props] = row;
-    if (!nomRaw) continue;
-    if (/^nom$/i.test(nomRaw) || /d[ée]g[âa]ts/i.test(degats)) continue;
-    const nom = stripPriceParentheses(nomRaw);
-    const dmgMatch = (degats || '').match(/(\d+d\d+)/i);
-    const damageDice = dmgMatch ? dmgMatch[1] : '1d6';
-    let damageType: 'Tranchant' | 'Perforant' | 'Contondant' = 'Tranchant';
-    if (/contondant/i.test(degats)) damageType = 'Contondant';
-    else if (/perforant/i.test(degats)) damageType = 'Perforant';
-    else if (/tranchant/i.test(degats)) damageType = 'Tranchant';
-    let range = 'Corps à corps';
-    const pm = (props || '').match(/portée\s*([\d,\.\/\s]+)/i);
-    if (pm) {
-      const first = pm[1].trim().split(/[\/\s]/)[0]?.trim() || '';
-      if (first) range = `${first} m`;
-    }
-    items.push({ id: `weapon:${nom}`, kind: 'weapons', name: nom, description: '', weapon: { damageDice, damageType, properties: props || '', range } });
-  }
-  return items;
-}
-
-// OUTILS: parser robuste
-function parseTools(md: string): CatalogItem[] {
-  const items: CatalogItem[] = [];
-
-  // 1) Extraire toutes les tables du doc comme des outils individuels
-  const tables = parseMarkdownTables(md);
-  const noiseRow = (s: string) =>
-    !s ||
-    /^autres? outils?$/i.test(s) ||
-    /^types? d'?outils?$/i.test(s) ||
-    /^outils?$/i.test(s) ||
-    /^sommaire$/i.test(s) ||
-    /^table des matières$/i.test(s) ||
-    /^généralités?$/i.test(s) ||
-    /^introduction$/i.test(s);
-
-  for (const table of tables) {
-    if (table.length === 0) continue;
-    // Build header
-    let header = table[0];
-    // If the second row looks like a separator (---), ignore it (already filtered in parser above in most cases)
-    const body = table.slice(1);
-
-    // Try to detect a header row; if the first row looks like all words (not values) and body has numbers,
-    // keep as header; otherwise treat first row as data and synthesize generic header.
-    const headerLooksLikeHeader = header.some(c => /nom|outil|description|prix|coût|co[ûu]t/i.test(c));
-    if (!headerLooksLikeHeader) {
-      header = header.map((_, i) => (i === 0 ? 'Nom' : `Col${i + 1}`));
-    }
-
-    for (const row of body) {
-      const name = stripPriceParentheses(row[0] || '').trim();
-      if (!name || noiseRow(name)) continue;
-
-      // Build description from header/value pairs
-      const parts: string[] = [];
-      for (let i = 1; i < Math.min(row.length, header.length); i++) {
-        const h = header[i]?.trim();
-        const v = (row[i] || '').trim();
-        if (!v) continue;
-        if (/prix|co[ûu]t/i.test(h)) continue; // masque la valeur/prix
-        parts.push(`${smartCapitalize(h)}: ${v}`);
-      }
-      const desc = parts.join('\n');
-
-      items.push({
-        id: `tools:${name}`,
-        kind: 'tools',
-        name,
-        description: desc
-      });
-    }
-  }
-
-  // 2) Fallback: sections ## / ### avec contenu (on évite "Autres outils", "Types", etc.)
-  const lines = md.split('\n');
-  const sections: { name: string; desc: string }[] = [];
-  let current: { name: string; buf: string[] } | null = null;
-
-  const isHeader = (line: string) => /^#{2,3}\s+/.test(line);
-  const headerName = (line: string) => line.replace(/^#{2,3}\s+/, '').trim();
-
-  for (const raw of lines) {
-    if (isHeader(raw)) {
-      if (current) {
-        const nm = stripPriceParentheses(current.name);
-        const ds = current.buf.join('\n').trim();
-        if (nm && ds && !noiseRow(nm)) sections.push({ name: nm, desc: ds });
-      }
-      current = { name: headerName(raw), buf: [] };
-    } else {
-      if (current) current.buf.push(raw);
-    }
-  }
-  if (current) {
-    const nm = stripPriceParentheses(current.name);
-    const ds = current.buf.join('\n').trim();
-    if (nm && ds && !noiseRow(nm)) sections.push({ name: nm, desc: ds });
-  }
-
-  // Ajoute les sections (en évitant de dupliquer les lignes déjà créées depuis les tables)
-  const seen = new Set(items.map(i => norm(i.name)));
-  for (const sec of sections) {
-    if (seen.has(norm(sec.name))) continue;
-    items.push({
-      id: `tools:${sec.name}`,
-      kind: 'tools',
-      name: sec.name,
-      description: sec.desc
-    });
-  }
-
-  // Nettoyage & dédup
-  const dedup = new Map<string, CatalogItem>();
-  for (const it of items) {
-    const key = it.id;
-    if (!dedup.has(key)) dedup.set(key, it);
-  }
-  return [...dedup.values()];
-}
-
-// Équipements d’aventurier: sections ## / ### (rendu Markdown)
-function parseSectionedList(md: string, kind: CatalogKind): CatalogItem[] {
-  const items: CatalogItem[] = [];
-  const lines = md.split('\n');
-  let current: { name: string; descLines: string[] } | null = null;
-
-  const isNoiseName = (n: string) =>
-    !n ||
-    /^sommaire$/i.test(n) ||
-    /^table des matières$/i.test(n) ||
-    /^introduction$/i.test(n);
-
-  const flush = () => {
-    if (!current) return;
-    const rawName = current.name || '';
-    const cleanName = stripPriceParentheses(rawName);
-    const desc = current.descLines.join('\n').trim();
-    if (!cleanName.trim() || isNoiseName(cleanName) || !desc) {
-      current = null;
-      return;
-    }
-    items.push({ id: `${kind}:${cleanName}`, kind, name: cleanName, description: desc });
-    current = null;
-  };
-
-  for (const line of lines) {
-    const h = line.match(/^#{2,3}\s+(.+?)\s*$/); // supporte ## et ###
-    if (h) { if (current) flush(); current = { name: h[1].trim(), descLines: [] }; continue; }
-    if (/^---\s*$/.test(line)) { if (current) { flush(); continue; } }
-    if (current) current.descLines.push(line);
-  }
-  if (current) flush();
-  return items;
-}
-
-/* ====================== Modal Liste d’équipement ====================== */
-
-type FilterState = {
-  weapons: boolean;
-  armors: boolean;
-  shields: boolean;
-  adventuring_gear: boolean;
-  tools: boolean;
-};
-
-function EquipmentListModal({
-  onClose,
-  onAddItem,
-  allowedKinds = null,
-}: {
-  onClose: () => void;
-  onAddItem: (item: { name: string; description?: string; meta: ItemMeta }) => void;
-  allowedKinds?: CatalogKind[] | null;
-}) {
-  const [loading, setLoading] = useState(false);
-  const [query, setQuery] = useState('');
-  const [all, setAll] = useState<CatalogItem[]>([]);
-  const [filters, setFilters] = useState<FilterState>({
-    weapons: true, armors: true, shields: true, adventuring_gear: true, tools: true
-  });
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, []);
-
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [armorsMd, shieldsMd, weaponsMd, gearMd, toolsMd] = await Promise.all([
-          fetchText(URLS.armors), fetchText(URLS.shields), fetchText(URLS.weapons),
-          fetchText(URLS.adventuring_gear), fetchText(URLS.tools),
-        ]);
-
-        const listArmors = parseArmors(armorsMd);
-        const listShields = parseShields(shieldsMd);
-        const listWeapons = parseWeapons(weaponsMd);
-        const listGear = parseSectionedList(gearMd, 'adventuring_gear');
-        const listTools = parseTools(toolsMd);
-
-        const list: CatalogItem[] = [
-          ...listArmors, ...listShields, ...listWeapons, ...listGear, ...listTools
-        ];
-
-        // Deduplicate by id and drop empty names
-        const seen = new Set<string>();
-        const cleaned = list.filter(ci => {
-          const nm = (ci.name || '').trim();
-          if (!nm) return false;
-          const id = ci.id;
-          if (seen.has(id)) return false;
-          seen.add(id);
-          return true;
-        });
-        setAll(cleaned);
-      } catch (e) {
-        console.error(e);
-        toast.error('Erreur de chargement de la liste');
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, []);
-
-  const effectiveFilters: FilterState = React.useMemo(() => {
-    if (!allowedKinds) return filters;
-    return {
-      weapons: allowedKinds.includes('weapons'),
-      armors: allowedKinds.includes('armors'),
-      shields: allowedKinds.includes('shields'),
-      adventuring_gear: allowedKinds.includes('adventuring_gear'),
-      tools: allowedKinds.includes('tools'),
-    };
-  }, [allowedKinds, filters]);
-
-  const noneSelected = !effectiveFilters.weapons && !effectiveFilters.armors && !effectiveFilters.shields && !effectiveFilters.adventuring_gear && !effectiveFilters.tools;
-
-  const filtered = useMemo(() => {
-    if (noneSelected) return [];
-    const q = query.trim().toLowerCase();
-    return all.filter(ci => {
-      if (!effectiveFilters[ci.kind]) return false;
-      if (allowedKinds && !allowedKinds.includes(ci.kind)) return false;
-      // Recherche
-      if (!q) return true;
-      if (smartCapitalize(ci.name).toLowerCase().includes(q)) return true;
-      if ((ci.kind === 'adventuring_gear' || ci.kind === 'tools') && (ci.description || '').toLowerCase().includes(q)) return true;
-      return false;
-    });
-  }, [all, query, effectiveFilters, allowedKinds, noneSelected]);
-
-  const handlePick = (ci: CatalogItem) => {
-    // Ajout défaut: quantité 1, non équipé
-    let meta: ItemMeta = { type: 'equipment', quantity: 1, equipped: false };
-    if (ci.kind === 'armors' && ci.armor) meta = { type: 'armor', quantity: 1, equipped: false, armor: ci.armor };
-    if (ci.kind === 'shields' && ci.shield) meta = { type: 'shield', quantity: 1, equipped: false, shield: ci.shield };
-    if (ci.kind === 'weapons' && ci.weapon) meta = { type: 'weapon', quantity: 1, equipped: false, weapon: ci.weapon };
-    if (ci.kind === 'tools') meta = { type: 'tool', quantity: 1, equipped: false };
-    const description = (ci.kind === 'adventuring_gear' || ci.kind === 'tools') ? (ci.description || '').trim() : '';
-    onAddItem({ name: ci.name, description, meta });
-  };
-
-  const toggleExpand = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
-
-  const typeButtons: CatalogKind[] = ['weapons','armors','shields','adventuring_gear','tools'];
-
-  return (
-    <div className="fixed inset-0 z-[9999]">
-      <div className="fixed inset-0 bg-black/70" onClick={onClose} />
-      <div className="fixed inset-0 bg-gray-900 flex flex-col" style={{ height: '100dvh' }}>
-        {/* Header */}
-        <div className="px-3 py-2 border-b border-gray-800">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-gray-100 font-semibold text-lg">Liste des équipements</h2>
-            <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg" aria-label="Fermer">
-              <X />
-            </button>
-          </div>
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2 min-w-[220px] flex-1">
-              <Search className="w-5 h-5 text-gray-400 shrink-0" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Rechercher…"
-                className="input-dark px-3 py-2 rounded-md w-full"
-              />
-            </div>
-            <div className="flex items-center gap-2 flex-wrap justify-end">
-              {typeButtons.map(k => {
-                if (allowedKinds && !allowedKinds.includes(k)) return null;
-                return (
-                  <button
-                    key={k}
-                    onClick={() => setFilters(prev => ({ ...prev, [k]: !prev[k] }))}
-                    className={`px-2 py-1 rounded text-xs border ${
-                      effectiveFilters[k] ? 'border-red-500/40 text-red-300 bg-red-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-800/40'
-                    }`}
-                  >
-                    {k === 'weapons' ? 'Armes' :
-                     k === 'armors' ? 'Armures' :
-                     k === 'shields' ? 'Boucliers' :
-                     k === 'adventuring_gear' ? 'Équipements' : 'Outils'}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Liste */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {loading ? (
-            <div className="text-gray-400">Chargement…</div>
-          ) : filtered.length === 0 ? (
-            <div className="text-gray-500 text-sm">Aucun résultat</div>
-          ) : (
-            filtered.map(ci => {
-              const isOpen = !!expanded[ci.id];
-              const preview = (
-                <>
-                  {ci.kind === 'armors' && ci.armor && <div>CA: {ci.armor.label}</div>}
-                  {ci.kind === 'shields' && ci.shield && <div>Bonus de bouclier: +{ci.shield.bonus}</div>}
-                  {ci.kind === 'weapons' && ci.weapon && (
-                    <div className="space-y-0.5">
-                      <div>Dégâts: {ci.weapon.damageDice} {ci.weapon.damageType}</div>
-                      {ci.weapon.properties && <div>Propriété: {ci.weapon.properties}</div>}
-                      {ci.weapon.range && <div>Portée: {ci.weapon.range}</div>}
-                    </div>
-                  )}
-                  {(ci.kind === 'adventuring_gear' || ci.kind === 'tools') && (ci.description ? 'Voir le détail' : 'Équipement')}
-                </>
-              );
-              return (
-                <div key={ci.id} className="bg-gray-800/50 border border-gray-700/50 rounded-md">
-                  <div className="flex items-start justify-between p-3 gap-3">
-                    <div className="flex-1 min-w-0">
-                      <button className="text-gray-100 font-medium hover:underline break-words text-left" onClick={() => toggleExpand(ci.id)}>
-                        {smartCapitalize(ci.name)}
-                      </button>
-                      <div className="text-xs text-gray-400 mt-1">{preview}</div>
-                    </div>
-                    <button onClick={() => handlePick(ci)} className="btn-primary px-3 py-2 rounded-lg flex items-center gap-1">
-                      <Check className="w-4 h-4" /> Ajouter
-                    </button>
-                  </div>
-                  {isOpen && (
-                    <div className="px-3 pb-3">
-                      {(ci.kind === 'adventuring_gear' || ci.kind === 'tools')
-                        ? <MarkdownLite text={(ci.description || '').trim()} />
-                        : <div className="text-sm text-gray-400">Aucun détail supplémentaire</div>}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ====================== Modals Custom & Edit ====================== */
-
-function CustomItemModal({
-  onClose, onAdd,
-}: {
-  onClose: () => void;
-  onAdd: (payload: { name: string; description: string; meta: ItemMeta }) => void;
-}) {
-  const [name, setName] = useState('');
-  const [type, setType] = useState<MetaType>('equipment');
-  const [description, setDescription] = useState('');
-  const [quantity, setQuantity] = useState(1);
-
-  const [armBase, setArmBase] = useState<number>(12);
-  const [armAddDex, setArmAddDex] = useState<boolean>(true);
-  const [armDexCap, setArmDexCap] = useState<number | ''>(2);
-  const [shieldBonus, setShieldBonus] = useState<number>(2);
-
-  const [wDice, setWDice] = useState('1d6');
-  const [wType, setWType] = useState<'Tranchant' | 'Perforant' | 'Contondant'>('Tranchant');
-  const [wProps, setWProps] = useState('');
-  const [wRange, setWRange] = useState('Corps à corps');
-
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, []);
-
-  const add = () => {
-    const cleanNameRaw = name.trim();
-    if (!cleanNameRaw) return toast.error('Nom requis');
-    if (quantity <= 0) return toast.error('Quantité invalide');
-    const cleanName = smartCapitalize(cleanNameRaw);
-    let meta: ItemMeta = { type, quantity, equipped: false };
-    if (type === 'armor') {
-      const cap = armDexCap === '' ? null : Number(armDexCap);
-      meta.armor = { base: armBase, addDex: armAddDex, dexCap: cap, label: `${armBase}${armAddDex ? ` + modificateur de Dex${cap != null ? ` (max ${cap})` : ''}` : ''}` };
-    } else if (type === 'shield') {
-      meta.shield = { bonus: shieldBonus };
-    } else if (type === 'weapon') {
-      meta.weapon = { damageDice: wDice, damageType: wType, properties: wProps, range: wRange };
-    }
-    onAdd({ name: cleanName, description: description.trim(), meta });
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 z-[9999]">
-      <div className="fixed inset-0 bg-black/70" onClick={onClose} />
-      <div className="fixed inset-0 bg-gray-900/95 w-screen h-screen overflow-y-auto p-4">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-lg font-semibold text-gray-100">Objet personnalisé</h3>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg"><X /></button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Nom</label>
-            <input className="input-dark w-full px-3 py-2 rounded-md" value={name} onChange={e => setName(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Type</label>
-            <select className="input-dark w-full px-3 py-2 rounded-md" value={type} onChange={e => setType(e.target.value as MetaType)}>
-              <option value="equipment">Équipement</option>
-              <option value="potion">Potion / Poison</option>
-              <option value="weapon">Arme</option>
-              <option value="armor">Armure</option>
-              <option value="shield">Bouclier</option>
-              <option value="jewelry">Bijoux</option>
-              <option value="tool">Outils</option>
-            </select>
-          </div>
-        </div>
-
-        {type === 'armor' && (
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div><label className="block text-sm text-gray-400 mb-1">Base CA</label><input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={armBase} onChange={e => setArmBase(parseInt(e.target.value) || 10)} /></div>
-            <div className="flex items-center gap-2"><input id="addDex" type="checkbox" checked={armAddDex} onChange={e => setArmAddDex(e.target.checked)} /><label htmlFor="addDex" className="text-sm text-gray-300">Ajoute mod DEX</label></div>
-            <div><label className="block text-sm text-gray-400 mb-1">Cap DEX (vide = illimité)</label><input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={armDexCap} onChange={e => setArmDexCap(e.target.value === '' ? '' : parseInt(e.target.value))} /></div>
-          </div>
-        )}
-        {type === 'shield' && (<div className="mt-3"><label className="block text-sm text-gray-400 mb-1">Bonus de bouclier</label><input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={shieldBonus} onChange={e => setShieldBonus(parseInt(e.target.value) || 0)} /></div>)}
-        {type === 'weapon' && (
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div><label className="block text-sm text-gray-400 mb-1">Dés de dégâts</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wDice} onChange={e => setWDice(e.target.value)} placeholder="1d6" /></div>
-            <div><label className="block text-sm text-gray-400 mb-1">Type de dégâts</label><select className="input-dark w-full px-3 py-2 rounded-md" value={wType} onChange={e => setWType(e.target.value as any)}><option>Tranchant</option><option>Perforant</option><option>Contondant</option></select></div>
-            <div><label className="block text-sm text-gray-400 mb-1">Propriété(s)</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wProps} onChange={e => setWProps(e.target.value)} placeholder="Finesse, Polyvalente..." /></div>
-            <div><label className="block text-sm text-gray-400 mb-1">Portée</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wRange} onChange={e => setWRange(e.target.value)} placeholder="Corps à corps, 6 m..." /></div>
-          </div>
-        )}
-
-        <div className="mt-3">
-          <label className="block text-sm text-gray-400 mb-1">Description</label>
-          <textarea className="input-dark w-full px-3 py-2 rounded-md" rows={4} value={description} onChange={e => setDescription(e.target.value)} />
-        </div>
-
-        <div className="mt-3 flex items-center gap-3">
-          <label className="text-sm text-gray-400">Quantité</label>
-          <input type="number" min={1} className="input-dark w-24 px-3 py-2 rounded-md" value={quantity} onChange={e => setQuantity(parseInt(e.target.value) || 1)} />
-        </div>
-
-        <div className="mt-4 flex justify-end gap-2">
-          <button onClick={add} className="btn-primary px-4 py-2 rounded-lg">Ajouter</button>
-          <button onClick={onClose} className="btn-secondary px-4 py-2 rounded-lg">Annuler</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InventoryItemEditModal({
-  item, onClose, onSaved,
-}: {
-  item: InventoryItem;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const meta = parseMeta(item.description) || { type: 'equipment', quantity: 1, equipped: false } as ItemMeta;
-  const [name, setName] = useState(smartCapitalize(item.name));
-  const [description, setDescription] = useState(visibleDescription(item.description));
-  const [quantity, setQuantity] = useState<number>(meta.quantity ?? 1);
-
-  const [wDice, setWDice] = useState(meta.weapon?.damageDice || '1d6');
-  const [wType, setWType] = useState<'Tranchant' | 'Perforant' | 'Contondant'>(meta.weapon?.damageType || 'Tranchant');
-  const [wProps, setWProps] = useState(meta.weapon?.properties || '');
-  const [wRange, setWRange] = useState(meta.weapon?.range || 'Corps à corps');
-
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, []);
-
-  const save = async () => {
-    try {
-      let nextMeta: ItemMeta = { ...meta, quantity: Math.max(1, quantity) };
-      if (nextMeta.type === 'weapon') {
-        nextMeta = {
-          ...nextMeta,
-          weapon: {
-            damageDice: wDice || '1d6',
-            damageType: wType,
-            properties: wProps || '',
-            range: wRange || 'Corps à corps'
-          }
-        };
-      }
-      const nextDesc = injectMetaIntoDescription(description, nextMeta);
-      const { error } = await supabase.from('inventory_items').update({ name: smartCapitalize(name.trim()), description: nextDesc }).eq('id', item.id);
-      if (error) throw error;
-      toast.success('Objet mis à jour');
-      onSaved();
-      onClose();
-    } catch (e) {
-      console.error(e);
-      toast.error('Erreur lors de la mise à jour');
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[9999]">
-      <div className="fixed inset-0 bg-black/70" onClick={onClose} />
-      <div className="fixed inset-0 bg-gray-900/95 w-screen h-screen overflow-y-auto p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-gray-100">Modifier l’objet</h3>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg"><X /></button>
-        </div>
-
-        <div className="space-y-3">
-          <div><label className="block text-sm text-gray-400 mb-1">Nom</label><input className="input-dark w-full px-3 py-2 rounded-md" value={name} onChange={e => setName(e.target.value)} /></div>
-          <div><label className="block text-sm text-gray-400 mb-1">Description</label><textarea className="input-dark w-full px-3 py-2 rounded-md" rows={6} value={description} onChange={e => setDescription(e.target.value)} /></div>
-
-          {meta.type === 'weapon' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div><label className="block text-sm text-gray-400 mb-1">Dés de dégâts</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wDice} onChange={e => setWDice(e.target.value)} /></div>
-              <div><label className="block text-sm text-gray-400 mb-1">Type de dégâts</label><select className="input-dark w-full px-3 py-2 rounded-md" value={wType} onChange={e => setWType(e.target.value as any)}><option>Tranchant</option><option>Perforant</option><option>Contondant</option></select></div>
-              <div className="md:col-span-2"><label className="block text-sm text-gray-400 mb-1">Propriété(s)</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wProps} onChange={e => setWProps(e.target.value)} /></div>
-              <div className="md:col-span-2"><label className="block text-sm text-gray-400 mb-1">Portée</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wRange} onChange={e => setWRange(e.target.value)} /></div>
-            </div>
-          )}
-
-          <div className="flex items-center gap-3"><label className="text-sm text-gray-400">Quantité</label><input type="number" min={1} className="input-dark w-24 px-3 py-2 rounded-md" value={quantity} onChange={e => setQuantity(parseInt(e.target.value) || 1)} /></div>
-          <div className="pt-2 flex justify-end gap-2">
-            <button onClick={save} className="btn-primary px-4 py-2 rounded-lg">Sauvegarder</button>
-            <button onClick={onClose} className="btn-secondary px-4 py-2 rounded-lg">Annuler</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ====================== Popup slot (image) ====================== */
-
 const getTitle = (type: 'armor' | 'weapon' | 'shield' | 'potion' | 'jewelry' | 'bag') =>
   type === 'armor' ? 'Armure'
   : type === 'shield' ? 'Bouclier'
@@ -899,7 +149,6 @@ interface InfoBubbleProps {
   onRequestOpenList?: () => void;
   onOpenEditFromSlot?: () => void;
 }
-
 const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onRequestOpenList, onOpenEditFromSlot }: InfoBubbleProps) => (
   <div className="fixed inset-0 z-[9999]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
     <div className="fixed inset-0 bg-black/50" onClick={onClose} />
@@ -977,7 +226,6 @@ interface EquipmentSlotProps {
   onOpenEditFromSlot: () => void;
   isEquipped: boolean;
 }
-
 const EquipmentSlot = ({
   icon, position, equipment, type, onRequestOpenList, onToggleEquipFromSlot, onOpenEditFromSlot, isEquipped
 }: EquipmentSlotProps) => {
@@ -1010,14 +258,12 @@ const EquipmentSlot = ({
 };
 
 /* ====================== Composant principal ====================== */
-
 interface EquipmentTabProps {
   player: Player;
   inventory: InventoryItem[];
   onPlayerUpdate: (player: Player) => void;
   onInventoryUpdate: (inventory: InventoryItem[]) => void;
 }
-
 type Currency = 'gold' | 'silver' | 'copper';
 
 const CurrencyInput = ({ currency, value, onAdd, onSpend }: {
@@ -1047,7 +293,7 @@ export function EquipmentTab({
   player, inventory, onPlayerUpdate, onInventoryUpdate
 }: EquipmentTabProps) {
   const [showList, setShowList] = useState(false);
-  const [allowedKinds, setAllowedKinds] = useState<CatalogKind[] | null>(null);
+  const [allowedKinds, setAllowedKinds] = useState<('armors' | 'shields' | 'weapons' | 'adventuring_gear' | 'tools')[] | null>(null);
   const [showCustom, setShowCustom] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
 
@@ -1058,21 +304,16 @@ export function EquipmentTab({
   const [weapon, setWeapon] = useState<Equipment | null>(player.equipment?.weapon || null);
   const [shield, setShield] = useState<Equipment | null>(player.equipment?.shield || null);
 
-  // Synthèses dynamiques pour bijoux/potions (liste provenant de l’inventaire)
   const jewelryItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'jewelry'), [inventory]);
   const potionItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'potion'), [inventory]);
   const jewelryEquip: Equipment = useMemo(() => ({
     name: 'Bijoux',
-    description: jewelryItems.length
-      ? jewelryItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n')
-      : 'Aucun bijou dans le sac.',
+    description: jewelryItems.length ? jewelryItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n') : 'Aucun bijou dans le sac.',
     isTextArea: true
   }), [jewelryItems]);
   const potionEquip: Equipment = useMemo(() => ({
     name: 'Potions et poisons',
-    description: potionItems.length
-      ? potionItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n')
-      : 'Aucune potion/poison dans le sac.',
+    description: potionItems.length ? potionItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n') : 'Aucune potion/poison dans le sac.',
     isTextArea: true
   }), [potionItems]);
 
@@ -1096,11 +337,8 @@ export function EquipmentTab({
   };
 
   const notifyAttacksChanged = () => {
-    try {
-      window.dispatchEvent(new CustomEvent('attacks:changed', { detail: { playerId: player.id } }));
-    } catch {}
+    try { window.dispatchEvent(new CustomEvent('attacks:changed', { detail: { playerId: player.id } })); } catch {}
   };
-
   const createOrUpdateWeaponAttack = async (name: string, w?: WeaponMeta | null) => {
     try {
       const attacks = await attackService.getPlayerAttacks(player.id);
@@ -1119,17 +357,11 @@ export function EquipmentTab({
         spell_level: null as any,
         ammo_count: (existing as any)?.ammo_count ?? 0
       };
-      if (existing) {
-        await attackService.updateAttack({ ...payload, id: existing.id });
-      } else {
-        await attackService.addAttack(payload);
-      }
+      if (existing) { await attackService.updateAttack({ ...payload, id: existing.id }); }
+      else { await attackService.addAttack(payload); }
       notifyAttacksChanged();
-    } catch (err) {
-      console.error('Création/mise à jour attaque échouée', err);
-    }
+    } catch (err) { console.error('Création/mise à jour attaque échouée', err); }
   };
-
   const removeWeaponAttacksByName = async (name: string) => {
     try {
       const attacks = await attackService.getPlayerAttacks(player.id);
@@ -1137,9 +369,7 @@ export function EquipmentTab({
       if (toDelete.length === 0) return;
       await Promise.allSettled(toDelete.map(a => attackService.removeAttack(a.id)));
       notifyAttacksChanged();
-    } catch (e) {
-      console.error('Suppression attaques (déséquipement) échouée', e);
-    }
+    } catch (e) { console.error('Suppression attaques (déséquipement) échouée', e); }
   };
 
   const applyInventoryMetaLocal = (itemId: string, nextMeta: ItemMeta) => {
@@ -1150,7 +380,7 @@ export function EquipmentTab({
     onInventoryUpdate(next);
   };
 
-  const addFromList = async (payload: { name: string; description?: string; meta: ItemMeta }) => {
+  const addFromList = async (payload: { name: string; description?: string; meta: any }) => {
     try {
       const meta: ItemMeta = { ...payload.meta, equipped: false };
       const finalDesc = injectMetaIntoDescription(payload.description || '', meta);
@@ -1218,7 +448,6 @@ export function EquipmentTab({
     if (updates.length) await Promise.allSettled(updates);
   };
 
-  // Multi-armes: ne force pas l’unicité; on gère "équipé" via meta.equipped
   const performToggle = async (item: InventoryItem, mode: 'equip' | 'unequip') => {
     const meta = parseMeta(item.description);
     if (!meta) return;
@@ -1261,16 +490,11 @@ export function EquipmentTab({
       } else if (meta.type === 'weapon') {
         if (mode === 'unequip') {
           await updateItemMeta(item, { ...meta, equipped: false });
-          // Si le slot prévisualise précisément cette arme, on vide le slot
           if (weapon?.inventory_item_id === item.id) { setWeapon(null); await saveEquipment('weapon', null); }
-          // Supprime l’attaque correspondante dans CombatTab
           await removeWeaponAttacksByName(item.name);
           toast.success('Arme déséquipée');
         } else if (mode === 'equip') {
-          // Marque l’arme comme équipée (persistance via meta)
           await updateItemMeta(item, { ...meta, equipped: true });
-
-          // Si aucune arme n'est affichée dans le slot, montrer un aperçu de celle-ci
           if (!weapon) {
             const eq: Equipment = {
               name: item.name,
@@ -1283,23 +507,15 @@ export function EquipmentTab({
                 damageType: meta.weapon.damageType || 'Tranchant',
                 properties: meta.weapon.properties || '',
                 range: meta.weapon.range || 'Corps à corps',
-              } : {
-                damageDice: '1d6',
-                damageType: 'Tranchant',
-                properties: '',
-                range: 'Corps à corps',
-              }
+              } : { damageDice: '1d6', damageType: 'Tranchant', properties: '', range: 'Corps à corps' }
             };
             setWeapon(eq);
             await saveEquipment('weapon', eq);
           }
-
-          // Upsert de l’attaque
           await createOrUpdateWeaponAttack(item.name, meta.weapon);
           toast.success('Arme équipée');
         }
       }
-
       await refreshInventory();
     } catch (e) {
       console.error(e);
@@ -1313,41 +529,34 @@ export function EquipmentTab({
     const isArmor = meta.type === 'armor';
     const isShield = meta.type === 'shield';
     const isWeapon = meta.type === 'weapon';
-
     const equipped =
       (isArmor && armor?.inventory_item_id === item.id) ||
       (isShield && shield?.inventory_item_id === item.id) ||
       (isWeapon && meta.equipped === true);
-
     setConfirmPayload({ mode: equipped ? 'unequip' : 'equip', item });
     setConfirmOpen(true);
   };
 
-  // Ouvre l’édition depuis le slot (icône roue)
   const openEditFromSlot = (slot: 'armor' | 'shield' | 'weapon') => {
     const eq = slot === 'armor' ? armor : slot === 'shield' ? shield : weapon;
     if (!eq?.inventory_item_id) return;
     const item = inventory.find(i => i.id === eq.inventory_item_id);
     if (item) setEditingItem(item);
   };
-
   const toggleFromSlot = (slot: 'armor' | 'shield' | 'weapon') => {
     const eq = slot === 'armor' ? armor : slot === 'shield' ? shield : weapon;
     if (!eq) return;
-    const item = eq.inventory_item_id
-      ? inventory.find(i => i.id === eq.inventory_item_id)
-      : undefined;
+    const item = eq.inventory_item_id ? inventory.find(i => i.id === eq.inventory_item_id) : undefined;
     if (!item) return;
     setConfirmPayload({ mode: 'unequip', item });
     setConfirmOpen(true);
   };
 
-  /* ===== Sac: filtres (gauche) + recherche (droite) ===== */
+  /* Sac: filtres + recherche */
   const [bagFilter, setBagFilter] = useState('');
   const [bagKinds, setBagKinds] = useState<Record<MetaType, boolean>>({
     armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true, tool: true
   });
-
   const filteredInventory = useMemo(() => {
     const q = bagFilter.trim().toLowerCase();
     return inventory.filter(i => {
@@ -1360,7 +569,6 @@ export function EquipmentTab({
       return name.includes(q) || desc.includes(q);
     });
   }, [inventory, bagFilter, bagKinds]);
-
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const toggleExpand = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -1381,7 +589,6 @@ export function EquipmentTab({
               style={{ mixBlendMode: 'luminosity' }}
             />
 
-            {/* Armure */}
             <EquipmentSlot
               icon={<ShieldIcon size={24} className="text-purple-500" />}
               position="top-[27%] left-1/2 -translate-x-1/2"
@@ -1393,7 +600,6 @@ export function EquipmentTab({
               isEquipped={!!armor}
             />
 
-            {/* Bouclier (descendu légèrement) */}
             <EquipmentSlot
               icon={<ShieldIcon size={24} className="text-blue-500" />}
               position="top-[50%] left-[15%]"
@@ -1405,7 +611,6 @@ export function EquipmentTab({
               isEquipped={!!shield}
             />
 
-            {/* Arme (descendue légèrement) */}
             <EquipmentSlot
               icon={<Sword size={24} className="text-red-500" />}
               position="top-[50%] right-[15%]"
@@ -1417,11 +622,10 @@ export function EquipmentTab({
               isEquipped={!!weapon}
             />
 
-            {/* Potion: synthèse des objets de type potion/poison */}
             <EquipmentSlot
               icon={<Flask size={24} className="text-green-500" />}
               position="top-[5%] right-[5%]"
-              equipment={potionEquip}
+              equipment={{ name: 'Potions et poisons', description: potionItems.length ? potionItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n') : 'Aucune potion/poison dans le sac.', isTextArea: true }}
               type="potion"
               onRequestOpenList={() => { setAllowedKinds(null); setShowList(true); }}
               onToggleEquipFromSlot={() => {}}
@@ -1429,11 +633,10 @@ export function EquipmentTab({
               isEquipped={false}
             />
 
-            {/* Bijoux: synthèse des objets de type jewelry */}
             <EquipmentSlot
               icon={<Star size={24} className="text-yellow-500" />}
               position="top-[15%] right-[5%]"
-              equipment={jewelryEquip}
+              equipment={{ name: 'Bijoux', description: jewelryItems.length ? jewelryItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n') : 'Aucun bijou dans le sac.', isTextArea: true }}
               type="jewelry"
               onRequestOpenList={() => { setAllowedKinds(null); setShowList(true); }}
               onToggleEquipFromSlot={() => {}}
@@ -1441,7 +644,6 @@ export function EquipmentTab({
               isEquipped={false}
             />
 
-            {/* Sac visuel */}
             <EquipmentSlot
               icon={<img src="https://yumzqyyogwzrmlcpvnky.supabase.co/storage/v1/object/public/static//8-2-backpack-png-pic.png" alt="Backpack" className="w-24 h-24 object-contain" />}
               position="bottom-[5%] right-[2%]"
@@ -1499,12 +701,10 @@ export function EquipmentTab({
         </div>
 
         <div className="p-4">
-          {/* Actions + filtres alignés à gauche, recherche à droite */}
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             <button onClick={() => { setAllowedKinds(null); setShowList(true); }} className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={20} /> Liste d’équipement</button>
             <button onClick={() => setShowCustom(true)} className="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"><Plus size={18} /> Objet personnalisé</button>
 
-            {/* Filtres (gauche) */}
             <div className="flex items-center gap-2 flex-wrap">
               {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
                 <button
@@ -1512,24 +712,17 @@ export function EquipmentTab({
                   onClick={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
                   className={`px-2 py-1 rounded text-xs border ${bagKinds[k] ? 'border-red-500/40 text-red-300 bg-red-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-800/40'}`}
                 >
-                  {k === 'armor' ? 'Armure'
-                    : k === 'shield' ? 'Bouclier'
-                    : k === 'weapon' ? 'Arme'
-                    : k === 'potion' ? 'Potion/Poison'
-                    : k === 'jewelry' ? 'Bijoux'
-                    : k === 'tool' ? 'Outils' : 'Équipement'}
+                  {k === 'armor' ? 'Armure' : k === 'shield' ? 'Bouclier' : k === 'weapon' ? 'Arme' : k === 'potion' ? 'Potion/Poison' : k === 'jewelry' ? 'Bijoux' : k === 'tool' ? 'Outils' : 'Équipement'}
                 </button>
               ))}
             </div>
 
-            {/* Recherche (droite) */}
             <div className="ml-auto flex-1 min-w-[220px] flex items-center gap-2">
               <Search className="w-4 h-4 text-gray-400" />
               <input value={bagFilter} onChange={(e) => setBagFilter(e.target.value)} placeholder="Filtrer le sac…" className="input-dark px-3 py-2 rounded-md w-full" />
             </div>
           </div>
 
-          {/* Liste inventaire */}
           <div className="space-y-2">
             {filteredInventory.map(item => {
               const meta = parseMeta(item.description);
@@ -1537,7 +730,6 @@ export function EquipmentTab({
               const isArmor = meta?.type === 'armor';
               const isShield = meta?.type === 'shield';
               const isWeapon = meta?.type === 'weapon';
-
               const isEquipped =
                 (isArmor && armor?.inventory_item_id === item.id) ||
                 (isShield && shield?.inventory_item_id === item.id) ||
@@ -1558,7 +750,6 @@ export function EquipmentTab({
                         {meta?.type === 'potion' && <span className="text-xs px-2 py-0.5 rounded bg-green-900/30 text-green-300">Potion/Poison</span>}
                       </div>
 
-                      {/* Détails techniques (déplié) */}
                       {expanded[item.id] && (isArmor || isShield || isWeapon) && (
                         <div className="text-xs text-gray-400 mt-2 space-y-0.5">
                           {isArmor && meta?.armor && <div>CA: {meta.armor.label}</div>}
@@ -1587,7 +778,6 @@ export function EquipmentTab({
                           {isEquipped ? 'Équipé' : 'Non équipé'}
                         </button>
                       )}
-                      {/* Paramètres (édition) */}
                       <button onClick={() => setEditingItem(item)} className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-700/40 rounded-full" title="Paramètres">
                         <Settings size={16} />
                       </button>
@@ -1625,7 +815,6 @@ export function EquipmentTab({
         />
       )}
 
-      {/* Confirmation equip/unequip */}
       <ConfirmEquipModal
         open={confirmOpen}
         mode={confirmPayload?.mode || 'equip'}
