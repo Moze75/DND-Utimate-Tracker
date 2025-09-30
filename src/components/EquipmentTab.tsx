@@ -11,6 +11,7 @@ import { Player, InventoryItem } from '../types/dnd';
 import { EquipmentListModal } from './modals/EquipmentListModal';
 import { CustomItemModal } from './modals/CustomItemModal';
 import { InventoryItemEditModal } from './modals/InventoryItemEditModal';
+import { WeaponsManageModal } from './modals/WeaponsManageModal';
 
 /* ====================== Types & helpers ====================== */
 
@@ -145,8 +146,9 @@ interface InfoBubbleProps {
   isEquipped?: boolean;
   onRequestOpenList?: () => void;
   onOpenEditFromSlot?: () => void;
+  onOpenWeaponsManage?: () => void; // NEW: open weapons manage modal
 }
-const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onRequestOpenList, onOpenEditFromSlot }: InfoBubbleProps) => (
+const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onRequestOpenList, onOpenEditFromSlot, onOpenWeaponsManage }: InfoBubbleProps) => (
   <div className="fixed inset-0 z-[9999]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
     <div className="fixed inset-0 bg-black/50" onClick={onClose} />
     <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 text-sm text-gray-300 rounded-lg shadow-lg w-[min(32rem,95vw)] border border-gray-700/50">
@@ -159,6 +161,15 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
               className={`px-2 py-1 rounded text-xs border ${isEquipped ? 'border-green-500/40 text-green-300 bg-green-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'}`}
             >
               {isEquipped ? 'Équipé' : 'Non équipé'}
+            </button>
+          )}
+          {type === 'weapon' && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenWeaponsManage?.(); }}
+              className="p-2 text-gray-400 hover:bg-gray-700/50 rounded-lg"
+              title="Gérer mes armes"
+            >
+              <Sword size={18} />
             </button>
           )}
           <button
@@ -203,8 +214,13 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
         (type === 'armor' || type === 'shield' || type === 'weapon') && (
           <div className="text-sm text-gray-400">
             Aucun {type === 'armor' ? 'armure' : type === 'shield' ? 'bouclier' : 'arme'} équipé.
-            <div className="mt-3">
+            <div className="mt-3 flex items-center gap-2">
               <button onClick={() => onRequestOpenList?.()} className="btn-primary px-3 py-2 rounded-lg">Équiper depuis la liste</button>
+              {type === 'weapon' && (
+                <button onClick={() => onOpenWeaponsManage?.()} className="px-3 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200">
+                  Gérer mes armes
+                </button>
+              )}
             </div>
           </div>
         )
@@ -222,9 +238,10 @@ interface EquipmentSlotProps {
   onToggleEquipFromSlot: () => void;
   onOpenEditFromSlot: () => void;
   isEquipped: boolean;
+  onOpenWeaponsManageFromSlot?: () => void; // NEW
 }
 const EquipmentSlot = ({
-  icon, position, equipment, type, onRequestOpenList, onToggleEquipFromSlot, onOpenEditFromSlot, isEquipped
+  icon, position, equipment, type, onRequestOpenList, onToggleEquipFromSlot, onOpenEditFromSlot, isEquipped, onOpenWeaponsManageFromSlot
 }: EquipmentSlotProps) => {
   const [showInfo, setShowInfo] = useState(false);
   return (
@@ -248,6 +265,7 @@ const EquipmentSlot = ({
           isEquipped={isEquipped}
           onRequestOpenList={onRequestOpenList}
           onOpenEditFromSlot={onOpenEditFromSlot}
+          onOpenWeaponsManage={onOpenWeaponsManageFromSlot}
         />
       )}
     </>
@@ -303,6 +321,7 @@ export function EquipmentTab({
   const [allowedKinds, setAllowedKinds] = useState<('armors' | 'shields' | 'weapons' | 'adventuring_gear' | 'tools')[] | null>(null);
   const [showCustom, setShowCustom] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [showWeaponsModal, setShowWeaponsModal] = useState(false); // NEW
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmPayload, setConfirmPayload] = useState<{ mode: 'equip' | 'unequip'; item: InventoryItem } | null>(null);
@@ -563,6 +582,45 @@ export function EquipmentTab({
     setConfirmOpen(true);
   };
 
+  // NEW: Gestion depuis le modal Mes armes
+  const handleEquipWeapon = async (item: InventoryItem) => {
+    await performToggle(item, 'equip');
+  };
+  const handleUnequipWeapon = async (item: InventoryItem) => {
+    await performToggle(item, 'unequip');
+  };
+  const handleSetPrimaryWeapon = async (item: InventoryItem) => {
+    const meta = parseMeta(item.description);
+    if (!meta || meta.type !== 'weapon') return;
+
+    // Si pas encore équipée, on l’équipe d’abord
+    if (!meta.equipped) {
+      await performToggle(item, 'equip');
+    }
+
+    // Définir comme arme principale (slot) sans affecter les autres armes équipées
+    const eq: Equipment = {
+      name: item.name,
+      description: visibleDescription(item.description),
+      inventory_item_id: item.id,
+      armor_formula: null,
+      shield_bonus: null,
+      weapon_meta: meta.weapon ? {
+        damageDice: meta.weapon.damageDice || '1d6',
+        damageType: meta.weapon.damageType || 'Tranchant',
+        properties: meta.weapon.properties || '',
+        range: meta.weapon.range || 'Corps à corps',
+      } : { damageDice: '1d6', damageType: 'Tranchant', properties: '', range: 'Corps à corps' }
+    };
+    await saveEquipment('weapon', eq);
+
+    // S’assurer que l’attaque existe
+    await createOrUpdateWeaponAttack(item.name, meta.weapon);
+
+    // Rafraîchir l’inventaire pour refléter l’état
+    await refreshInventory();
+  };
+
   /* Sac: recherche sur la même ligne que les filtres (liste déroulante à coches) */
   const [bagFilter, setBagFilter] = useState('');
   const [bagKinds, setBagKinds] = useState<Record<MetaType, boolean>>({
@@ -635,6 +693,7 @@ export function EquipmentTab({
               onRequestOpenList={() => { setAllowedKinds(['weapons']); setShowList(true); }}
               onToggleEquipFromSlot={() => toggleFromSlot('weapon')}
               onOpenEditFromSlot={() => openEditFromSlot('weapon')}
+              onOpenWeaponsManageFromSlot={() => setShowWeaponsModal(true)}
               isEquipped={!!weapon}
             />
 
@@ -891,6 +950,17 @@ export function EquipmentTab({
           item={editingItem}
           onClose={() => setEditingItem(null)}
           onSaved={refreshInventory}
+        />
+      )}
+
+      {showWeaponsModal && (
+        <WeaponsManageModal
+          inventory={inventory}
+          primaryWeaponItemId={weapon?.inventory_item_id}
+          onClose={() => setShowWeaponsModal(false)}
+          onEquip={handleEquipWeapon}
+          onUnequip={handleUnequipWeapon}
+          onSetPrimary={handleSetPrimaryWeapon}
         />
       )}
 
