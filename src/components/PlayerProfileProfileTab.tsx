@@ -485,13 +485,6 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
                 {saveErr}
               </span>
             )}
-            <button
-              type="button"
-              onClick={saveHistory}
-              className="ml-auto px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/15 text-sm text-gray-100"
-            >
-              Forcer la sauvegarde
-            </button>
           </div>
         </div>
       </SectionContainer>
