@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   Backpack, Plus, Trash2, Shield as ShieldIcon, Sword, FlaskRound as Flask, Star,
-  Coins, Search, X, Settings
+  Coins, Search, X, Settings, Filter as FilterIcon, ChevronDown
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
@@ -456,7 +456,7 @@ export function EquipmentTab({
     if (updates.length) await Promise.allSettled(updates);
   };
 
-  // Equip/Unequip à partir d’un item (conserve multi-armes)
+  // Equip/Unequip à partir d’un item (multi-armes supportées)
   const performToggle = async (item: InventoryItem, mode: 'equip' | 'unequip') => {
     const meta = parseMeta(item.description);
     if (!meta) return;
@@ -503,15 +503,17 @@ export function EquipmentTab({
       } else if (meta.type === 'weapon') {
         if (mode === 'unequip') {
           await updateItemMeta(item, { ...meta, equipped: false });
+          // Ne vider le slot que si on déséquipe l’arme principale
           if (weapon?.inventory_item_id === item.id) {
             await saveEquipment('weapon', null);
           }
           await removeWeaponAttacksByName(item.name);
           toast.success('Arme déséquipée');
         } else if (mode === 'equip') {
+          // Équiper sans toucher aux autres armes
           await updateItemMeta(item, { ...meta, equipped: true });
 
-          // S’il n’y a pas d’arme “principale” dans le slot, projeter celle-ci
+          // Si aucune arme n'est définie comme principale, définir celle-ci
           if (!stableEquipmentRef.current?.weapon) {
             const eq: Equipment = {
               name: item.name,
@@ -592,11 +594,12 @@ export function EquipmentTab({
     await refreshInventory();
   };
 
-  /* Sac: filtres + recherche (liste à coches) */
+  /* Sac: filtres + recherche (liste déroulante à coches) */
   const [bagFilter, setBagFilter] = useState('');
   const [bagKinds, setBagKinds] = useState<Record<MetaType, boolean>>({
     armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true, tool: true
   });
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const filteredInventory = useMemo(() => {
     const q = bagFilter.trim().toLowerCase();
     return inventory.filter(i => {
@@ -752,26 +755,36 @@ export function EquipmentTab({
               <button onClick={() => setShowCustom(true)} className="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"><Plus size={18} /> Objet personnalisé</button>
             </div>
 
-            {/* Liste à coches des catégories */}
-            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
-              {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
-                <label key={k} className="inline-flex items-center gap-2 text-xs text-gray-300 bg-gray-800/30 rounded px-2 py-1 border border-gray-700/50 hover:bg-gray-800/50 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={bagKinds[k]}
-                    onChange={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
-                    className="accent-red-500"
-                  />
-                  <span>
-                    {k === 'armor' ? 'Armure'
-                      : k === 'shield' ? 'Bouclier'
-                      : k === 'weapon' ? 'Arme'
-                      : k === 'potion' ? 'Potion/Poison'
-                      : k === 'jewelry' ? 'Bijoux'
-                      : k === 'tool' ? 'Outils' : 'Équipement'}
-                  </span>
-                </label>
-              ))}
+            {/* Liste déroulante avec petites coches */}
+            <div className="relative">
+              <button
+                onClick={() => setFiltersOpen(v => !v)}
+                className="px-3 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"
+              >
+                <FilterIcon size={16} /> Filtres <ChevronDown size={16} />
+              </button>
+              {filtersOpen && (
+                <div className="absolute z-50 mt-2 w-56 bg-gray-900/95 border border-gray-700 rounded-lg shadow-lg p-2">
+                  {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
+                    <label key={k} className="flex items-center justify-between text-sm text-gray-200 px-2 py-1 rounded hover:bg-gray-800/60 cursor-pointer">
+                      <span>
+                        {k === 'armor' ? 'Armure'
+                          : k === 'shield' ? 'Bouclier'
+                          : k === 'weapon' ? 'Arme'
+                          : k === 'potion' ? 'Potion/Poison'
+                          : k === 'jewelry' ? 'Bijoux'
+                          : k === 'tool' ? 'Outils' : 'Équipement'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        className="accent-red-500"
+                        checked={bagKinds[k]}
+                        onChange={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
+                      />
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="ml-auto min-w-[220px] flex items-center gap-2">
