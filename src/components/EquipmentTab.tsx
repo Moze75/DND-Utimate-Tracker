@@ -11,7 +11,6 @@ import { Player, InventoryItem } from '../types/dnd';
 import { EquipmentListModal } from './modals/EquipmentListModal';
 import { CustomItemModal } from './modals/CustomItemModal';
 import { InventoryItemEditModal } from './modals/InventoryItemEditModal';
-import { WeaponsManageModal } from './modals/WeaponsManageModal';
 
 /* ====================== Types & helpers ====================== */
 
@@ -146,9 +145,8 @@ interface InfoBubbleProps {
   isEquipped?: boolean;
   onRequestOpenList?: () => void;
   onOpenEditFromSlot?: () => void;
-  onOpenWeaponsManage?: () => void;
 }
-const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onRequestOpenList, onOpenEditFromSlot, onOpenWeaponsManage }: InfoBubbleProps) => (
+const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onRequestOpenList, onOpenEditFromSlot }: InfoBubbleProps) => (
   <div className="fixed inset-0 z-[9999]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
     <div className="fixed inset-0 bg-black/50" onClick={onClose} />
     <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 text-sm text-gray-300 rounded-lg shadow-lg w-[min(32rem,95vw)] border border-gray-700/50">
@@ -161,15 +159,6 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
               className={`px-2 py-1 rounded text-xs border ${isEquipped ? 'border-green-500/40 text-green-300 bg-green-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'}`}
             >
               {isEquipped ? 'Équipé' : 'Non équipé'}
-            </button>
-          )}
-          {type === 'weapon' && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onOpenWeaponsManage?.(); }}
-              className="px-2 py-1 rounded text-xs border border-red-500/40 text-red-300 bg-red-900/20 hover:border-red-400/60"
-              title="Gérer mes armes"
-            >
-              Gérer
             </button>
           )}
           <button
@@ -214,11 +203,8 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
         (type === 'armor' || type === 'shield' || type === 'weapon') && (
           <div className="text-sm text-gray-400">
             Aucun {type === 'armor' ? 'armure' : type === 'shield' ? 'bouclier' : 'arme'} équipé.
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3">
               <button onClick={() => onRequestOpenList?.()} className="btn-primary px-3 py-2 rounded-lg">Équiper depuis la liste</button>
-              {type === 'weapon' && (
-                <button onClick={() => onOpenWeaponsManage?.()} className="px-3 py-2 rounded-lg border border-red-500/40 text-red-300 bg-red-900/20 hover:border-red-400/60">Gérer mes armes</button>
-              )}
             </div>
           </div>
         )
@@ -235,11 +221,10 @@ interface EquipmentSlotProps {
   onRequestOpenList: () => void;
   onToggleEquipFromSlot: () => void;
   onOpenEditFromSlot: () => void;
-  onOpenWeaponsManage?: () => void;
   isEquipped: boolean;
 }
 const EquipmentSlot = ({
-  icon, position, equipment, type, onRequestOpenList, onToggleEquipFromSlot, onOpenEditFromSlot, onOpenWeaponsManage, isEquipped
+  icon, position, equipment, type, onRequestOpenList, onToggleEquipFromSlot, onOpenEditFromSlot, isEquipped
 }: EquipmentSlotProps) => {
   const [showInfo, setShowInfo] = useState(false);
   return (
@@ -263,7 +248,6 @@ const EquipmentSlot = ({
           isEquipped={isEquipped}
           onRequestOpenList={onRequestOpenList}
           onOpenEditFromSlot={onOpenEditFromSlot}
-          onOpenWeaponsManage={onOpenWeaponsManage}
         />
       )}
     </>
@@ -312,11 +296,13 @@ export function EquipmentTab({
   const [bag, setBag] = useState<Equipment | null>(player.equipment?.bag || null);
   const stableEquipmentRef = useRef<{ armor: Equipment | null; weapon: Equipment | null; shield: Equipment | null; bag: Equipment | null; } | null>(null);
 
+  // Séquenceur pour éviter les retours réseau obsolètes qui écrasent l’état récent
+  const refreshSeqRef = useRef(0);
+
   const [showList, setShowList] = useState(false);
   const [allowedKinds, setAllowedKinds] = useState<('armors' | 'shields' | 'weapons' | 'adventuring_gear' | 'tools')[] | null>(null);
   const [showCustom, setShowCustom] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-  const [showWeaponsModal, setShowWeaponsModal] = useState(false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmPayload, setConfirmPayload] = useState<{ mode: 'equip' | 'unequip'; item: InventoryItem } | null>(null);
@@ -364,7 +350,10 @@ export function EquipmentTab({
   };
 
   const refreshInventory = async () => {
+    const seq = ++refreshSeqRef.current;
     const { data, error } = await supabase.from('inventory_items').select('*').eq('player_id', player.id);
+    // Si une requête plus récente a été lancée entre-temps, on ignore cette réponse
+    if (seq !== refreshSeqRef.current) return;
     if (!error && data) {
       onInventoryUpdate(data);
       if (!stableEquipmentRef.current?.weapon) {
@@ -513,7 +502,7 @@ export function EquipmentTab({
           // Équiper sans toucher aux autres armes
           await updateItemMeta(item, { ...meta, equipped: true });
 
-          // Si aucune arme n'est définie comme principale, définir celle-ci
+          // Si aucune arme n’est définie comme “principale”, définir celle-ci
           if (!stableEquipmentRef.current?.weapon) {
             const eq: Equipment = {
               name: item.name,
@@ -536,6 +525,7 @@ export function EquipmentTab({
         }
       }
 
+      // Important: n’appliquer que le dernier refresh (séquencé)
       await refreshInventory();
     } catch (e) {
       console.error(e);
@@ -573,28 +563,7 @@ export function EquipmentTab({
     setConfirmOpen(true);
   };
 
-  // Définir l’arme principale (slot) depuis le modal “Armes”
-  const setPrimaryWeaponFromItem = async (it: InventoryItem) => {
-    const meta = parseMeta(it.description);
-    if (!meta) return;
-    const eq: Equipment = {
-      name: it.name,
-      description: visibleDescription(it.description),
-      inventory_item_id: it.id,
-      armor_formula: null,
-      shield_bonus: null,
-      weapon_meta: meta.weapon ? {
-        damageDice: meta.weapon.damageDice || '1d6',
-        damageType: meta.weapon.damageType || 'Tranchant',
-        properties: meta.weapon.properties || '',
-        range: meta.weapon.range || 'Corps à corps',
-      } : { damageDice: '1d6', damageType: 'Tranchant', properties: '', range: 'Corps à corps' }
-    };
-    await saveEquipment('weapon', eq);
-    await refreshInventory();
-  };
-
-  /* Sac: filtres + recherche (liste déroulante à coches) */
+  /* Sac: recherche sur la même ligne que les filtres (liste déroulante à coches) */
   const [bagFilter, setBagFilter] = useState('');
   const [bagKinds, setBagKinds] = useState<Record<MetaType, boolean>>({
     armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true, tool: true
@@ -666,7 +635,6 @@ export function EquipmentTab({
               onRequestOpenList={() => { setAllowedKinds(['weapons']); setShowList(true); }}
               onToggleEquipFromSlot={() => toggleFromSlot('weapon')}
               onOpenEditFromSlot={() => openEditFromSlot('weapon')}
-              onOpenWeaponsManage={() => setShowWeaponsModal(true)}
               isEquipped={!!weapon}
             />
 
@@ -749,47 +717,47 @@ export function EquipmentTab({
         </div>
 
         <div className="p-4">
-          <div className="flex flex-col lg:flex-row lg:items-end gap-3 mb-4">
-            <div className="flex items-center gap-2">
-              <button onClick={() => { setAllowedKinds(null); setShowList(true); }} className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={20} /> Liste d’équipement</button>
-              <button onClick={() => setShowCustom(true)} className="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"><Plus size={18} /> Objet personnalisé</button>
-            </div>
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            <button onClick={() => { setAllowedKinds(null); setShowList(true); }} className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={20} /> Liste d’équipement</button>
+            <button onClick={() => setShowCustom(true)} className="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"><Plus size={18} /> Objet personnalisé</button>
 
-            {/* Liste déroulante avec petites coches */}
-            <div className="relative">
-              <button
-                onClick={() => setFiltersOpen(v => !v)}
-                className="px-3 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"
-              >
-                <FilterIcon size={16} /> Filtres <ChevronDown size={16} />
-              </button>
-              {filtersOpen && (
-                <div className="absolute z-50 mt-2 w-56 bg-gray-900/95 border border-gray-700 rounded-lg shadow-lg p-2">
-                  {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
-                    <label key={k} className="flex items-center justify-between text-sm text-gray-200 px-2 py-1 rounded hover:bg-gray-800/60 cursor-pointer">
-                      <span>
-                        {k === 'armor' ? 'Armure'
-                          : k === 'shield' ? 'Bouclier'
-                          : k === 'weapon' ? 'Arme'
-                          : k === 'potion' ? 'Potion/Poison'
-                          : k === 'jewelry' ? 'Bijoux'
-                          : k === 'tool' ? 'Outils' : 'Équipement'}
-                      </span>
-                      <input
-                        type="checkbox"
-                        className="accent-red-500"
-                        checked={bagKinds[k]}
-                        onChange={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
-                      />
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Filtres (liste déroulante) et Recherche sur la même ligne */}
+            <div className="ml-auto flex items-center gap-2 min-w-[240px] flex-1">
+              <div className="relative">
+                <button
+                  onClick={() => setFiltersOpen(v => !v)}
+                  className="px-3 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"
+                >
+                  <FilterIcon size={16} /> Filtres <ChevronDown size={16} />
+                </button>
+                {filtersOpen && (
+                  <div className="absolute z-50 mt-2 w-56 bg-gray-900/95 border border-gray-700 rounded-lg shadow-lg p-2 right-0">
+                    {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
+                      <label key={k} className="flex items-center justify-between text-sm text-gray-200 px-2 py-1 rounded hover:bg-gray-800/60 cursor-pointer">
+                        <span>
+                          {k === 'armor' ? 'Armure'
+                            : k === 'shield' ? 'Bouclier'
+                            : k === 'weapon' ? 'Arme'
+                            : k === 'potion' ? 'Potion/Poison'
+                            : k === 'jewelry' ? 'Bijoux'
+                            : k === 'tool' ? 'Outils' : 'Équipement'}
+                        </span>
+                        <input
+                          type="checkbox"
+                          className="accent-red-500"
+                          checked={bagKinds[k]}
+                          onChange={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            <div className="ml-auto min-w-[220px] flex items-center gap-2">
-              <Search className="w-4 h-4 text-gray-400" />
-              <input value={bagFilter} onChange={(e) => setBagFilter(e.target.value)} placeholder="Filtrer le sac…" className="input-dark px-3 py-2 rounded-md w-full" />
+              <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                <Search className="w-4 h-4 text-gray-400" />
+                <input value={bagFilter} onChange={(e) => setBagFilter(e.target.value)} placeholder="Filtrer le sac…" className="input-dark px-3 py-2 rounded-md w-full" />
+              </div>
             </div>
           </div>
 
@@ -923,16 +891,6 @@ export function EquipmentTab({
           item={editingItem}
           onClose={() => setEditingItem(null)}
           onSaved={refreshInventory}
-        />
-      )}
-      {showWeaponsModal && (
-        <WeaponsManageModal
-          inventory={inventory}
-          primaryWeaponItemId={weapon?.inventory_item_id || null}
-          onClose={() => setShowWeaponsModal(false)}
-          onEquip={async (it) => { await performToggle(it, 'equip'); }}
-          onUnequip={async (it) => { await performToggle(it, 'unequip'); }}
-          onSetPrimary={async (it) => { await setPrimaryWeaponFromItem(it); }}
         />
       )}
 
