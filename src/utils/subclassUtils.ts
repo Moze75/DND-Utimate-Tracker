@@ -3,7 +3,7 @@ export const SUBCLASS_ALIASES: Record<string, string[]> = {
   // Barbare
   'voie de l arbre monde': ['Voie de l’Arbre-Monde', 'Voie de l arbre-monde', 'Voie de l arbre monde', 'Path of the World Tree'],
   'voie du berserker': ['Voie du Berserker', 'Berserker', 'Path of the Berserker'],
-  'voie du coeur sauvage': ['Voie du Cœur sauvage', 'Voie du Coeur sauvage', 'Path of the Wild Heart'],
+  'voie du cœur sauvage': ['Voie du Cœur sauvage', 'Voie du Coeur sauvage', 'Path of the Wild Heart'],
   'voie du zelateur': ['Voie du Zélateur', 'Voie du Zelateur', 'Path of the Zealot'],
 
   // Barde
