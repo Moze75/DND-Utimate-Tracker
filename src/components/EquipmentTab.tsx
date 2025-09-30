@@ -26,6 +26,14 @@ interface Equipment {
   } | null;
 
   shield_bonus?: number | null;
+
+  // Nouveau: méta pour affichage armes dans le popup
+  weapon_meta?: {
+    damageDice: string;
+    damageType: 'Tranchant' | 'Perforant' | 'Contondant';
+    properties: string;
+    range: string;
+  } | null;
 }
 
 // Ajout du type 'tool' pour filtrer “Outils” dans le sac
@@ -116,7 +124,7 @@ function ConfirmEquipModal({
   );
 }
 
-/* ====================== Liste d’équipement: fetch + parsing ====================== */
+/* ====================== Liste d’équipement (fetch+parsing) ====================== */
 
 type CatalogKind = 'armors' | 'shields' | 'weapons' | 'adventuring_gear' | 'tools';
 interface CatalogItem { id: string; kind: CatalogKind; name: string; description?: string; armor?: ArmorMeta; shield?: ShieldMeta; weapon?: WeaponMeta; }
@@ -135,7 +143,6 @@ async function fetchText(url: string): Promise<string> {
   if (!res.ok) throw new Error(`Fetch catalogue échoué: ${url}`);
   return await res.text();
 }
-
 function parseMarkdownTable(md: string): string[][] {
   const rows: string[][] = [];
   const lines = md.split('\n');
@@ -149,7 +156,6 @@ function parseMarkdownTable(md: string): string[][] {
   }
   return rows;
 }
-
 function parseArmors(md: string): CatalogItem[] {
   const rows = parseMarkdownTable(md);
   const items: CatalogItem[] = [];
@@ -166,14 +172,13 @@ function parseArmors(md: string): CatalogItem[] {
   }
   return items;
 }
-
 function parseShields(md: string): CatalogItem[] {
   const rows = parseMarkdownTable(md);
   const items: CatalogItem[] = [];
   for (const row of rows) {
     if (row.length < 2) continue;
     const [nomRaw, ca] = row;
-    if (!nomRaw || /^nom$/i.test(nomRaw)) continue; // évite l'entête
+    if (!nomRaw || /^nom$/i.test(nomRaw)) continue;
     const nom = stripPriceParentheses(nomRaw);
     const m = ca.match(/\+?\s*(\d+)/);
     const bonus = m ? +m[1] : 2;
@@ -181,7 +186,6 @@ function parseShields(md: string): CatalogItem[] {
   }
   return items;
 }
-
 function parseWeapons(md: string): CatalogItem[] {
   const rows = parseMarkdownTable(md);
   const items: CatalogItem[] = [];
@@ -203,7 +207,6 @@ function parseWeapons(md: string): CatalogItem[] {
   }
   return items;
 }
-
 function parseSectionedList(md: string, kind: CatalogKind): CatalogItem[] {
   const items: CatalogItem[] = [];
   const lines = md.split('\n');
@@ -284,7 +287,7 @@ function EquipmentListModal({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return all.filter(ci => {
-      // Filtre strict (double-gardes contre tout “stigmate”)
+      // Filtre strict (double garde)
       if (!filters[ci.kind]) return false;
       if (ci.kind === 'shields' && !filters.shields) return false;
       if (ci.kind === 'armors' && !filters.armors) return false;
@@ -573,7 +576,7 @@ const InfoBubble = ({ equipment, onClose, setIsEditing, type, onToggleEquip, isE
       <div className="flex items-center justify-between mb-2">
         <h4 className="font-semibold text-gray-100 text-lg">{getTitle(type)}</h4>
         <div className="flex items-center gap-1">
-          {(type === 'armor' || type === 'shield') && (
+          {(type === 'armor' || type === 'shield' || type === 'weapon') && (
             <button
               onClick={(e) => { e.stopPropagation(); onToggleEquip?.(); }}
               className={`px-2 py-1 rounded text-xs border ${isEquipped ? 'border-green-500/40 text-green-300 bg-green-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'}`}
@@ -588,26 +591,37 @@ const InfoBubble = ({ equipment, onClose, setIsEditing, type, onToggleEquip, isE
       </div>
 
       {equipment ? (
-        <div className="space-y-1">
+        <div className="space-y-2">
           {equipment.name && <h5 className="font-medium text-gray-100 break-words">{smartCapitalize(equipment.name)}</h5>}
           {equipment.description && <p className="text-sm text-gray-400 whitespace-pre-wrap">{equipment.description}</p>}
+
           {type === 'armor' && equipment.armor_formula && (
-            <div className="mt-2 text-sm text-gray-300 flex items-center justify-between">
+            <div className="mt-1 text-sm text-gray-300 flex items-center justify-between">
               <span className="text-gray-400">Formule</span>
               <span className="font-medium text-gray-100">{equipment.armor_formula.label || ''}</span>
             </div>
           )}
+
           {type === 'shield' && typeof equipment.shield_bonus === 'number' && (
-            <div className="mt-2 text-sm text-gray-300 flex items-center justify-between">
+            <div className="mt-1 text-sm text-gray-300 flex items-center justify-between">
               <span className="text-gray-400">Bonus de bouclier</span>
               <span className="font-medium text-gray-100">+{equipment.shield_bonus}</span>
             </div>
           )}
+
+          {type === 'weapon' && equipment.weapon_meta && (
+            <div className="mt-1 text-sm text-gray-300 space-y-1">
+              <div className="flex items-center justify-between"><span className="text-gray-400">Dés</span><span className="font-medium text-gray-100">{equipment.weapon_meta.damageDice}</span></div>
+              <div className="flex items-center justify-between"><span className="text-gray-400">Type</span><span className="font-medium text-gray-100">{equipment.weapon_meta.damageType}</span></div>
+              {equipment.weapon_meta.properties && <div className="flex items-center justify-between"><span className="text-gray-400">Propriétés</span><span className="font-medium text-gray-100">{equipment.weapon_meta.properties}</span></div>}
+              {equipment.weapon_meta.range && <div className="flex items-center justify-between"><span className="text-gray-400">Portée</span><span className="font-medium text-gray-100">{equipment.weapon_meta.range}</span></div>}
+            </div>
+          )}
         </div>
       ) : (
-        (type === 'armor' || type === 'shield') && (
+        (type === 'armor' || type === 'shield' || type === 'weapon') && (
           <div className="text-sm text-gray-400">
-            Aucun {type === 'armor' ? 'armure' : 'bouclier'} équipé.
+            Aucun {type === 'armor' ? 'armure' : type === 'shield' ? 'bouclier' : 'arme'} équipé.
             <div className="mt-3">
               <button onClick={() => onRequestOpenList?.()} className="btn-primary px-3 py-2 rounded-lg">Équiper depuis la liste</button>
             </div>
@@ -814,6 +828,20 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
     if (updates.length) await Promise.allSettled(updates);
   };
 
+  // Déséquipe proprement l’arme déjà dans le slot (si présente)
+  const unequipCurrentWeaponSlot = async () => {
+    if (!weapon?.inventory_item_id) return;
+    const prev = inventory.find(i => i.id === weapon.inventory_item_id);
+    if (prev) {
+      const metaPrev = parseMeta(prev.description);
+      if (metaPrev?.type === 'weapon' && metaPrev.equipped) {
+        await updateItemMeta(prev, { ...metaPrev, equipped: false });
+      }
+    }
+    setWeapon(null);
+    await saveEquipment('weapon', null);
+  };
+
   // Ouvre le popup de confirmation avant d’équiper/déséquiper
   const requestToggleWithConfirm = (item: InventoryItem) => {
     const meta = parseMeta(item.description);
@@ -822,14 +850,40 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
     const isShield = meta.type === 'shield';
     const isWeapon = meta.type === 'weapon';
 
-    // Décide du mode via l’état courant (slots pour armure/bouclier; meta pour arme)
+    // Décide du mode via l’état courant (slots pour armure/bouclier/arme)
     const equipped =
       (isArmor && armor?.inventory_item_id === item.id) ||
       (isShield && shield?.inventory_item_id === item.id) ||
-      (isWeapon && !!meta.equipped);
+      (isWeapon && weapon?.inventory_item_id === item.id);
 
     setConfirmPayload({ mode: equipped ? 'unequip' : 'equip', item });
     setConfirmOpen(true);
+  };
+
+  // Création d'attaque si nécessaire à l’équipement d’une arme
+  const createWeaponAttackIfNeeded = async (itemName: string, w: WeaponMeta | undefined | null) => {
+    try {
+      const existing = await attackService.getPlayerAttacks(player.id);
+      const already = existing.some(a => norm(a.name) === norm(itemName));
+      if (already) return;
+      await attackService.addAttack({
+        player_id: player.id,
+        name: itemName,
+        damage_dice: w?.damageDice || '1d6',
+        damage_type: (w?.damageType || 'Tranchant'),
+        range: w?.range || 'Corps à corps',
+        properties: w?.properties || '',
+        manual_attack_bonus: null,
+        manual_damage_bonus: null,
+        expertise: false,
+        attack_type: 'physical',
+        spell_level: null,
+        ammo_count: 0
+      });
+    } catch (err) {
+      console.error('Création attaque échouée', err);
+      // on n'empêche pas l’équipement si l’insert échoue (RLS etc.)
+    }
   };
 
   // Exécute la bascule après confirmation
@@ -849,6 +903,7 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
             description: visibleDescription(item.description),
             inventory_item_id: item.id,
             armor_formula: meta.armor ? { base: meta.armor.base, addDex: meta.armor.addDex, dexCap: meta.armor.dexCap ?? null, label: meta.armor.label } : null,
+            weapon_meta: null
           };
           setArmor(eq); await saveEquipment('armor', eq); await updateItemMeta(item, { ...meta, equipped: true });
           toast.success('Armure équipée');
@@ -864,42 +919,46 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
             description: visibleDescription(item.description),
             inventory_item_id: item.id,
             shield_bonus: meta.shield?.bonus ?? null,
+            armor_formula: null,
+            weapon_meta: null
           };
           setShield(eq); await saveEquipment('shield', eq); await updateItemMeta(item, { ...meta, equipped: true });
           toast.success('Bouclier équipé');
         }
       } else if (meta.type === 'weapon') {
-        const nextEquipped = mode === 'equip';
-        await updateItemMeta(item, { ...meta, equipped: nextEquipped });
-
-        // Création d’attaque robuste: on évite le doublon évident (même nom, même joueur)
-        if (nextEquipped && meta.weapon) {
-          try {
-            const existing = await attackService.getPlayerAttacks(player.id);
-            const already = existing.some(a => norm(a.name) === norm(item.name));
-            if (!already) {
-              await attackService.addAttack({
-                player_id: player.id,
-                name: item.name,
-                damage_dice: meta.weapon.damageDice,
-                damage_type: meta.weapon.damageType,
-                range: meta.weapon.range || 'Corps à corps',
-                properties: meta.weapon.properties || '',
-                manual_attack_bonus: null,
-                manual_damage_bonus: null,
-                expertise: false,
-                attack_type: 'physical',
-                spell_level: null,
-                ammo_count: 0
-              });
-              toast.success('Attaque créée');
+        if (mode === 'unequip' && weapon?.inventory_item_id === item.id) {
+          // Déséquiper l’arme du slot
+          await updateItemMeta(item, { ...meta, equipped: false });
+          await unequipCurrentWeaponSlot();
+          toast.success('Arme déséquipée');
+        } else if (mode === 'equip') {
+          // 1 seul slot arme: on vide l’ancienne si besoin
+          await unequipCurrentWeaponSlot();
+          // équipe la nouvelle arme
+          const eq: Equipment = {
+            name: item.name,
+            description: visibleDescription(item.description),
+            inventory_item_id: item.id,
+            armor_formula: null,
+            shield_bonus: null,
+            weapon_meta: meta.weapon ? {
+              damageDice: meta.weapon.damageDice || '1d6',
+              damageType: meta.weapon.damageType || 'Tranchant',
+              properties: meta.weapon.properties || '',
+              range: meta.weapon.range || 'Corps à corps'
+            } : {
+              damageDice: '1d6',
+              damageType: 'Tranchant',
+              properties: '',
+              range: 'Corps à corps'
             }
-          } catch (err) {
-            console.error('Création attaque échouée', err);
-            // On n’empêche pas la bascule même si la création échoue
-          }
+          };
+          setWeapon(eq);
+          await saveEquipment('weapon', eq);
+          await updateItemMeta(item, { ...meta, equipped: true });
+          await createWeaponAttackIfNeeded(item.name, meta.weapon);
+          toast.success('Arme équipée');
         }
-        toast.success(nextEquipped ? 'Arme équipée' : 'Arme déséquipée');
       }
 
       await refreshInventory();
@@ -910,8 +969,8 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
   };
 
   // Bascule via slot (demande confirmation aussi)
-  const toggleFromSlot = (slot: 'armor' | 'shield') => {
-    const eq = slot === 'armor' ? armor : shield;
+  const toggleFromSlot = (slot: 'armor' | 'shield' | 'weapon') => {
+    const eq = slot === 'armor' ? armor : slot === 'shield' ? shield : weapon;
     if (!eq) { setShowList(true); return; }
 
     const item = eq.inventory_item_id
@@ -920,7 +979,9 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
 
     if (!item) {
       // aucun lien -> on vide directement le slot
-      (slot === 'armor') ? (setArmor(null), saveEquipment('armor', null)) : (setShield(null), saveEquipment('shield', null));
+      if (slot === 'armor') { setArmor(null); saveEquipment('armor', null); }
+      if (slot === 'shield') { setShield(null); saveEquipment('shield', null); }
+      if (slot === 'weapon') { setWeapon(null); saveEquipment('weapon', null); }
       return;
     }
 
@@ -928,7 +989,7 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
     setConfirmOpen(true);
   };
 
-  // Filtres du sac: on aligne les étiquettes à gauche (champ de recherche à droite)
+  // Filtres du sac: étiquettes alignées à gauche, recherche à droite
   const [bagFilter, setBagFilter] = useState('');
   const [bagKinds, setBagKinds] = useState<Record<MetaType, boolean>>({
     armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true, tool: true
@@ -993,12 +1054,12 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
             <EquipmentSlot
               icon={<Sword size={24} className="text-red-500" />}
               position="top-[45%] right-[15%]"
-              equipment={weapon || { name: 'Armes', description: 'Gérées dans Attaques', isTextArea: true }}
+              equipment={weapon || null}
               onEquip={(eq) => { setWeapon(eq as any); saveEquipment('weapon', eq as any); }}
               type="weapon"
               onRequestOpenList={() => setShowList(true)}
-              onToggleEquipFromSlot={() => {}}
-              isEquipped={false}
+              onToggleEquipFromSlot={() => toggleFromSlot('weapon')}
+              isEquipped={!!weapon}
             />
 
             <EquipmentSlot
@@ -1064,7 +1125,7 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
         </div>
 
         <div className="p-4">
-          {/* Actions + filtres: étiquettes alignées à gauche, champ recherche à droite */}
+          {/* Actions + filtres: étiquettes alignées à gauche, recherche à droite */}
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             <button onClick={() => setShowList(true)} className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={20} /> Liste d’équipement</button>
             <button onClick={() => setShowCustom(true)} className="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"><Plus size={18} /> Objet personnalisé</button>
@@ -1101,10 +1162,11 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
               const isShield = meta?.type === 'shield';
               const isWeapon = meta?.type === 'weapon';
 
+              // Statut basé EXCLUSIVEMENT sur l’id d’inventaire du slot
               const isEquipped =
                 (isArmor && armor?.inventory_item_id === item.id) ||
                 (isShield && shield?.inventory_item_id === item.id) ||
-                (isWeapon && !!meta?.equipped);
+                (isWeapon && weapon?.inventory_item_id === item.id);
 
               return (
                 <div key={item.id} className="bg-gray-800/40 border border-gray-700/40 rounded-md">
