@@ -8,6 +8,9 @@ interface Equipment {
   name: string;
   description: string;
   isTextArea?: boolean;
+  // Ajouts pour l'armure
+  armor_bonus?: number | null;
+  proficiency?: string | null;
 }
 
 interface EquipmentModalProps {
@@ -18,9 +21,120 @@ interface EquipmentModalProps {
   setIsEditing: (value: boolean) => void;
 }
 
+/* Nouveau modal dédié à l'Armure: Nom, Description, Bonus d'armure, Maîtrise */
+function ArmorEditModal({
+  equipment,
+  onClose,
+  onSave,
+  setIsEditing,
+}: {
+  equipment: Equipment | null;
+  onClose: () => void;
+  onSave: (equipment: Equipment) => void;
+  setIsEditing: (value: boolean) => void;
+}) {
+  const [name, setName] = useState<string>(equipment?.name || 'Armure');
+  const [description, setDescription] = useState<string>(equipment?.description || '');
+  const [armorBonus, setArmorBonus] = useState<string>(
+    equipment?.armor_bonus != null ? String(equipment.armor_bonus) : ''
+  );
+  const [proficiency, setProficiency] = useState<string>(equipment?.proficiency || '');
+
+  const handleSave = () => {
+    const bonus = armorBonus.trim() === '' ? null : Number.parseInt(armorBonus, 10);
+    if (armorBonus.trim() !== '' && Number.isNaN(bonus)) {
+      toast.error("Le bonus d'armure doit être un nombre");
+      return;
+    }
+    onSave({
+      name: name.trim() || 'Armure',
+      description: description.trim(),
+      isTextArea: false,
+      armor_bonus: bonus,
+      proficiency: proficiency.trim() || null,
+    });
+    setIsEditing(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full space-y-4">
+        <h3 className="text-lg font-semibold text-gray-100 flex items-center gap-2">
+          <Shield size={20} className="text-purple-500" />
+          Armure
+        </h3>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">Nom de l'objet</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="input-dark w-full px-3 py-2 rounded-md"
+              placeholder="Ex: Cotte de mailles"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="input-dark w-full px-3 py-2 rounded-md"
+              rows={4}
+              placeholder="Détails, propriétés, etc."
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm text-gray-300 mb-1">Bonus d'armure</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={armorBonus}
+                onChange={(e) => setArmorBonus(e.target.value)}
+                className="input-dark w-full px-3 py-2 rounded-md"
+                placeholder="Ex: 1, 2, 3..."
+              />
+              <p className="text-xs text-gray-500 mt-1">S'ajoute à la CA de base.</p>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-300 mb-1">Maîtrise</label>
+              <input
+                type="text"
+                value={proficiency || ''}
+                onChange={(e) => setProficiency(e.target.value)}
+                className="input-dark w-full px-3 py-2 rounded-md"
+                placeholder="Ex: Légère, Intermédiaire, Lourde..."
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-2">
+          <button onClick={handleSave} className="btn-primary flex-1 px-4 py-2 rounded-lg">
+            Sauvegarder
+          </button>
+          <button
+            onClick={() => {
+              setIsEditing(false);
+              onClose();
+            }}
+            className="btn-secondary px-4 py-2 rounded-lg"
+          >
+            Annuler
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const EquipmentModal = ({ type, equipment, onClose, onSave, setIsEditing }: EquipmentModalProps) => {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
   const [text, setText] = useState(
     type === 'armor' ? equipment?.description || '' :
     type === 'potion' ? equipment?.description || '' :
@@ -30,6 +144,9 @@ const EquipmentModal = ({ type, equipment, onClose, onSave, setIsEditing }: Equi
     type === 'bag' ? equipment?.description || '' :
     type === 'jewelry' ? equipment?.description || '' : ''
   );
+
+  // Ne plus utiliser ce petit modal pour l'armure
+  if (type === 'armor') return null;
 
   const handleSave = () => {
     if (type === 'armor' || type === 'potion' || type === 'weapon' || type === 'shield' || type === 'shoes' || type === 'bag' || type === 'jewelry') {
@@ -52,7 +169,7 @@ const EquipmentModal = ({ type, equipment, onClose, onSave, setIsEditing }: Equi
             {getTitle(type)}
           </h3>
         </div>
-        
+
         <textarea
           placeholder={
             `Liste des ${getTitle(type).toLowerCase()} en votre possession...`
@@ -104,9 +221,10 @@ interface InfoBubbleProps {
   onClose: () => void;
   setIsEditing: (value: boolean) => void;
   type: 'armor' | 'weapon' | 'shield' | 'potion' | 'shoes' | 'jewelry';
+  onDelete?: () => void; // pour armure
 }
 
-const InfoBubble = ({ equipment, position, onClose, setIsEditing, type }: InfoBubbleProps) => {
+const InfoBubble = ({ equipment, position, onClose, setIsEditing, type, onDelete }: InfoBubbleProps) => {
   if (!equipment) return null;
   return (
     <div
@@ -122,21 +240,59 @@ const InfoBubble = ({ equipment, position, onClose, setIsEditing, type }: InfoBu
       <div className="relative p-4 bg-gray-900/95 text-sm text-gray-300 rounded-lg shadow-lg w-96 border border-gray-700/50 z-[62]">
         <div className="flex items-center justify-between mb-2">
           <h4 className="font-semibold text-gray-100 text-lg">{getTitle(type)}</h4>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsEditing(true);
-            }}
-            className="p-2 text-gray-400 hover:bg-gray-700/50 rounded-lg transition-colors hover:text-red-500"
-          >
-            <Settings size={20} />
-          </button>
+          <div className="flex items-center gap-1">
+            {type === 'armor' && onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm("Supprimer l'armure ?")) {
+                    onDelete();
+                  }
+                }}
+                className="p-2 text-gray-400 hover:bg-gray-700/50 rounded-lg transition-colors hover:text-red-500"
+                title="Supprimer l'objet"
+              >
+                <Trash2 size={18} />
+              </button>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsEditing(true);
+              }}
+              className="p-2 text-gray-400 hover:bg-gray-700/50 rounded-lg transition-colors hover:text-red-500"
+              title="Modifier"
+            >
+              <Settings size={20} />
+            </button>
+          </div>
         </div>
-        {equipment.isTextArea ? (
-          <pre className="whitespace-pre-wrap font-sans">{equipment.description}</pre>
-        ) : equipment.description && (
-          <p className="mb-4">{equipment.description}</p>
-        )}
+
+        {/* Rendu type "Sac": nom + description + infos */}
+        <div className="space-y-1">
+          {equipment.name && (
+            <h5 className="font-medium text-gray-100">{equipment.name}</h5>
+          )}
+          {equipment.description && (
+            <p className="text-sm text-gray-400">{equipment.description}</p>
+          )}
+          {type === 'armor' && (
+            <div className="mt-2 text-sm text-gray-300 space-y-1">
+              {equipment.armor_bonus != null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400">Bonus d'armure</span>
+                  <span className="font-medium text-gray-100">+{equipment.armor_bonus}</span>
+                </div>
+              )}
+              {equipment.proficiency && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400">Maîtrise</span>
+                  <span className="font-medium text-gray-100">{equipment.proficiency}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -146,7 +302,7 @@ interface EquipmentSlotProps {
   icon: React.ReactNode;
   position: string;
   equipment: Equipment | null;
-  onEquip: (equipment: Equipment) => void;
+  onEquip: (equipment: Equipment | null) => void;
   type: 'armor' | 'weapon' | 'shield' | 'potion' | 'shoes' | 'jewelry';
   bubblePosition: string;
 }
@@ -191,20 +347,36 @@ const EquipmentSlot = ({ icon, position, equipment, onEquip, type, bubblePositio
           onClose={handleClose}
           setIsEditing={handleEdit}
           type={type}
+          onDelete={
+            type === 'armor'
+              ? () => {
+                  onEquip(null);
+                }
+              : undefined
+          }
         />
       </>
     )}
     
     {isEditing && (
-      <EquipmentModal
-        type={type}
-        equipment={equipment}
-        onClose={() => {
-          setIsEditing(false);
-        }}
-        onSave={onEquip}
-        setIsEditing={setIsEditing}
-      />
+      type === 'armor' ? (
+        <ArmorEditModal
+          equipment={equipment}
+          onClose={() => setIsEditing(false)}
+          onSave={(eq) => onEquip(eq)}
+          setIsEditing={setIsEditing}
+        />
+      ) : (
+        <EquipmentModal
+          type={type}
+          equipment={equipment}
+          onClose={() => {
+            setIsEditing(false);
+          }}
+          onSave={(eq) => onEquip(eq)}
+          setIsEditing={setIsEditing}
+        />
+      )
     )}
   </>
   );
@@ -274,14 +446,14 @@ const CurrencyInput = ({ currency, value, onAdd, onSpend }: CurrencyInputProps) 
         />
         <button
           onClick={() => handleAction(true)}
-          className="h-11 w-[72px] text-base text-green-500 hover:bg-green-900/30 rounded-md transition-colors whitespace-nowrap border border-green-500/20 hover:border-green-500/40 flex items-center justify-center shrink-0"
+          className="h-11 w-[72px] text-base text-green-500 hover:bg-green-900/30 rounded-md transition-colors whitespace-nowrap border border-green-500/20 hover:border-green-500/40 flex items-center justify-center"
           title="Ajouter"
         >
           Ajouter
         </button>
         <button
           onClick={() => handleAction(false)}
-          className="h-11 w-[72px] text-base text-red-500 hover:bg-red-900/30 rounded-md transition-colors whitespace-nowrap border border-red-500/20 hover:border-red-500/40 flex items-center justify-center shrink-0"
+          className="h-11 w-[72px] text-base text-red-500 hover:bg-red-900/30 rounded-md transition-colors whitespace-nowrap border border-red-500/20 hover:border-red-500/40 flex items-center justify-center"
           title="Retirer"
         >
           Dépenser
@@ -309,13 +481,15 @@ export function EquipmentTab({
 
   const saveEquipment = async (type: 'armor' | 'weapon' | 'shield' | 'potion' | 'shoes' | 'bag' | 'jewelry', equipment: Equipment | null) => {
     try {
+      const nextEquipment = {
+        ...player.equipment,
+        [type]: equipment
+      };
+
       const { error } = await supabase
         .from('players')
         .update({
-          equipment: {
-            ...player.equipment,
-            [type]: equipment
-          }
+          equipment: nextEquipment
         })
         .eq('id', player.id);
 
@@ -323,13 +497,19 @@ export function EquipmentTab({
 
       onPlayerUpdate({
         ...player,
-        equipment: {
-          ...player.equipment,
-          [type]: equipment
-        }
+        equipment: nextEquipment
       });
 
-      toast.success(`${type === 'armor' ? 'Armure' : type === 'weapon' ? 'Arme' : type === 'shield' ? 'Bouclier / Focalisateur' : 'Potion'} mise à jour`);
+      const label =
+        type === 'armor' ? 'Armure'
+        : type === 'weapon' ? 'Arme'
+        : type === 'shield' ? 'Bouclier / Focalisateur'
+        : type === 'potion' ? 'Potions'
+        : type === 'shoes' ? 'Chaussures'
+        : type === 'bag' ? 'Sac à dos'
+        : 'Bijoux';
+
+      toast.success(`${label} ${equipment ? 'mise à jour' : 'supprimée'}`);
     } catch (error) {
       console.error('Erreur lors de la mise à jour de l\'équipement:', error);
       toast.error('Erreur lors de la mise à jour');
@@ -432,7 +612,7 @@ export function EquipmentTab({
             <EquipmentSlot
               icon={<Shield size={24} className="text-purple-500" />}
               position="top-[25%] left-1/2 -translate-x-1/2 bg-gray-800/50"
-              equipment={armor || { name: 'Armure', description: '', isTextArea: true }}
+              equipment={armor || { name: 'Armure', description: '', isTextArea: false }}
               onEquip={(equipment) => {
                 setArmor(equipment);
                 saveEquipment('armor', equipment);
@@ -447,8 +627,8 @@ export function EquipmentTab({
               position="top-[45%] left-[15%] bg-gray-800/50"
               equipment={shield || { name: 'Bouclier / Focalisateur', description: '', isTextArea: true }}
               onEquip={(equipment) => {
-                setShield(equipment);
-                saveEquipment('shield', equipment);
+                setShield(equipment as Equipment);
+                saveEquipment('shield', equipment as Equipment);
               }}
               type="shield"
               bubblePosition="left-[5%] top-[15%]"
@@ -460,8 +640,8 @@ export function EquipmentTab({
               position="top-[45%] right-[15%] bg-gray-800/50"
               equipment={weapon || { name: 'Aucune arme', description: '' }}
               onEquip={(equipment) => {
-                setWeapon(equipment);
-                saveEquipment('weapon', equipment);
+                setWeapon(equipment as Equipment);
+                saveEquipment('weapon', equipment as Equipment);
               }}
               type="weapon"
               bubblePosition="right-[5%] top-[15%]"
@@ -473,8 +653,8 @@ export function EquipmentTab({
               position="top-[5%] right-[5%] bg-gray-800/50" 
               equipment={potion || { name: 'Potions et poisons', description: '', isTextArea: true }}
               onEquip={(equipment) => {
-                setPotion(equipment);
-                saveEquipment('potion', equipment);
+                setPotion(equipment as Equipment);
+                saveEquipment('potion', equipment as Equipment);
               }}
               type="potion"
               bubblePosition="right-[5%] top-[5%]"
@@ -486,8 +666,8 @@ export function EquipmentTab({
               position="top-[15%] right-[5%] bg-gray-800/50"
               equipment={jewelry || { name: 'Bijoux', description: '', isTextArea: true }}
               onEquip={(equipment) => {
-                setJewelry(equipment);
-                saveEquipment('jewelry', equipment);
+                setJewelry(equipment as Equipment);
+                saveEquipment('jewelry', equipment as Equipment);
               }}
               type="jewelry"
               bubblePosition="right-[5%] top-[15%]"
@@ -499,8 +679,8 @@ export function EquipmentTab({
               position="bottom-[5%] left-1/2 -translate-x-1/2 bg-gray-800/50"
               equipment={shoes || { name: 'Chaussures', description: '', isTextArea: true }}
               onEquip={(equipment) => {
-                setShoes(equipment);
-                saveEquipment('shoes', equipment);
+                setShoes(equipment as Equipment);
+                saveEquipment('shoes', equipment as Equipment);
               }}
               type="shoes"
               bubblePosition="right-[5%] bottom-[15%]"
@@ -512,8 +692,8 @@ export function EquipmentTab({
               position="bottom-[5%] right-[2%]"
               equipment={bag || { name: 'Sac à dos', description: '', isTextArea: true }}
               onEquip={(equipment) => {
-                setBag(equipment);
-                saveEquipment('bag', equipment);
+                setBag(equipment as Equipment);
+                saveEquipment('bag', equipment as Equipment);
               }}
               type="bag"
               bubblePosition="left-[5%] bottom-[5%]"
