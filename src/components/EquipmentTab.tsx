@@ -1,23 +1,24 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import {
-  Backpack, Plus, Trash2, Shield, Sword, Settings,
-  FlaskRound as Flask, Star, Coins, Search, X, Check
+  Backpack, Plus, Trash2, Shield as ShieldIcon, Sword, FlaskRound as Flask, Star,
+  Coins, Search, X, Check
 } from 'lucide-react';
-import { Player, InventoryItem } from '../types/dnd';
-import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 import { attackService } from '../services/attackService';
+import { Player, InventoryItem } from '../types/dnd';
 
-/* ====================== Types & helpers méta ====================== */
+/* ====================== Types & helpers ====================== */
 
 interface Equipment {
   name: string;
   description: string;
   isTextArea?: boolean;
 
-  // Associe le slot à une ligne d’inventaire précise
+  // Lien vers l'item d'inventaire source (évite ambiguïtés)
   inventory_item_id?: string | null;
 
+  // Armure
   armor_formula?: {
     base: number;
     addDex: boolean;
@@ -25,9 +26,10 @@ interface Equipment {
     label?: string;
   } | null;
 
+  // Bouclier
   shield_bonus?: number | null;
 
-  // Nouveau: méta pour affichage armes dans le popup
+  // Arme (affichage dans le popup)
   weapon_meta?: {
     damageDice: string;
     damageType: 'Tranchant' | 'Perforant' | 'Contondant';
@@ -36,12 +38,24 @@ interface Equipment {
   } | null;
 }
 
-// Ajout du type 'tool' pour filtrer “Outils” dans le sac
+// Ajout 'tool' pour les Outils dans le sac
 type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment' | 'jewelry' | 'tool';
 
-interface WeaponMeta { damageDice: string; damageType: 'Tranchant' | 'Perforant' | 'Contondant'; properties: string; range: string; }
-interface ArmorMeta { base: number; addDex: boolean; dexCap?: number | null; label: string; }
-interface ShieldMeta { bonus: number; }
+interface WeaponMeta {
+  damageDice: string;
+  damageType: 'Tranchant' | 'Perforant' | 'Contondant';
+  properties: string;
+  range: string;
+}
+interface ArmorMeta {
+  base: number;
+  addDex: boolean;
+  dexCap?: number | null;
+  label: string;
+}
+interface ShieldMeta {
+  bonus: number;
+}
 
 interface ItemMeta {
   type: MetaType;
@@ -59,12 +73,20 @@ function parseMeta(description: string | null | undefined): ItemMeta | null {
   const lines = (description || '').split('\n').map(l => l.trim());
   const metaLine = [...lines].reverse().find(l => l.startsWith(META_PREFIX));
   if (!metaLine) return null;
-  try { return JSON.parse(metaLine.slice(META_PREFIX.length)); } catch { return null; }
+  try {
+    return JSON.parse(metaLine.slice(META_PREFIX.length));
+  } catch {
+    return null;
+  }
 }
 
 function injectMetaIntoDescription(desc: string | null | undefined, meta: ItemMeta): string {
   const base = (desc || '').trim();
-  const noOldMeta = base.split('\n').filter(l => !l.trim().startsWith(META_PREFIX)).join('\n').trim();
+  const noOldMeta = base
+    .split('\n')
+    .filter(l => !l.trim().startsWith(META_PREFIX))
+    .join('\n')
+    .trim();
   const metaLine = `${META_PREFIX}${JSON.stringify(meta)}`;
   return (noOldMeta ? `${noOldMeta}\n` : '') + metaLine;
 }
@@ -74,13 +96,16 @@ function stripPriceParentheses(name: string): string {
 }
 function visibleDescription(desc: string | null | undefined): string {
   if (!desc) return '';
-  return desc.split('\n').filter(l => !l.trim().startsWith(META_PREFIX)).join('\n').trim();
+  return desc.split('\n').filter((l) => !l.trim().startsWith(META_PREFIX)).join('\n').trim();
 }
 function smartCapitalize(name: string): string {
   const base = stripPriceParentheses(name).trim();
   if (!base) return '';
   const isAllUpper = base === base.toUpperCase();
-  if (isAllUpper) { const lower = base.toLowerCase(); return lower.charAt(0).toUpperCase() + lower.slice(1); }
+  if (isAllUpper) {
+    const lower = base.toLowerCase();
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  }
   return base.charAt(0).toUpperCase() + base.slice(1);
 }
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
@@ -89,7 +114,7 @@ const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
 function ConfirmEquipModal({
   open,
-  mode,       // 'equip' | 'unequip'
+  mode, // 'equip' | 'unequip'
   itemName,
   onConfirm,
   onCancel
@@ -103,7 +128,6 @@ function ConfirmEquipModal({
   if (!open) return null;
   const title = mode === 'equip' ? 'Équiper cet objet ?' : 'Déséquiper cet objet ?';
   const label = mode === 'equip' ? 'Équiper' : 'Déséquiper';
-
   return (
     <div className="fixed inset-0 z-[10000]" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
       <div className="fixed inset-0 bg-black/60" />
@@ -124,10 +148,18 @@ function ConfirmEquipModal({
   );
 }
 
-/* ====================== Liste d’équipement (fetch+parsing) ====================== */
+/* ====================== Liste d’équipement: fetch + parsing ====================== */
 
 type CatalogKind = 'armors' | 'shields' | 'weapons' | 'adventuring_gear' | 'tools';
-interface CatalogItem { id: string; kind: CatalogKind; name: string; description?: string; armor?: ArmorMeta; shield?: ShieldMeta; weapon?: WeaponMeta; }
+interface CatalogItem {
+  id: string;
+  kind: CatalogKind;
+  name: string;
+  description?: string;
+  armor?: ArmorMeta;
+  shield?: ShieldMeta;
+  weapon?: WeaponMeta;
+}
 
 const ULT_BASE = 'https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main/Equipements';
 const URLS = {
@@ -150,7 +182,7 @@ function parseMarkdownTable(md: string): string[][] {
     const l = line.trim();
     if (l.startsWith('|') && l.endsWith('|') && l.includes('|')) {
       const cells = l.substring(1, l.length - 1).split('|').map(c => c.trim());
-      if (cells.every(c => /^[-:\s]+$/.test(c))) continue;
+      if (cells.every(c => /^[-:\s]+$/.test(c))) continue; // ligne de séparateurs
       rows.push(cells);
     }
   }
@@ -227,7 +259,7 @@ function parseSectionedList(md: string, kind: CatalogKind): CatalogItem[] {
   return items;
 }
 
-/* ====================== Modal Liste d’équipement (plein écran) ====================== */
+/* ====================== Modal Liste d’équipement ====================== */
 
 type FilterState = {
   weapons: boolean;
@@ -240,9 +272,12 @@ type FilterState = {
 function EquipmentListModal({
   onClose,
   onAddItem,
+  allowedKinds = null,
 }: {
   onClose: () => void;
   onAddItem: (item: { name: string; description?: string; meta: ItemMeta }) => void;
+  // si défini, la liste ne montre que ces catégories (ex: ['weapons'])
+  allowedKinds?: CatalogKind[] | null;
 }) {
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
@@ -284,23 +319,32 @@ function EquipmentListModal({
     load();
   }, []);
 
+  // Si allowedKinds est défini, forcer les filtres en conséquence
+  const effectiveFilters: FilterState = React.useMemo(() => {
+    if (!allowedKinds) return filters;
+    return {
+      weapons: allowedKinds.includes('weapons'),
+      armors: allowedKinds.includes('armors'),
+      shields: allowedKinds.includes('shields'),
+      adventuring_gear: allowedKinds.includes('adventuring_gear'),
+      tools: allowedKinds.includes('tools'),
+    };
+  }, [allowedKinds, filters]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return all.filter(ci => {
-      // Filtre strict (double garde)
-      if (!filters[ci.kind]) return false;
-      if (ci.kind === 'shields' && !filters.shields) return false;
-      if (ci.kind === 'armors' && !filters.armors) return false;
-      if (ci.kind === 'weapons' && !filters.weapons) return false;
-      if (ci.kind === 'adventuring_gear' && !filters.adventuring_gear) return false;
-      if (ci.kind === 'tools' && !filters.tools) return false;
+      // Filtre strict par type + allowedKinds
+      if (!effectiveFilters[ci.kind]) return false;
+      if (allowedKinds && !allowedKinds.includes(ci.kind)) return false;
+
       // Recherche
       if (!q) return true;
       if (ci.name.toLowerCase().includes(q)) return true;
       if ((ci.kind === 'adventuring_gear' || ci.kind === 'tools') && (ci.description || '').toLowerCase().includes(q)) return true;
       return false;
     });
-  }, [all, query, filters]);
+  }, [all, query, effectiveFilters, allowedKinds]);
 
   const handlePick = (ci: CatalogItem) => {
     // Ajout défaut: quantité 1, non équipé
@@ -314,6 +358,8 @@ function EquipmentListModal({
   };
 
   const toggleExpand = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+
+  const typeButtons: CatalogKind[] = ['weapons','armors','shields','adventuring_gear','tools'];
 
   return (
     <div className="fixed inset-0 z-[9999]">
@@ -338,20 +384,24 @@ function EquipmentListModal({
               />
             </div>
             <div className="flex items-center gap-2 flex-wrap justify-end">
-              {(['weapons','armors','shields','adventuring_gear','tools'] as CatalogKind[]).map(k => (
-                <button
-                  key={k}
-                  onClick={() => setFilters(prev => ({ ...prev, [k]: !prev[k] }))}
-                  className={`px-2 py-1 rounded text-xs border ${
-                    filters[k] ? 'border-red-500/40 text-red-300 bg-red-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-800/40'
-                  }`}
-                >
-                  {k === 'weapons' ? 'Armes' :
-                   k === 'armors' ? 'Armures' :
-                   k === 'shields' ? 'Boucliers' :
-                   k === 'adventuring_gear' ? 'Équipements' : 'Outils'}
-                </button>
-              ))}
+              {typeButtons.map(k => {
+                // Si allowedKinds est défini, ne montrer que les boutons autorisés
+                if (allowedKinds && !allowedKinds.includes(k)) return null;
+                return (
+                  <button
+                    key={k}
+                    onClick={() => setFilters(prev => ({ ...prev, [k]: !prev[k] }))}
+                    className={`px-2 py-1 rounded text-xs border ${
+                      effectiveFilters[k] ? 'border-red-500/40 text-red-300 bg-red-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-800/40'
+                    }`}
+                  >
+                    {k === 'weapons' ? 'Armes' :
+                     k === 'armors' ? 'Armures' :
+                     k === 'shields' ? 'Boucliers' :
+                     k === 'adventuring_gear' ? 'Équipements' : 'Outils'}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -400,17 +450,25 @@ function EquipmentListModal({
   );
 }
 
-/* ====================== Modals Custom & Edit (plein écran) ====================== */
+/* ====================== Modals Custom & Edit ====================== */
 
-function CustomItemModal({ onClose, onAdd }: { onClose: () => void; onAdd: (payload: { name: string; description: string; meta: ItemMeta }) => void; }) {
+function CustomItemModal({
+  onClose, onAdd,
+}: {
+  onClose: () => void;
+  onAdd: (payload: { name: string; description: string; meta: ItemMeta }) => void;
+}) {
   const [name, setName] = useState('');
   const [type, setType] = useState<MetaType>('equipment');
   const [description, setDescription] = useState('');
   const [quantity, setQuantity] = useState(1);
+
+  // Spécifiques
   const [armBase, setArmBase] = useState<number>(12);
   const [armAddDex, setArmAddDex] = useState<boolean>(true);
   const [armDexCap, setArmDexCap] = useState<number | ''>(2);
   const [shieldBonus, setShieldBonus] = useState<number>(2);
+
   const [wDice, setWDice] = useState('1d6');
   const [wType, setWType] = useState<'Tranchant' | 'Perforant' | 'Contondant'>('Tranchant');
   const [wProps, setWProps] = useState('');
@@ -428,9 +486,14 @@ function CustomItemModal({ onClose, onAdd }: { onClose: () => void; onAdd: (payl
     if (quantity <= 0) return toast.error('Quantité invalide');
     const cleanName = smartCapitalize(cleanNameRaw);
     let meta: ItemMeta = { type, quantity, equipped: false };
-    if (type === 'armor') { const cap = armDexCap === '' ? null : Number(armDexCap); meta.armor = { base: armBase, addDex: armAddDex, dexCap: cap, label: `${armBase}${armAddDex ? ` + modificateur de Dex${cap != null ? ` (max ${cap})` : ''}` : ''}` }; }
-    else if (type === 'shield') meta.shield = { bonus: shieldBonus };
-    else if (type === 'weapon') meta.weapon = { damageDice: wDice, damageType: wType, properties: wProps, range: wRange };
+    if (type === 'armor') {
+      const cap = armDexCap === '' ? null : Number(armDexCap);
+      meta.armor = { base: armBase, addDex: armAddDex, dexCap: cap, label: `${armBase}${armAddDex ? ` + modificateur de Dex${cap != null ? ` (max ${cap})` : ''}` : ''}` };
+    } else if (type === 'shield') {
+      meta.shield = { bonus: shieldBonus };
+    } else if (type === 'weapon') {
+      meta.weapon = { damageDice: wDice, damageType: wType, properties: wProps, range: wRange };
+    }
     onAdd({ name: cleanName, description: description.trim(), meta });
     onClose();
   };
@@ -499,7 +562,13 @@ function CustomItemModal({ onClose, onAdd }: { onClose: () => void; onAdd: (payl
   );
 }
 
-function InventoryItemEditModal({ item, onClose, onSaved }: { item: InventoryItem; onClose: () => void; onSaved: () => void; }) {
+function InventoryItemEditModal({
+  item, onClose, onSaved,
+}: {
+  item: InventoryItem;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const meta = parseMeta(item.description) || { type: 'equipment', quantity: 1, equipped: false } as ItemMeta;
   const [name, setName] = useState(smartCapitalize(item.name));
   const [description, setDescription] = useState(visibleDescription(item.description));
@@ -549,7 +618,7 @@ function InventoryItemEditModal({ item, onClose, onSaved }: { item: InventoryIte
   );
 }
 
-/* ====================== Popup slot ====================== */
+/* ====================== Popup slot (image) ====================== */
 
 const getTitle = (type: 'armor' | 'weapon' | 'shield' | 'potion' | 'jewelry' | 'bag') =>
   type === 'armor' ? 'Armure'
@@ -561,22 +630,21 @@ const getTitle = (type: 'armor' | 'weapon' | 'shield' | 'potion' | 'jewelry' | '
 
 interface InfoBubbleProps {
   equipment: Equipment | null;
-  onClose: () => void;
-  setIsEditing: (value: boolean) => void;
   type: 'armor' | 'weapon' | 'shield' | 'potion' | 'jewelry' | 'bag';
+  onClose: () => void;
   onToggleEquip?: () => void;
   isEquipped?: boolean;
   onRequestOpenList?: () => void;
 }
 
-const InfoBubble = ({ equipment, onClose, setIsEditing, type, onToggleEquip, isEquipped, onRequestOpenList }: InfoBubbleProps) => (
+const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onRequestOpenList }: InfoBubbleProps) => (
   <div className="fixed inset-0 z-[9999]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
     <div className="fixed inset-0 bg-black/50" onClick={onClose} />
     <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 text-sm text-gray-300 rounded-lg shadow-lg w-[min(32rem,95vw)] border border-gray-700/50">
       <div className="flex items-center justify-between mb-2">
         <h4 className="font-semibold text-gray-100 text-lg">{getTitle(type)}</h4>
         <div className="flex items-center gap-1">
-          {(type === 'armor' || type === 'shield' || type === 'weapon') && (
+          {(type === 'armor' || type === 'shield' || type === 'weapon') && equipment && (
             <button
               onClick={(e) => { e.stopPropagation(); onToggleEquip?.(); }}
               className={`px-2 py-1 rounded text-xs border ${isEquipped ? 'border-green-500/40 text-green-300 bg-green-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'}`}
@@ -584,9 +652,6 @@ const InfoBubble = ({ equipment, onClose, setIsEditing, type, onToggleEquip, isE
               {isEquipped ? 'Équipé' : 'Non équipé'}
             </button>
           )}
-          <button onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} className="p-2 text-gray-400 hover:bg-gray-700/50 rounded-lg" title="Modifier">
-            <Settings size={18} />
-          </button>
         </div>
       </div>
 
@@ -632,22 +697,20 @@ const InfoBubble = ({ equipment, onClose, setIsEditing, type, onToggleEquip, isE
   </div>
 );
 
-/* ====================== Slot ====================== */
-
 interface EquipmentSlotProps {
   icon: React.ReactNode;
   position: string;
   equipment: Equipment | null;
-  onEquip: (equipment: Equipment | null) => void;
   type: 'armor' | 'weapon' | 'shield' | 'potion' | 'jewelry' | 'bag';
   onRequestOpenList: () => void;
   onToggleEquipFromSlot: () => void;
   isEquipped: boolean;
 }
 
-const EquipmentSlot = ({ icon, position, equipment, onEquip, type, onRequestOpenList, onToggleEquipFromSlot, isEquipped }: EquipmentSlotProps) => {
+const EquipmentSlot = ({
+  icon, position, equipment, type, onRequestOpenList, onToggleEquipFromSlot, isEquipped
+}: EquipmentSlotProps) => {
   const [showInfo, setShowInfo] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   return (
     <>
       <button
@@ -663,15 +726,13 @@ const EquipmentSlot = ({ icon, position, equipment, onEquip, type, onRequestOpen
       {showInfo && (
         <InfoBubble
           equipment={equipment}
-          onClose={() => setShowInfo(false)}
-          setIsEditing={setIsEditing}
           type={type}
+          onClose={() => setShowInfo(false)}
           onToggleEquip={onToggleEquipFromSlot}
           isEquipped={isEquipped}
           onRequestOpenList={onRequestOpenList}
         />
       )}
-      {isEditing && <div /> /* édition via sac */}
     </>
   );
 };
@@ -687,7 +748,12 @@ interface EquipmentTabProps {
 
 type Currency = 'gold' | 'silver' | 'copper';
 
-const CurrencyInput = ({ currency, value, onAdd, onSpend }: { currency: Currency; value: number; onAdd: (n: number) => void; onSpend: (n: number) => void; }) => {
+const CurrencyInput = ({ currency, value, onAdd, onSpend }: {
+  currency: Currency;
+  value: number;
+  onAdd: (n: number) => void;
+  onSpend: (n: number) => void;
+}) => {
   const [amount, setAmount] = useState<string>('');
   const getColor = (c: Currency) => c === 'gold' ? 'text-yellow-500' : c === 'silver' ? 'text-gray-300' : 'text-orange-400';
   const getName = (c: Currency) => c === 'gold' ? 'Or' : c === 'silver' ? 'Argent' : 'Cuivre';
@@ -705,12 +771,15 @@ const CurrencyInput = ({ currency, value, onAdd, onSpend }: { currency: Currency
   );
 };
 
-export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpdate }: EquipmentTabProps) {
+export function EquipmentTab({
+  player, inventory, onPlayerUpdate, onInventoryUpdate
+}: EquipmentTabProps) {
   const [showList, setShowList] = useState(false);
+  const [allowedKinds, setAllowedKinds] = useState<CatalogKind[] | null>(null);
   const [showCustom, setShowCustom] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
 
-  // Popup confirmation
+  // Confirmation
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmPayload, setConfirmPayload] = useState<{ mode: 'equip' | 'unequip'; item: InventoryItem } | null>(null);
 
@@ -734,22 +803,46 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
     }
   };
 
-  const updatePlayerMoney = async (currency: Currency, amount: number, isAdding: boolean) => {
-    const newAmount = Math.max(0, (player[currency] as number) + (isAdding ? amount : -amount));
-    try {
-      const { error } = await supabase.from('players').update({ [currency]: newAmount }).eq('id', player.id);
-      if (error) throw error;
-      onPlayerUpdate({ ...player, [currency]: newAmount } as any);
-      toast.success(`${isAdding ? 'Ajout' : 'Retrait'} de ${amount} ${currency}`);
-    } catch (error) {
-      console.error('Erreur argent:', error);
-      toast.error('Erreur lors de la mise à jour');
-    }
-  };
-
   const refreshInventory = async () => {
     const { data } = await supabase.from('inventory_items').select('*').eq('player_id', player.id);
     if (data) onInventoryUpdate(data);
+  };
+
+  // Notifie CombatTab de recharger la liste des attaques
+  const notifyAttacksChanged = () => {
+    try {
+      window.dispatchEvent(new CustomEvent('attacks:changed', { detail: { playerId: player.id } }));
+    } catch { /* ignore */ }
+  };
+
+  const createOrUpdateWeaponAttack = async (name: string, w?: WeaponMeta | null) => {
+    try {
+      const attacks = await attackService.getPlayerAttacks(player.id);
+      const existing = attacks.find(a => norm(a.name) === norm(name));
+      const payload = {
+        player_id: player.id,
+        name,
+        damage_dice: w?.damageDice || '1d6',
+        damage_type: w?.damageType || 'Tranchant',
+        range: w?.range || 'Corps à corps',
+        properties: w?.properties || '',
+        manual_attack_bonus: null,
+        manual_damage_bonus: null,
+        expertise: false,
+        attack_type: 'physical' as const,
+        spell_level: null as any,
+        ammo_count: (existing as any)?.ammo_count ?? 0
+      };
+      if (existing) {
+        await attackService.updateAttack({ ...payload, id: existing.id });
+      } else {
+        await attackService.addAttack(payload);
+      }
+      notifyAttacksChanged();
+    } catch (err) {
+      console.error('Création/mise à jour attaque échouée', err);
+      // ne bloque pas l’équipement
+    }
   };
 
   // Mise à jour optimiste locale du meta
@@ -774,6 +867,7 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
       toast.error('Erreur ajout équipement');
     } finally {
       setShowList(false);
+      setAllowedKinds(null);
     }
   };
 
@@ -828,9 +922,9 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
     if (updates.length) await Promise.allSettled(updates);
   };
 
-  // Déséquipe proprement l’arme déjà dans le slot (si présente)
+  // Déséquipe proprement l’arme du slot si présente
   const unequipCurrentWeaponSlot = async () => {
-    if (!weapon?.inventory_item_id) return;
+    if (!weapon?.inventory_item_id) { setWeapon(null); await saveEquipment('weapon', null); return; }
     const prev = inventory.find(i => i.id === weapon.inventory_item_id);
     if (prev) {
       const metaPrev = parseMeta(prev.description);
@@ -842,7 +936,7 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
     await saveEquipment('weapon', null);
   };
 
-  // Ouvre le popup de confirmation avant d’équiper/déséquiper
+  // Demande confirmation pour bascule depuis la liste du sac
   const requestToggleWithConfirm = (item: InventoryItem) => {
     const meta = parseMeta(item.description);
     if (!meta) return toast.error("Objet sans métadonnées. Ouvrez Paramètres et précisez sa nature.");
@@ -850,7 +944,6 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
     const isShield = meta.type === 'shield';
     const isWeapon = meta.type === 'weapon';
 
-    // Décide du mode via l’état courant (slots pour armure/bouclier/arme)
     const equipped =
       (isArmor && armor?.inventory_item_id === item.id) ||
       (isShield && shield?.inventory_item_id === item.id) ||
@@ -858,32 +951,6 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
 
     setConfirmPayload({ mode: equipped ? 'unequip' : 'equip', item });
     setConfirmOpen(true);
-  };
-
-  // Création d'attaque si nécessaire à l’équipement d’une arme
-  const createWeaponAttackIfNeeded = async (itemName: string, w: WeaponMeta | undefined | null) => {
-    try {
-      const existing = await attackService.getPlayerAttacks(player.id);
-      const already = existing.some(a => norm(a.name) === norm(itemName));
-      if (already) return;
-      await attackService.addAttack({
-        player_id: player.id,
-        name: itemName,
-        damage_dice: w?.damageDice || '1d6',
-        damage_type: (w?.damageType || 'Tranchant'),
-        range: w?.range || 'Corps à corps',
-        properties: w?.properties || '',
-        manual_attack_bonus: null,
-        manual_damage_bonus: null,
-        expertise: false,
-        attack_type: 'physical',
-        spell_level: null,
-        ammo_count: 0
-      });
-    } catch (err) {
-      console.error('Création attaque échouée', err);
-      // on n'empêche pas l’équipement si l’insert échoue (RLS etc.)
-    }
   };
 
   // Exécute la bascule après confirmation
@@ -903,7 +970,8 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
             description: visibleDescription(item.description),
             inventory_item_id: item.id,
             armor_formula: meta.armor ? { base: meta.armor.base, addDex: meta.armor.addDex, dexCap: meta.armor.dexCap ?? null, label: meta.armor.label } : null,
-            weapon_meta: null
+            shield_bonus: null,
+            weapon_meta: null,
           };
           setArmor(eq); await saveEquipment('armor', eq); await updateItemMeta(item, { ...meta, equipped: true });
           toast.success('Armure équipée');
@@ -920,21 +988,18 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
             inventory_item_id: item.id,
             shield_bonus: meta.shield?.bonus ?? null,
             armor_formula: null,
-            weapon_meta: null
+            weapon_meta: null,
           };
           setShield(eq); await saveEquipment('shield', eq); await updateItemMeta(item, { ...meta, equipped: true });
           toast.success('Bouclier équipé');
         }
       } else if (meta.type === 'weapon') {
         if (mode === 'unequip' && weapon?.inventory_item_id === item.id) {
-          // Déséquiper l’arme du slot
           await updateItemMeta(item, { ...meta, equipped: false });
           await unequipCurrentWeaponSlot();
           toast.success('Arme déséquipée');
         } else if (mode === 'equip') {
-          // 1 seul slot arme: on vide l’ancienne si besoin
           await unequipCurrentWeaponSlot();
-          // équipe la nouvelle arme
           const eq: Equipment = {
             name: item.name,
             description: visibleDescription(item.description),
@@ -945,18 +1010,18 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
               damageDice: meta.weapon.damageDice || '1d6',
               damageType: meta.weapon.damageType || 'Tranchant',
               properties: meta.weapon.properties || '',
-              range: meta.weapon.range || 'Corps à corps'
+              range: meta.weapon.range || 'Corps à corps',
             } : {
               damageDice: '1d6',
               damageType: 'Tranchant',
               properties: '',
-              range: 'Corps à corps'
+              range: 'Corps à corps',
             }
           };
           setWeapon(eq);
           await saveEquipment('weapon', eq);
           await updateItemMeta(item, { ...meta, equipped: true });
-          await createWeaponAttackIfNeeded(item.name, meta.weapon);
+          await createOrUpdateWeaponAttack(item.name, meta.weapon);
           toast.success('Arme équipée');
         }
       }
@@ -968,28 +1033,27 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
     }
   };
 
-  // Bascule via slot (demande confirmation aussi)
+  // Bascule via l'icône (slot) – ne montre le bouton que si un objet est présent (pas d'ouverture de liste par ce bouton)
   const toggleFromSlot = (slot: 'armor' | 'shield' | 'weapon') => {
     const eq = slot === 'armor' ? armor : slot === 'shield' ? shield : weapon;
-    if (!eq) { setShowList(true); return; }
-
+    if (!eq) {
+      // Slot vide → bouton de bascule non rendu; seul "Équiper depuis la liste" ouvre la liste déjà filtrée
+      return;
+    }
     const item = eq.inventory_item_id
       ? inventory.find(i => i.id === eq.inventory_item_id)
       : inventory.find(i => norm(stripPriceParentheses(i.name)) === norm(stripPriceParentheses(eq.name)));
-
     if (!item) {
-      // aucun lien -> on vide directement le slot
       if (slot === 'armor') { setArmor(null); saveEquipment('armor', null); }
       if (slot === 'shield') { setShield(null); saveEquipment('shield', null); }
       if (slot === 'weapon') { setWeapon(null); saveEquipment('weapon', null); }
       return;
     }
-
     setConfirmPayload({ mode: 'unequip', item });
     setConfirmOpen(true);
   };
 
-  // Filtres du sac: étiquettes alignées à gauche, recherche à droite
+  /* ===== Sac: filtres (alignés à gauche) + recherche (à droite) ===== */
   const [bagFilter, setBagFilter] = useState('');
   const [bagKinds, setBagKinds] = useState<Record<MetaType, boolean>>({
     armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true, tool: true
@@ -1008,13 +1072,14 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
     });
   }, [inventory, bagFilter, bagKinds]);
 
-  // Expansion items
+  // Expansion items (sac)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const toggleExpand = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
+  /* ====================== Rendu ====================== */
   return (
     <div className="space-y-6">
-      {/* Carte avec slots */}
+      {/* Carte silhouette + slots */}
       <div className="stat-card">
         <div className="stat-header flex items-center gap-3">
           <Backpack className="text-purple-500" size={24} />
@@ -1029,68 +1094,68 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
               style={{ mixBlendMode: 'luminosity' }}
             />
 
+            {/* Armure */}
             <EquipmentSlot
-              icon={<Shield size={24} className="text-purple-500" />}
+              icon={<ShieldIcon size={24} className="text-purple-500" />}
               position="top-[25%] left-1/2 -translate-x-1/2"
               equipment={armor || null}
-              onEquip={(eq) => { setArmor(eq); saveEquipment('armor', eq); }}
               type="armor"
-              onRequestOpenList={() => setShowList(true)}
+              onRequestOpenList={() => { setAllowedKinds(['armors']); setShowList(true); }}
               onToggleEquipFromSlot={() => toggleFromSlot('armor')}
               isEquipped={!!armor}
             />
 
+            {/* Bouclier */}
             <EquipmentSlot
-              icon={<Shield size={24} className="text-blue-500" />}
+              icon={<ShieldIcon size={24} className="text-blue-500" />}
               position="top-[45%] left-[15%]"
               equipment={shield || null}
-              onEquip={(eq) => { setShield(eq as any); saveEquipment('shield', eq as any); }}
               type="shield"
-              onRequestOpenList={() => setShowList(true)}
+              onRequestOpenList={() => { setAllowedKinds(['shields']); setShowList(true); }}
               onToggleEquipFromSlot={() => toggleFromSlot('shield')}
               isEquipped={!!shield}
             />
 
+            {/* Arme */}
             <EquipmentSlot
               icon={<Sword size={24} className="text-red-500" />}
               position="top-[45%] right-[15%]"
               equipment={weapon || null}
-              onEquip={(eq) => { setWeapon(eq as any); saveEquipment('weapon', eq as any); }}
               type="weapon"
-              onRequestOpenList={() => setShowList(true)}
+              onRequestOpenList={() => { setAllowedKinds(['weapons']); setShowList(true); }}
               onToggleEquipFromSlot={() => toggleFromSlot('weapon')}
               isEquipped={!!weapon}
             />
 
+            {/* Potion */}
             <EquipmentSlot
               icon={<Flask size={24} className="text-green-500" />}
               position="top-[5%] right-[5%]"
               equipment={potion || { name: 'Potions et poisons', description: '', isTextArea: true }}
-              onEquip={(eq) => { setPotion(eq as any); saveEquipment('potion', eq as any); }}
               type="potion"
-              onRequestOpenList={() => setShowList(true)}
+              onRequestOpenList={() => { setAllowedKinds(null); setShowList(true); }}
               onToggleEquipFromSlot={() => {}}
               isEquipped={false}
             />
 
+            {/* Bijoux */}
             <EquipmentSlot
               icon={<Star size={24} className="text-yellow-500" />}
               position="top-[15%] right-[5%]"
               equipment={jewelry || { name: 'Bijoux', description: '', isTextArea: true }}
-              onEquip={(eq) => { setJewelry(eq as any); saveEquipment('jewelry', eq as any); }}
               type="jewelry"
-              onRequestOpenList={() => setShowList(true)}
+              onRequestOpenList={() => { setAllowedKinds(null); setShowList(true); }}
               onToggleEquipFromSlot={() => {}}
               isEquipped={false}
             />
 
+            {/* Sac visuel */}
             <EquipmentSlot
               icon={<img src="https://yumzqyyogwzrmlcpvnky.supabase.co/storage/v1/object/public/static//8-2-backpack-png-pic.png" alt="Backpack" className="w-24 h-24 object-contain" />}
               position="bottom-[5%] right-[2%]"
               equipment={bag || { name: 'Sac à dos', description: '', isTextArea: true }}
-              onEquip={(eq) => { setBag(eq as any); saveEquipment('bag', eq as any); }}
               type="bag"
-              onRequestOpenList={() => setShowList(true)}
+              onRequestOpenList={() => { setAllowedKinds(null); setShowList(true); }}
               onToggleEquipFromSlot={() => {}}
               isEquipped={false}
             />
@@ -1110,8 +1175,24 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
               key={curr}
               currency={curr}
               value={player[curr] as number}
-              onAdd={(n) => updatePlayerMoney(curr, n, true)}
-              onSpend={(n) => updatePlayerMoney(curr, n, false)}
+              onAdd={async (n) => {
+                const newAmount = Math.max(0, (player[curr] as number) + n);
+                try {
+                  const { error } = await supabase.from('players').update({ [curr]: newAmount }).eq('id', player.id);
+                  if (error) throw error;
+                  onPlayerUpdate({ ...player, [curr]: newAmount } as any);
+                  toast.success(`Ajout de ${n} ${curr}`);
+                } catch (e) { toast.error('Erreur lors de la mise à jour'); }
+              }}
+              onSpend={async (n) => {
+                const newAmount = Math.max(0, (player[curr] as number) - n);
+                try {
+                  const { error } = await supabase.from('players').update({ [curr]: newAmount }).eq('id', player.id);
+                  if (error) throw error;
+                  onPlayerUpdate({ ...player, [curr]: newAmount } as any);
+                  toast.success(`Retrait de ${n} ${curr}`);
+                } catch (e) { toast.error('Erreur lors de la mise à jour'); }
+              }}
             />
           ))}
         </div>
@@ -1125,11 +1206,12 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
         </div>
 
         <div className="p-4">
-          {/* Actions + filtres: étiquettes alignées à gauche, recherche à droite */}
+          {/* Actions + filtres alignés à gauche, recherche à droite */}
           <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <button onClick={() => setShowList(true)} className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={20} /> Liste d’équipement</button>
+            <button onClick={() => { setAllowedKinds(null); setShowList(true); }} className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={20} /> Liste d’équipement</button>
             <button onClick={() => setShowCustom(true)} className="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"><Plus size={18} /> Objet personnalisé</button>
 
+            {/* Filtres (gauche) */}
             <div className="flex items-center gap-2 flex-wrap">
               {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
                 <button
@@ -1137,16 +1219,17 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
                   onClick={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
                   className={`px-2 py-1 rounded text-xs border ${bagKinds[k] ? 'border-red-500/40 text-red-300 bg-red-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-800/40'}`}
                 >
-                  {k === 'armor' ? 'Armure' :
-                   k === 'shield' ? 'Bouclier' :
-                   k === 'weapon' ? 'Arme' :
-                   k === 'potion' ? 'Potion/Poison' :
-                   k === 'jewelry' ? 'Bijoux' :
-                   k === 'tool' ? 'Outils' : 'Équipement'}
+                  {k === 'armor' ? 'Armure'
+                    : k === 'shield' ? 'Bouclier'
+                    : k === 'weapon' ? 'Arme'
+                    : k === 'potion' ? 'Potion/Poison'
+                    : k === 'jewelry' ? 'Bijoux'
+                    : k === 'tool' ? 'Outils' : 'Équipement'}
                 </button>
               ))}
             </div>
 
+            {/* Recherche (droite) */}
             <div className="ml-auto flex-1 min-w-[220px] flex items-center gap-2">
               <Search className="w-4 h-4 text-gray-400" />
               <input value={bagFilter} onChange={(e) => setBagFilter(e.target.value)} placeholder="Filtrer le sac…" className="input-dark px-3 py-2 rounded-md w-full" />
@@ -1162,7 +1245,6 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
               const isShield = meta?.type === 'shield';
               const isWeapon = meta?.type === 'weapon';
 
-              // Statut basé EXCLUSIVEMENT sur l’id d’inventaire du slot
               const isEquipped =
                 (isArmor && armor?.inventory_item_id === item.id) ||
                 (isShield && shield?.inventory_item_id === item.id) ||
@@ -1181,7 +1263,7 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
                         {meta?.type === 'tool' && <span className="text-xs px-2 py-0.5 rounded bg-teal-900/30 text-teal-300">Outil</span>}
                       </div>
 
-                      {/* Détails techniques quand déplié (sans redondance) */}
+                      {/* Détails techniques (déplié) */}
                       {expanded[item.id] && (isArmor || isShield || isWeapon) && (
                         <div className="text-xs text-gray-400 mt-2">
                           {isArmor && meta?.armor && <>CA: {meta.armor.label}</>}
@@ -1205,7 +1287,8 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
                         </button>
                       )}
                       <button onClick={() => setEditingItem(item)} className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-700/40 rounded-full" title="Paramètres">
-                        <Settings size={16} />
+                        {/* Paramètres de l'item (dans le sac uniquement) */}
+                        <svg width="16" height="16" viewBox="0 0 24 24" className="fill-current"><path d="M12 8a4 4 0 100 8 4 4 0 000-8z"/><path fillRule="evenodd" d="M2 12a9.99 9.99 0 011.465-5.236l1.5 1.5A8 8 0 1012 4V2A10 10 0 012 12z" clipRule="evenodd"/></svg>
                       </button>
                       <button onClick={() => removeItemFromInventory(item.id)} className="p-1.5 text-gray-500 hover:text-red-500 hover:bg-red-900/30 rounded-full" title="Supprimer l'objet">
                         <Trash2 size={16} />
@@ -1219,12 +1302,29 @@ export function EquipmentTab({ player, inventory, onPlayerUpdate, onInventoryUpd
         </div>
       </div>
 
-      {/* Popups */}
-      {showList && <EquipmentListModal onClose={() => setShowList(false)} onAddItem={addFromList} />}
-      {showCustom && <CustomItemModal onClose={() => setShowCustom(false)} onAdd={addCustom} />}
-      {editingItem && <InventoryItemEditModal item={editingItem} onClose={() => setEditingItem(null)} onSaved={refreshInventory} />}
+      {/* Modals */}
+      {showList && (
+        <EquipmentListModal
+          onClose={() => { setShowList(false); setAllowedKinds(null); }}
+          onAddItem={addFromList}
+          allowedKinds={allowedKinds}
+        />
+      )}
+      {showCustom && (
+        <CustomItemModal
+          onClose={() => setShowCustom(false)}
+          onAdd={addCustom}
+        />
+      )}
+      {editingItem && (
+        <InventoryItemEditModal
+          item={editingItem}
+          onClose={() => setEditingItem(null)}
+          onSaved={refreshInventory}
+        />
+      )}
 
-      {/* Confirmation équiper/déséquiper */}
+      {/* Confirmation equip/unequip */}
       <ConfirmEquipModal
         open={confirmOpen}
         mode={confirmPayload?.mode || 'equip'}
