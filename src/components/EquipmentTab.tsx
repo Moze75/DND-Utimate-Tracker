@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Backpack, Plus, Trash2, Shield, Sword, Settings,
   FlaskRound as Flask, Star, Coins, Search, X, Check, Filter
@@ -15,7 +15,6 @@ interface Equipment {
   description: string;
   isTextArea?: boolean;
 
-  // Armure: calcul par formule (remplace la CA de base)
   armor_formula?: {
     base: number;
     addDex: boolean;
@@ -26,7 +25,6 @@ interface Equipment {
     label?: string;
   } | null;
 
-  // Bouclier: simple bonus
   shield_bonus?: number | null;
 }
 
@@ -88,18 +86,15 @@ function injectMetaIntoDescription(desc: string | null | undefined, meta: ItemMe
   return (noOldMeta ? `${noOldMeta}\n` : '') + metaLine;
 }
 
-// Supprime " (xxx po|pa|pc)" du nom
 function stripPriceParentheses(name: string): string {
   return name.replace(/\s*\((?:\d+|\w+|\s|,|\.|\/|-)+\s*p[oa]?\)\s*$/i, '').trim();
 }
 
-// Supprime la ligne #meta: de l’affichage de description
 function visibleDescription(desc: string | null | undefined): string {
   if (!desc) return '';
   return desc.split('\n').filter((l) => !l.trim().startsWith(META_PREFIX)).join('\n').trim();
 }
 
-// Noms avec seulement la première lettre en majuscule
 function smartCapitalize(name: string): string {
   const base = stripPriceParentheses(name).trim();
   if (!base) return '';
@@ -111,12 +106,11 @@ function smartCapitalize(name: string): string {
   return base.charAt(0).toUpperCase() + base.slice(1);
 }
 
-// Normalisation pour comparaisons robustes
 function norm(s: string | null | undefined): string {
   return (s ?? '').trim().toLowerCase();
 }
 
-/* ====================== Fetch + Parsing “Liste d’équipement” ====================== */
+/* ====================== Liste d’équipement: fetch + parsing ====================== */
 
 type CatalogKind = 'armors' | 'shields' | 'weapons' | 'adventuring_gear' | 'tools';
 
@@ -164,7 +158,7 @@ function parseArmors(md: string): CatalogItem[] {
   const items: CatalogItem[] = [];
   for (const row of rows) {
     if (row.length < 4) continue;
-    const [nomRaw, ca, force, discr] = row;
+    const [nomRaw, ca] = row;
     if (!nomRaw || nomRaw.toLowerCase().includes('armures')) continue;
     const nom = stripPriceParentheses(nomRaw);
 
@@ -183,23 +177,12 @@ function parseArmors(md: string): CatalogItem[] {
       }
     }
 
-    const stealthDisadvantage = /désavantage/i.test(discr || '');
-    let strengthReq: number | null = null;
-    const strMatch = (force || '').match(/For\s*(\d+)/i);
-    if (strMatch) strengthReq = parseInt(strMatch[1], 10);
-
-    let kind: 'light' | 'medium' | 'heavy' | undefined = undefined;
-    if (/matelassée|cuir|clouté/i.test(nom)) kind = 'light';
-    else if (/peaux|chemise de mailles|écailles|cuirasse|demi-plate/i.test(nom)) kind = 'medium';
-    else kind = 'heavy';
-
     items.push({
       id: `armor:${nom}`,
       kind: 'armors',
       name: nom,
-      // pas de duplication: l’étiquette montrera la formule, on garde une description courte
-      description: '',
-      armor: { base, addDex, dexCap, stealthDisadvantage, strengthReq, kind, label: ca },
+      description: '', // pas de duplication
+      armor: { base, addDex, dexCap, label: ca },
     });
   }
   return items;
@@ -219,8 +202,7 @@ function parseShields(md: string): CatalogItem[] {
       id: `shield:${nom}`,
       kind: 'shields',
       name: nom,
-      // pas de duplication: l’étiquette montrera “+bonus”
-      description: '',
+      description: '', // pas de duplication
       shield: { bonus },
     });
   }
@@ -255,8 +237,7 @@ function parseWeapons(md: string): CatalogItem[] {
       id: `weapon:${nom}`,
       kind: 'weapons',
       name: nom,
-      // pas de duplication: l’étiquette montrera dégâts/propriétés
-      description: '',
+      description: '', // pas de duplication
       weapon: { damageDice, damageType, properties: props || '', range },
     });
   }
@@ -294,7 +275,7 @@ function parseSectionedList(md: string, kind: CatalogKind): CatalogItem[] {
   return items;
 }
 
-/* ====================== Modal Liste d’équipement (plein écran) ====================== */
+/* ====================== Modal Liste d’équipement (plein écran + scroll lock) ====================== */
 
 type FilterState = {
   weapons: boolean;
@@ -320,7 +301,14 @@ function EquipmentListModal({
   });
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  React.useEffect(() => {
+  useEffect(() => {
+    // Scroll lock du fond
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
@@ -352,9 +340,14 @@ function EquipmentListModal({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return all.filter(ci => {
-      if (!filters[ci.kind]) return false;
-      if (!q) return true;
-      return ci.name.toLowerCase().includes(q);
+      if (!filters[ci.kind]) return false;               // filtre type
+      if (!q) return true;                               // recherche
+      // on matche aussi la description pour Équipements/Outils
+      const inName = ci.name.toLowerCase().includes(q);
+      const inDesc = (ci.kind === 'adventuring_gear' || ci.kind === 'tools')
+        ? (ci.description || '').toLowerCase().includes(q)
+        : false;
+      return inName || inDesc;
     });
   }, [all, query, filters]);
 
@@ -368,7 +361,7 @@ function EquipmentListModal({
     if (ci.kind === 'shields' && ci.shield) meta = { type: 'shield', quantity, equipped: false, shield: ci.shield };
     if (ci.kind === 'weapons' && ci.weapon) meta = { type: 'weapon', quantity, equipped: false, weapon: ci.weapon };
 
-    // pas de description redondante pour arme/armure/bouclier
+    // pas de redondance: description seulement pour Équipements/Outils
     const description = (ci.kind === 'adventuring_gear' || ci.kind === 'tools') ? (ci.description || '').trim() : '';
 
     onAddItem({
@@ -381,8 +374,9 @@ function EquipmentListModal({
   const toggleExpand = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-[80] flex items-stretch justify-stretch" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-gray-900 w-screen h-screen flex flex-col">
+    <div className="fixed inset-0 z-[9999]">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className="absolute inset-0 bg-gray-900 flex flex-col">
         {/* Header plein écran: recherche à gauche, filtres à droite */}
         <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-800 flex-wrap">
           <div className="flex items-center gap-2 min-w-[220px] flex-1">
@@ -440,7 +434,7 @@ function EquipmentListModal({
                         {smartCapitalize(ci.name)}
                       </button>
                       <div className="text-xs text-gray-400 mt-1">
-                        {ci.kind === 'armors' && ci.armor && `CA: ${ci.armor.label}${ci.armor.stealthDisadvantage ? ' • Désavantage Discrétion' : ''}`}
+                        {ci.kind === 'armors' && ci.armor && `CA: ${ci.armor.label}`}
                         {ci.kind === 'shields' && ci.shield && `Bonus de bouclier: +${ci.shield.bonus}`}
                         {ci.kind === 'weapons' && ci.weapon && `Dégâts: ${ci.weapon.damageDice} ${ci.weapon.damageType} • Props: ${ci.weapon.properties || '—'}`}
                         {(ci.kind === 'adventuring_gear' || ci.kind === 'tools') && (ci.description ? 'Voir le détail' : 'Équipement')}
@@ -471,7 +465,7 @@ function EquipmentListModal({
   );
 }
 
-/* ====================== Modal “Objet personnalisé” ====================== */
+/* ====================== Modal “Objet personnalisé” (inchangé ici) ====================== */
 
 function CustomItemModal({
   onClose,
@@ -485,16 +479,13 @@ function CustomItemModal({
   const [description, setDescription] = useState('');
   const [quantity, setQuantity] = useState(1);
 
-  // Armure
   const [armBase, setArmBase] = useState<number>(12);
   const [armAddDex, setArmAddDex] = useState<boolean>(true);
   const [armDexCap, setArmDexCap] = useState<number | ''>(2);
   const [armKind, setArmKind] = useState<'light' | 'medium' | 'heavy'>('medium');
 
-  // Bouclier
   const [shieldBonus, setShieldBonus] = useState<number>(2);
 
-  // Arme
   const [wDice, setWDice] = useState('1d6');
   const [wType, setWType] = useState<'Tranchant' | 'Perforant' | 'Contondant'>('Tranchant');
   const [wProps, setWProps] = useState('');
@@ -515,7 +506,7 @@ function CustomItemModal({
     if (type === 'armor') {
       const cap = armDexCap === '' ? null : Number(armDexCap);
       const label = `${armBase}${armAddDex ? ` + modificateur de Dex${cap != null ? ` (max ${cap})` : ''}` : ''}`;
-      meta.armor = { base: armBase, addDex: armAddDex, dexCap: cap, kind: armKind, label };
+      meta.armor = { base: armBase, addDex: armAddDex, dexCap: cap, label };
     } else if (type === 'shield') {
       meta.shield = { bonus: shieldBonus };
     } else if (type === 'weapon') {
@@ -525,9 +516,16 @@ function CustomItemModal({
     onClose();
   };
 
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   return (
-    <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-3" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-gray-900/95 border border-gray-800 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4">
+    <div className="fixed inset-0 z-[9999]">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className="absolute inset-0 bg-gray-900/95 border border-gray-800 rounded-none w-screen h-screen overflow-y-auto p-4">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-lg font-semibold text-gray-100">Objet personnalisé</h3>
           <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg">
@@ -571,14 +569,6 @@ function CustomItemModal({
                 value={armDexCap}
                 onChange={e => setArmDexCap(e.target.value === '' ? '' : parseInt(e.target.value))}
               />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Catégorie</label>
-              <select className="input-dark w-full px-3 py-2 rounded-md" value={armKind} onChange={e => setArmKind(e.target.value as any)}>
-                <option value="light">Légère</option>
-                <option value="medium">Intermédiaire</option>
-                <option value="heavy">Lourde</option>
-              </select>
             </div>
           </div>
         )}
@@ -634,7 +624,7 @@ function CustomItemModal({
   );
 }
 
-/* ====================== Popup des slots (avec bouton Équipé) ====================== */
+/* ====================== Popup & Slot (inchangé, mais utilisent maintenant l’état slots pour Équipé) ====================== */
 
 const getTitle = (type: 'armor' | 'weapon' | 'shield' | 'potion' | 'jewelry' | 'bag') => {
   switch (type) {
@@ -662,7 +652,7 @@ interface InfoBubbleProps {
 const InfoBubble = ({ equipment, position, onClose, setIsEditing, type, onToggleEquip, isEquipped, onRequestOpenList }: InfoBubbleProps) => {
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center z-[70]"
+      className="fixed inset-0 flex items-center justify-center z-[9999]"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           e.stopPropagation();
@@ -670,8 +660,8 @@ const InfoBubble = ({ equipment, position, onClose, setIsEditing, type, onToggle
         }
       }}
     >
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[69]" onClick={onClose} />
-      <div className="relative p-4 bg-gray-900/95 text-sm text-gray-300 rounded-lg shadow-lg w-[min(32rem,95vw)] border border-gray-700/50 z-[70]">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9998]" onClick={onClose} />
+      <div className="relative p-4 bg-gray-900/95 text-sm text-gray-300 rounded-lg shadow-lg w-[min(32rem,95vw)] border border-gray-700/50 z-[9999]">
         <div className="flex items-center justify-between mb-2">
           <h4 className="font-semibold text-gray-100 text-lg">{getTitle(type)}</h4>
           <div className="flex items-center gap-1">
@@ -738,8 +728,6 @@ const InfoBubble = ({ equipment, position, onClose, setIsEditing, type, onToggle
   );
 };
 
-/* ====================== Equipment Slot ====================== */
-
 interface EquipmentSlotProps {
   icon: React.ReactNode;
   position: string;
@@ -788,13 +776,13 @@ const EquipmentSlot = ({
       )}
 
       {isEditing && (
-        <div /> /* édition via sac uniquement */
+        <div /> /* édition via sac */
       )}
     </>
   );
 };
 
-/* ====================== Modal d’édition d’un item d’inventaire ====================== */
+/* ====================== Edition d’un item d’inventaire ====================== */
 
 function InventoryItemEditModal({
   item,
@@ -809,6 +797,12 @@ function InventoryItemEditModal({
   const [name, setName] = useState(smartCapitalize(item.name));
   const [description, setDescription] = useState(visibleDescription(item.description));
   const [quantity, setQuantity] = useState<number>(meta.quantity ?? 1);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
 
   const save = async () => {
     try {
@@ -829,8 +823,9 @@ function InventoryItemEditModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-[85] flex items-center justify-center p-3" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-gray-900/95 border border-gray-800 rounded-xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-4">
+    <div className="fixed inset-0 z-[9999]">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className="absolute inset-0 bg-gray-900/95 border border-gray-800 rounded-none w-screen h-screen overflow-y-auto p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold text-gray-100">Modifier l’objet</h3>
           <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg">
@@ -845,7 +840,7 @@ function InventoryItemEditModal({
           </div>
           <div>
             <label className="block text-sm text-gray-400 mb-1">Description</label>
-            <textarea className="input-dark w-full px-3 py-2 rounded-md" rows={4} value={description} onChange={e => setDescription(e.target.value)} />
+            <textarea className="input-dark w-full px-3 py-2 rounded-md" rows={6} value={description} onChange={e => setDescription(e.target.value)} />
           </div>
           <div className="flex items-center gap-3">
             <label className="text-sm text-gray-400">Quantité</label>
@@ -862,7 +857,7 @@ function InventoryItemEditModal({
   );
 }
 
-/* ====================== Main component ====================== */
+/* ====================== Composant principal ====================== */
 
 interface EquipmentTabProps {
   player: Player;
@@ -906,7 +901,6 @@ export function EquipmentTab({
   const [showCustom, setShowCustom] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
 
-  // Slots
   const [armor, setArmor] = useState<Equipment | null>(player.equipment?.armor || null);
   const [weapon, setWeapon] = useState<Equipment | null>(player.equipment?.weapon || null);
   const [shield, setShield] = useState<Equipment | null>(player.equipment?.shield || null);
@@ -926,7 +920,6 @@ export function EquipmentTab({
     }
   };
 
-  /* ===== Money ===== */
   const updatePlayerMoney = async (currency: Currency, amount: number, isAdding: boolean) => {
     const newAmount = Math.max(0, (player[currency] as number) + (isAdding ? amount : -amount));
     try {
@@ -940,7 +933,6 @@ export function EquipmentTab({
     }
   };
 
-  /* ===== Inventory CRUD ===== */
   const refreshInventory = async () => {
     const { data } = await supabase.from('inventory_items').select('*').eq('player_id', player.id);
     if (data) onInventoryUpdate(data);
@@ -948,7 +940,6 @@ export function EquipmentTab({
 
   const addFromList = async (payload: { name: string; description?: string; meta: ItemMeta }) => {
     try {
-      // Pas de redondance: description déjà nettoyée côté modal
       const finalDesc = injectMetaIntoDescription(payload.description || '', payload.meta);
       const { error } = await supabase.from('inventory_items').insert([{ player_id: player.id, name: smartCapitalize(payload.name), description: finalDesc }]);
       if (error) throw error;
@@ -996,7 +987,6 @@ export function EquipmentTab({
     if (error) throw error;
   };
 
-  // Déséquipe tous les autres objets d’un type (armure ou bouclier) pour garantir l’unicité
   const unequipOthersOfType = async (type: 'armor' | 'shield', keepItemId?: string) => {
     const updates: Promise<any>[] = [];
     for (const it of inventory) {
@@ -1014,7 +1004,6 @@ export function EquipmentTab({
     }
   };
 
-  /* ===== Equip / Unequip toggle (unique) ===== */
   const toggleEquip = async (item: InventoryItem) => {
     const meta = parseMeta(item.description);
     if (!meta) return;
@@ -1023,14 +1012,11 @@ export function EquipmentTab({
     const nextMeta: ItemMeta = { ...meta, equipped: nextEquipped };
 
     try {
-      // Garantit 1 seule armure/bouclier équipée à la fois
       if (meta.type === 'armor' && nextEquipped) await unequipOthersOfType('armor', item.id);
       if (meta.type === 'shield' && nextEquipped) await unequipOthersOfType('shield', item.id);
 
-      // Persiste l’état
       await updateItemMeta(item, nextMeta);
 
-      // Applique effet gameplay
       if (meta.type === 'armor') {
         if (nextEquipped && meta.armor) {
           const eq: Equipment = {
@@ -1040,9 +1026,6 @@ export function EquipmentTab({
               base: meta.armor.base,
               addDex: meta.armor.addDex,
               dexCap: meta.armor.dexCap ?? null,
-              strengthReq: meta.armor.strengthReq ?? null,
-              stealthDisadvantage: meta.armor.stealthDisadvantage ?? false,
-              kind: meta.armor.kind,
               label: meta.armor.label,
             },
           };
@@ -1080,19 +1063,15 @@ export function EquipmentTab({
               spell_level: null,
               ammo_count: 0
             });
-            if (newAttack) {
-              toast.success('Attaque créée');
-            } else {
-              toast.error("Impossible de créer l'attaque (vérifier les permissions RLS)");
-            }
+            if (newAttack) toast.success('Attaque créée');
+            else toast.error("Impossible de créer l'attaque (vérifier les permissions RLS)");
           } catch (err: any) {
             console.error(err);
-            toast.error("Création d'attaque impossible. Si vous voyez un code 42501 (RLS), ajoutez une policy d'insert sur attacks.");
+            toast.error("Création d'attaque impossible (RLS?).");
           }
         }
       }
 
-      // Rafraîchir l’inventaire pour refléter “equipped”
       await refreshInventory();
     } catch (e) {
       console.error(e);
@@ -1100,13 +1079,9 @@ export function EquipmentTab({
     }
   };
 
-  // Toggle depuis slot: bascule l’état (si rien d’équipé, ouvre la liste)
   const toggleFromSlot = async (slot: 'armor' | 'shield') => {
     const equippedName = slot === 'armor' ? armor?.name : shield?.name;
-    if (!equippedName) {
-      setShowList(true);
-      return;
-    }
+    if (!equippedName) { setShowList(true); return; }
     const item = inventory.find(i => norm(stripPriceParentheses(i.name)) === norm(stripPriceParentheses(equippedName)));
     if (!item) {
       if (slot === 'armor') { setArmor(null); await saveEquipment('armor', null); }
@@ -1122,11 +1097,9 @@ export function EquipmentTab({
     await refreshInventory();
   };
 
-  // État d’expansion du sac
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const toggleExpand = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
-  // Filtre du sac
   const [bagFilter, setBagFilter] = useState('');
   const [bagKinds, setBagKinds] = useState<Record<MetaType, boolean>>({
     armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true
@@ -1147,7 +1120,7 @@ export function EquipmentTab({
 
   return (
     <div className="space-y-6">
-      {/* Carte personnage équipable */}
+      {/* Carte personnage + slots */}
       <div className="stat-card">
         <div className="stat-header flex items-center gap-3">
           <Backpack className="text-purple-500" size={24} />
@@ -1162,7 +1135,6 @@ export function EquipmentTab({
               style={{ mixBlendMode: 'luminosity' }}
             />
 
-            {/* Armor slot */}
             <EquipmentSlot
               icon={<Shield size={24} className="text-purple-500" />}
               position="top-[25%] left-1/2 -translate-x-1/2 bg-gray-800/50"
@@ -1175,7 +1147,6 @@ export function EquipmentTab({
               isEquipped={!!armor}
             />
 
-            {/* Shield slot */}
             <EquipmentSlot
               icon={<Shield size={24} className="text-blue-500" />}
               position="top-[45%] left-[15%] bg-gray-800/50"
@@ -1188,7 +1159,6 @@ export function EquipmentTab({
               isEquipped={!!shield}
             />
 
-            {/* Weapon slot (informationnel) */}
             <EquipmentSlot
               icon={<Sword size={24} className="text-red-500" />}
               position="top-[45%] right-[15%] bg-gray-800/50"
@@ -1201,7 +1171,6 @@ export function EquipmentTab({
               isEquipped={false}
             />
 
-            {/* Potion */}
             <EquipmentSlot
               icon={<Flask size={24} className="text-green-500" title="Potions et poisons" />}
               position="top-[5%] right-[5%] bg-gray-800/50"
@@ -1214,7 +1183,6 @@ export function EquipmentTab({
               isEquipped={false}
             />
 
-            {/* Bijoux */}
             <EquipmentSlot
               icon={<Star size={24} className="text-yellow-500" />}
               position="top-[15%] right-[5%] bg-gray-800/50"
@@ -1227,7 +1195,6 @@ export function EquipmentTab({
               isEquipped={false}
             />
 
-            {/* Sac */}
             <EquipmentSlot
               icon={<img src="https://yumzqyyogwzrmlcpvnky.supabase.co/storage/v1/object/public/static//8-2-backpack-png-pic.png" alt="Backpack" className="w-24 h-24 object-contain" />}
               position="bottom-[5%] right-[2%]"
@@ -1318,22 +1285,20 @@ export function EquipmentTab({
             </div>
           </div>
 
-          {/* Liste inventaire (dépliable + bouton unique Équipé/Non équipé + roue paramètres) */}
+          {/* Liste inventaire */}
           <div className="space-y-2">
             {filteredInventory.map((item) => {
               const meta = parseMeta(item.description);
               const qty = meta?.quantity ?? 1;
-              const desc = visibleDescription(item.description);
               const isArmor = meta?.type === 'armor';
               const isShield = meta?.type === 'shield';
               const isWeapon = meta?.type === 'weapon';
 
-              // Statut “équipé” (slots pour armure/bouclier, méta pour arme)
-              const equippedBySlot =
+              // Armure/Bouclier: état basé EXCLUSIVEMENT sur les slots (fiable dès le clic)
+              const isEquipped =
                 (isArmor && armor && norm(stripPriceParentheses(armor.name)) === norm(stripPriceParentheses(item.name))) ||
-                (isShield && shield && norm(stripPriceParentheses(shield.name)) === norm(stripPriceParentheses(item.name)));
-
-              const isEquipped = equippedBySlot || !!meta?.equipped;
+                (isShield && shield && norm(stripPriceParentheses(shield.name)) === norm(stripPriceParentheses(item.name))) ||
+                (isWeapon && !!meta?.equipped);
 
               return (
                 <div key={item.id} className="bg-gray-800/40 border border-gray-700/40 rounded-md">
@@ -1352,8 +1317,21 @@ export function EquipmentTab({
                         {isShield && <span className="text-xs px-2 py-0.5 rounded bg-blue-900/30 text-blue-300">Bouclier</span>}
                         {isWeapon && <span className="text-xs px-2 py-0.5 rounded bg-red-900/30 text-red-300">Arme</span>}
                       </div>
-                      {desc && (
-                        <p className="text-sm text-gray-300 mt-2 whitespace-pre-wrap">{desc}</p>
+
+                      {/* Description visible uniquement pour les autres types (pas de redondance) */}
+                      {expanded[item.id] && meta?.type !== 'armor' && meta?.type !== 'shield' && meta?.type !== 'weapon' && (
+                        <div className="text-sm text-gray-300 mt-2 whitespace-pre-wrap">
+                          {visibleDescription(item.description)}
+                        </div>
+                      )}
+
+                      {/* Détails techniques quand déplié */}
+                      {expanded[item.id] && (isArmor || isShield || isWeapon) && (
+                        <div className="text-xs text-gray-400 mt-2">
+                          {isArmor && meta?.armor && <>CA: {meta.armor.label}</>}
+                          {isShield && meta?.shield && <>Bonus de bouclier: +{meta.shield.bonus}</>}
+                          {isWeapon && meta?.weapon && <>Dégâts: {meta.weapon.damageDice} {meta.weapon.damageType}{meta.weapon.properties ? ` • Props: ${meta.weapon.properties}` : ''}{meta.weapon.range ? ` • Portée: ${meta.weapon.range}` : ''}</>}
+                        </div>
                       )}
                     </div>
 
@@ -1387,31 +1365,6 @@ export function EquipmentTab({
                       </button>
                     </div>
                   </div>
-
-                  {/* Détail déplié – pleine largeur */}
-                  {expanded[item.id] && (
-                    <div className="px-3 pb-3">
-                      {isArmor && meta?.armor && (
-                        <div className="text-xs text-gray-400">
-                          CA: {meta.armor.label}{meta.armor.stealthDisadvantage ? ' • Désavantage Discrétion' : ''}
-                          {meta.armor.strengthReq ? ` • For ${meta.armor.strengthReq}` : ''}
-                        </div>
-                      )}
-                      {isShield && meta?.shield && (
-                        <div className="text-xs text-gray-400">Bonus de bouclier: +{meta.shield.bonus}</div>
-                      )}
-                      {isWeapon && meta?.weapon && (
-                        <div className="text-xs text-gray-400">
-                          Dégâts: {meta.weapon.damageDice} {meta.weapon.damageType}
-                          {meta.weapon.properties ? ` • Props: ${meta.weapon.properties}` : ''}
-                          {meta.weapon.range ? ` • Portée: ${meta.weapon.range}` : ''}
-                        </div>
-                      )}
-                      {desc && !(isArmor || isShield || isWeapon) && (
-                        <div className="text-xs text-gray-400 mt-1">{/* description juste pour les autres */}</div>
-                      )}
-                    </div>
-                  )}
                 </div>
               );
             })}
