@@ -8,9 +8,10 @@ interface Equipment {
   name: string;
   description: string;
   isTextArea?: boolean;
-  // Ajouts pour l'armure
-  armor_bonus?: number | null;
-  proficiency?: string | null;
+  // Champs spécifiques
+  armor_bonus?: number | null;   // pour Armure
+  shield_bonus?: number | null;  // pour Bouclier
+  proficiency?: string | null;   // uniquement pour Armure
 }
 
 interface EquipmentModalProps {
@@ -21,7 +22,7 @@ interface EquipmentModalProps {
   setIsEditing: (value: boolean) => void;
 }
 
-/* Nouveau modal dédié à l'Armure: Nom, Description, Bonus d'armure, Maîtrise */
+/* Modal Armure: Nom, Description, Bonus d'armure, Maîtrise */
 function ArmorEditModal({
   equipment,
   onClose,
@@ -73,7 +74,7 @@ function ArmorEditModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="input-dark w-full px-3 py-2 rounded-md"
-              placeholder="Ex: Cotte de mailles"
+              placeholder="Ex: Cuir clouté"
             />
           </div>
 
@@ -134,6 +135,104 @@ function ArmorEditModal({
   );
 }
 
+/* Modal Bouclier: Nom, Description, Bonus de bouclier (pas de Maîtrise) */
+function ShieldEditModal({
+  equipment,
+  onClose,
+  onSave,
+  setIsEditing,
+}: {
+  equipment: Equipment | null;
+  onClose: () => void;
+  onSave: (equipment: Equipment) => void;
+  setIsEditing: (value: boolean) => void;
+}) {
+  const [name, setName] = useState<string>(equipment?.name || 'Bouclier');
+  const [description, setDescription] = useState<string>(equipment?.description || '');
+  const [shieldBonus, setShieldBonus] = useState<string>(
+    equipment?.shield_bonus != null ? String(equipment.shield_bonus) : ''
+  );
+
+  const handleSave = () => {
+    const bonus = shieldBonus.trim() === '' ? null : Number.parseInt(shieldBonus, 10);
+    if (shieldBonus.trim() !== '' && Number.isNaN(bonus)) {
+      toast.error("Le bonus de bouclier doit être un nombre");
+      return;
+    }
+    onSave({
+      name: name.trim() || 'Bouclier',
+      description: description.trim(),
+      isTextArea: false,
+      shield_bonus: bonus,
+    });
+    setIsEditing(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full space-y-4">
+        <h3 className="text-lg font-semibold text-gray-100 flex items-center gap-2">
+          <Shield size={20} className="text-blue-500" />
+          Bouclier
+        </h3>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">Nom de l'objet</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="input-dark w-full px-3 py-2 rounded-md"
+              placeholder="Ex: Bouclier en acier"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="input-dark w-full px-3 py-2 rounded-md"
+              rows={4}
+              placeholder="Détails, propriétés, etc."
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">Bonus de bouclier</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={shieldBonus}
+              onChange={(e) => setShieldBonus(e.target.value)}
+              className="input-dark w-full px-3 py-2 rounded-md"
+              placeholder="Ex: 1, 2..."
+            />
+            <p className="text-xs text-gray-500 mt-1">S'ajoute à la CA de base.</p>
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-2">
+          <button onClick={handleSave} className="btn-primary flex-1 px-4 py-2 rounded-lg">
+            Sauvegarder
+          </button>
+          <button
+            onClick={() => {
+              setIsEditing(false);
+              onClose();
+            }}
+            className="btn-secondary px-4 py-2 rounded-lg"
+          >
+            Annuler
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const EquipmentModal = ({ type, equipment, onClose, onSave, setIsEditing }: EquipmentModalProps) => {
   const [text, setText] = useState(
     type === 'armor' ? equipment?.description || '' :
@@ -145,17 +244,15 @@ const EquipmentModal = ({ type, equipment, onClose, onSave, setIsEditing }: Equi
     type === 'jewelry' ? equipment?.description || '' : ''
   );
 
-  // Ne plus utiliser ce petit modal pour l'armure
-  if (type === 'armor') return null;
+  // On n'utilise plus ce petit modal pour armure et bouclier
+  if (type === 'armor' || type === 'shield') return null;
 
   const handleSave = () => {
-    if (type === 'armor' || type === 'potion' || type === 'weapon' || type === 'shield' || type === 'shoes' || type === 'bag' || type === 'jewelry') {
-      onSave({
-        name: getTitle(type),
-        description: text,
-        isTextArea: true
-      });
-    }
+    onSave({
+      name: getTitle(type),
+      description: text,
+      isTextArea: true
+    });
     onClose();
   };
 
@@ -171,9 +268,7 @@ const EquipmentModal = ({ type, equipment, onClose, onSave, setIsEditing }: Equi
         </div>
 
         <textarea
-          placeholder={
-            `Liste des ${getTitle(type).toLowerCase()} en votre possession...`
-          }
+          placeholder={`Liste des ${getTitle(type).toLowerCase()} en votre possession...`}
           value={text}
           onChange={(e) => setText(e.target.value)}
           className="input-dark w-full px-3 py-2 rounded-md"
@@ -205,7 +300,7 @@ const EquipmentModal = ({ type, equipment, onClose, onSave, setIsEditing }: Equi
 const getTitle = (type: 'armor' | 'weapon' | 'shield' | 'potion' | 'shoes' | 'bag' | 'jewelry') => {
   switch (type) {
     case 'potion': return 'Potions';
-    case 'shield': return 'Bouclier / Focalisateur';
+    case 'shield': return 'Bouclier';
     case 'armor': return 'Armure';
     case 'weapon': return 'Armes';
     case 'shoes': return 'Chaussures';
@@ -221,7 +316,7 @@ interface InfoBubbleProps {
   onClose: () => void;
   setIsEditing: (value: boolean) => void;
   type: 'armor' | 'weapon' | 'shield' | 'potion' | 'shoes' | 'jewelry';
-  onDelete?: () => void; // pour armure
+  onDelete?: () => void;
 }
 
 const InfoBubble = ({ equipment, position, onClose, setIsEditing, type, onDelete }: InfoBubbleProps) => {
@@ -241,11 +336,11 @@ const InfoBubble = ({ equipment, position, onClose, setIsEditing, type, onDelete
         <div className="flex items-center justify-between mb-2">
           <h4 className="font-semibold text-gray-100 text-lg">{getTitle(type)}</h4>
           <div className="flex items-center gap-1">
-            {type === 'armor' && onDelete && (
+            {(type === 'armor' || type === 'shield') && onDelete && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (window.confirm("Supprimer l'armure ?")) {
+                  if (window.confirm("Supprimer l'objet ?")) {
                     onDelete();
                   }
                 }}
@@ -276,6 +371,8 @@ const InfoBubble = ({ equipment, position, onClose, setIsEditing, type, onDelete
           {equipment.description && (
             <p className="text-sm text-gray-400">{equipment.description}</p>
           )}
+
+          {/* Détails spécifiques */}
           {type === 'armor' && (
             <div className="mt-2 text-sm text-gray-300 space-y-1">
               {equipment.armor_bonus != null && (
@@ -288,6 +385,17 @@ const InfoBubble = ({ equipment, position, onClose, setIsEditing, type, onDelete
                 <div className="flex items-center justify-between">
                   <span className="text-gray-400">Maîtrise</span>
                   <span className="font-medium text-gray-100">{equipment.proficiency}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {type === 'shield' && (
+            <div className="mt-2 text-sm text-gray-300 space-y-1">
+              {equipment.shield_bonus != null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400">Bonus de bouclier</span>
+                  <span className="font-medium text-gray-100">+{equipment.shield_bonus}</span>
                 </div>
               )}
             </div>
@@ -348,10 +456,8 @@ const EquipmentSlot = ({ icon, position, equipment, onEquip, type, bubblePositio
           setIsEditing={handleEdit}
           type={type}
           onDelete={
-            type === 'armor'
-              ? () => {
-                  onEquip(null);
-                }
+            (type === 'armor' || type === 'shield')
+              ? () => onEquip(null)
               : undefined
           }
         />
@@ -361,6 +467,13 @@ const EquipmentSlot = ({ icon, position, equipment, onEquip, type, bubblePositio
     {isEditing && (
       type === 'armor' ? (
         <ArmorEditModal
+          equipment={equipment}
+          onClose={() => setIsEditing(false)}
+          onSave={(eq) => onEquip(eq)}
+          setIsEditing={setIsEditing}
+        />
+      ) : type === 'shield' ? (
+        <ShieldEditModal
           equipment={equipment}
           onClose={() => setIsEditing(false)}
           onSave={(eq) => onEquip(eq)}
@@ -502,14 +615,14 @@ export function EquipmentTab({
 
       const label =
         type === 'armor' ? 'Armure'
-        : type === 'weapon' ? 'Arme'
-        : type === 'shield' ? 'Bouclier / Focalisateur'
+        : type === 'weapon' ? 'Armes'
+        : type === 'shield' ? 'Bouclier'
         : type === 'potion' ? 'Potions'
         : type === 'shoes' ? 'Chaussures'
         : type === 'bag' ? 'Sac à dos'
         : 'Bijoux';
 
-      toast.success(`${label} ${equipment ? 'mise à jour' : 'supprimée'}`);
+      toast.success(`${label} ${equipment ? 'mis à jour' : 'supprimé'}`);
     } catch (error) {
       console.error('Erreur lors de la mise à jour de l\'équipement:', error);
       toast.error('Erreur lors de la mise à jour');
@@ -621,11 +734,11 @@ export function EquipmentTab({
               bubblePosition="right-[5%] top-[15%]"
             />
             
-            {/* Shield slot (left hand) */}
+            {/* Shield slot */}
             <EquipmentSlot
               icon={<Shield size={24} className="text-blue-500" />}
               position="top-[45%] left-[15%] bg-gray-800/50"
-              equipment={shield || { name: 'Bouclier / Focalisateur', description: '', isTextArea: true }}
+              equipment={shield || { name: 'Bouclier', description: '', isTextArea: false }}
               onEquip={(equipment) => {
                 setShield(equipment as Equipment);
                 saveEquipment('shield', equipment as Equipment);
@@ -634,7 +747,7 @@ export function EquipmentTab({
               bubblePosition="left-[5%] top-[15%]"
             />
             
-            {/* Weapon slot (right hand) */}
+            {/* Weapon slot */}
             <EquipmentSlot
               icon={<Sword size={24} className="text-red-500" />}
               position="top-[45%] right-[15%] bg-gray-800/50"
@@ -673,7 +786,7 @@ export function EquipmentTab({
               bubblePosition="right-[5%] top-[15%]"
             />
 
-            {/* Left shoe slot */}
+            {/* Shoes slot */}
             <EquipmentSlot
               icon={<Shield size={24} className="text-yellow-500" />}
               position="bottom-[5%] left-1/2 -translate-x-1/2 bg-gray-800/50"
