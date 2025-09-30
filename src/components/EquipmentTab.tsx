@@ -1,77 +1,65 @@
 import React, { useMemo, useState } from 'react';
-import { Backpack, Plus, Trash2, Shield, Sword, Settings, FlaskRound as Flask, Star, Coins, Search, X, Check } from 'lucide-react';
+import {
+  Backpack, Plus, Trash2, Shield, Sword, Settings,
+  FlaskRound as Flask, Star, Coins, Search, X, Check, Filter
+} from 'lucide-react';
 import { Player, InventoryItem } from '../types/dnd';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { attackService } from '../services/attackService';
 
-/* ================================= Types ================================= */
+/* ====================== Types & helpers méta ====================== */
 
 interface Equipment {
   name: string;
   description: string;
   isTextArea?: boolean;
-  // Champs spécifiques (utilisés pour affichage/compat)
-  armor_bonus?: number | null;   // autre logique non utilisée si on a une formule
-  shield_bonus?: number | null;  // bonus de bouclier “simple”
-  proficiency?: string | null;   // pour armures (affichage)
-  // Formule d’armure standardisée (si présent, on calcule la CA depuis cette formule)
+
+  // Armure: calcul par formule (remplace la CA de base)
   armor_formula?: {
-    base: number;          // ex 12
-    addDex: boolean;       // true si on ajoute mod DEX
-    dexCap?: number | null; // cap éventuel (max 2 pour intermédiaires)
-    stealthDisadvantage?: boolean;
-    strengthReq?: number | null;
-    kind?: 'light' | 'medium' | 'heavy';
-    label?: string;        // ex “12 + modificateur de Dex (max 2)”
-  } | null;
-}
-
-type CatalogKind = 'armors' | 'shields' | 'weapons' | 'adventuring_gear' | 'tools' | 'custom';
-
-interface CatalogItem {
-  id: string;
-  kind: CatalogKind;
-  name: string;
-  // Champs optionnels selon type
-  // Armure:
-  armor?: {
     base: number;
     addDex: boolean;
     dexCap?: number | null;
     stealthDisadvantage?: boolean;
     strengthReq?: number | null;
     kind?: 'light' | 'medium' | 'heavy';
-    label: string; // ex "12 + modificateur de Dex (max 2)"
-  };
-  // Bouclier:
-  shield?: {
-    bonus: number; // ex +2, +3
-  };
-  // Arme:
-  weapon?: {
-    damageDice: string;      // ex "1d8"
-    damageType: 'Tranchant' | 'Perforant' | 'Contondant';
-    properties: string;      // ex "Finesse, Lancer (portée 6/18)"
-    range: string;           // ex "Corps à corps", "6 m", etc.
-  };
-  // Affichage libre
-  description?: string;
+    label?: string;
+  } | null;
+
+  // Bouclier: simple bonus
+  shield_bonus?: number | null;
 }
 
-/* ================================== Meta dans description d’inventaire ==================================
-   On stocke les informations structurées dans la description en ajoutant UNE LIGNE finale dédiée:
-   #meta:{"type":"armor","quantity":1,"armor":{"base":12,"addDex":true,"dexCap":2,"label":"12 + mod Dex (max 2)"}}
-   ================================================================================================ */
-
 type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment';
+
+interface WeaponMeta {
+  damageDice: string;
+  damageType: 'Tranchant' | 'Perforant' | 'Contondant';
+  properties: string;
+  range: string;
+}
+
+interface ArmorMeta {
+  base: number;
+  addDex: boolean;
+  dexCap?: number | null;
+  stealthDisadvantage?: boolean;
+  strengthReq?: number | null;
+  kind?: 'light' | 'medium' | 'heavy';
+  label: string;
+}
+
+interface ShieldMeta {
+  bonus: number;
+}
 
 interface ItemMeta {
   type: MetaType;
   quantity?: number;
-  armor?: CatalogItem['armor'];
-  shield?: CatalogItem['shield'];
-  weapon?: CatalogItem['weapon'];
+  equipped?: boolean;
+  weapon?: WeaponMeta;
+  armor?: ArmorMeta;
+  shield?: ShieldMeta;
 }
 
 const META_PREFIX = '#meta:';
@@ -83,14 +71,13 @@ function parseMeta(description: string | null | undefined): ItemMeta | null {
   if (!metaLine) return null;
   try {
     const json = metaLine.slice(META_PREFIX.length);
-    const meta = JSON.parse(json);
-    return meta;
+    return JSON.parse(json);
   } catch {
     return null;
   }
 }
 
-function injectMetaIntoDescription(desc: string | undefined | null, meta: ItemMeta): string {
+function injectMetaIntoDescription(desc: string | null | undefined, meta: ItemMeta): string {
   const base = (desc || '').trim();
   const noOldMeta = base
     .split('\n')
@@ -101,10 +88,32 @@ function injectMetaIntoDescription(desc: string | undefined | null, meta: ItemMe
   return (noOldMeta ? `${noOldMeta}\n` : '') + metaLine;
 }
 
-/* =============================== Fetch + Parsing du catalogue (Ultimate_Tracker) =============================== */
+// Supprime " (xxx po|pa|pc)" du nom
+function stripPriceParentheses(name: string): string {
+  return name.replace(/\s*\((?:\d+|\w+|\s|,|\.|\/|-)+\s*p[oa]?\)\s*$/i, '').trim();
+}
+
+// Supprime la ligne #meta: de l’affichage de description
+function visibleDescription(desc: string | null | undefined): string {
+  if (!desc) return '';
+  return desc.split('\n').filter((l) => !l.trim().startsWith(META_PREFIX)).join('\n').trim();
+}
+
+/* ====================== Fetch + Parsing “Liste d’équipement” ====================== */
+
+type CatalogKind = 'armors' | 'shields' | 'weapons' | 'adventuring_gear' | 'tools';
+
+interface CatalogItem {
+  id: string;
+  kind: CatalogKind;
+  name: string;
+  description?: string;
+  armor?: ArmorMeta;
+  shield?: ShieldMeta;
+  weapon?: WeaponMeta;
+}
 
 const ULT_BASE = 'https://raw.githubusercontent.com/Moze75/Ultimate_Tracker/main/Equipements';
-
 const URLS = {
   armors: `${ULT_BASE}/Armures.md`,
   shields: `${ULT_BASE}/Boucliers.md`,
@@ -119,440 +128,498 @@ async function fetchText(url: string): Promise<string> {
   return await res.text();
 }
 
-// Simple parseur de tableaux markdown “pipe”
 function parseMarkdownTable(md: string): string[][] {
   const rows: string[][] = [];
   const lines = md.split('\n');
   for (const line of lines) {
     const l = line.trim();
     if (l.startsWith('|') && l.endsWith('|') && l.includes('|')) {
-      // enlever | et splitter
       const cells = l.substring(1, l.length - 1).split('|').map(c => c.trim());
-      // ignorer lignes de séparation "---"
-      if (cells.every(c => c.match(/^[-:\s]+$/))) continue;
+      // ignorer séparateurs
+      if (cells.every(c => /^[-:\s]+$/.test(c))) continue;
       rows.push(cells);
     }
   }
   return rows;
 }
 
-// ARMURES
+// Armures (tables)
 function parseArmors(md: string): CatalogItem[] {
-  // On récupère tous les tableaux; on ne dépend pas des titres exacts
-  // Attendu colonnes: Armures | Classe d'armure (CA) | Force | Discrétion
   const rows = parseMarkdownTable(md);
   const items: CatalogItem[] = [];
-  // détecter header
-  // On garde les lignes où la CA est non vide
   for (const row of rows) {
     if (row.length < 4) continue;
-    const [nom, ca, force, discr] = row;
-    if (nom.toLowerCase().includes('armures')) continue; // header
-    if (!nom || !ca || nom === 'Armures') continue;
-    // Ex de ca:
-    // "11 + modificateur de Dex"
-    // "13 + modificateur de Dex (max 2)"
-    // "16"
-    const caStr = ca;
-    const dexMatch = caStr.match(/(\d+)\s*\+\s*modificateur de Dex(?:\s*\(max\s*(\d+)\))?/i);
-    let base = 10;
-    let addDex = false;
-    let dexCap: number | null | undefined = null;
+    const [nomRaw, ca, force, discr] = row;
+    if (!nomRaw || nomRaw.toLowerCase().includes('armures')) continue;
+    const nom = stripPriceParentheses(nomRaw);
+
+    let base = 10, addDex = false, dexCap: number | null = null;
+    const dexMatch = ca.match(/(\d+)\s*\+\s*modificateur de Dex(?:\s*\(max\s*(\d+)\))?/i);
     if (dexMatch) {
       base = parseInt(dexMatch[1], 10);
       addDex = true;
       dexCap = dexMatch[2] ? parseInt(dexMatch[2], 10) : null;
     } else {
-      const justBase = caStr.match(/^\s*(\d+)\s*$/);
+      const justBase = ca.match(/^\s*(\d+)\s*$/);
       if (justBase) {
         base = parseInt(justBase[1], 10);
         addDex = false;
         dexCap = null;
-      } else {
-        // fallback
-        base = 10;
-        addDex = false;
-        dexCap = null;
       }
     }
+
     const stealthDisadvantage = /désavantage/i.test(discr || '');
     let strengthReq: number | null = null;
     const strMatch = (force || '').match(/For\s*(\d+)/i);
     if (strMatch) strengthReq = parseInt(strMatch[1], 10);
 
-    // Déduire type depuis ordre du fichier si possible (facultatif)
     let kind: 'light' | 'medium' | 'heavy' | undefined = undefined;
-    // heuristique simple:
     if (/matelassée|cuir|clouté/i.test(nom)) kind = 'light';
     else if (/peaux|chemise de mailles|écailles|cuirasse|demi-plate/i.test(nom)) kind = 'medium';
-    else kind = 'heavy'; // broigne, cotte de mailles, etc.
+    else kind = 'heavy';
 
     items.push({
       id: `armor:${nom}`,
       kind: 'armors',
       name: nom,
-      armor: {
-        base,
-        addDex,
-        dexCap,
-        kind,
-        stealthDisadvantage,
-        strengthReq,
-        label: caStr
-      },
       description: `Force: ${force || '—'} • Discrétion: ${discr || '—'}`,
+      armor: { base, addDex, dexCap, stealthDisadvantage, strengthReq, kind, label: ca },
     });
   }
   return items;
 }
 
-// BOUCLIERS
+// Boucliers (table)
 function parseShields(md: string): CatalogItem[] {
-  // colonnes attendues: Armures | Classe d'armure (CA) | Force | Discrétion
   const rows = parseMarkdownTable(md);
   const items: CatalogItem[] = [];
   for (const row of rows) {
-    if (row.length < 4) continue;
-    const [nom, ca] = row;
-    if (!nom || !ca || nom.toLowerCase().includes('armures')) continue;
+    if (row.length < 2) continue;
+    const [nomRaw, ca] = row;
+    if (!nomRaw || nomRaw.toLowerCase().includes('armures')) continue;
+    const nom = stripPriceParentheses(nomRaw);
     const m = ca.match(/\+?\s*(\d+)/);
     const bonus = m ? parseInt(m[1], 10) : 2;
     items.push({
       id: `shield:${nom}`,
       kind: 'shields',
       name: nom,
-      shield: { bonus },
       description: `Bonus de CA: +${bonus}`,
+      shield: { bonus },
     });
   }
   return items;
 }
 
-// ARMES
+// Armes (tables)
 function parseWeapons(md: string): CatalogItem[] {
-  // Attendu colonnes: Nom | Dégâts | Propriétés | Botte d'arme
+  // colonnes: Nom | Dégâts | Propriétés | Botte d'arme (on n'utilise pas la botte)
   const rows = parseMarkdownTable(md);
   const items: CatalogItem[] = [];
   for (const row of rows) {
     if (row.length < 3) continue;
-    const [nom, degats, props] = row;
-    if (!nom || nom.toLowerCase() === 'nom') continue;
-    const dmgDiceMatch = (degats || '').match(/(\d+d\d+)/i);
-    const damageDice = dmgDiceMatch ? dmgDiceMatch[1] : '1d6';
-    // Type à partir de “1d6 contondants / tranchants / perforants”
+    const [nomRaw, degats, props] = row;
+    if (!nomRaw || nomRaw.toLowerCase() === 'nom') continue;
+    const nom = stripPriceParentheses(nomRaw);
+
+    const dmgMatch = (degats || '').match(/(\d+d\d+)/i);
+    const damageDice = dmgMatch ? dmgMatch[1] : '1d6';
+
     let damageType: 'Tranchant' | 'Perforant' | 'Contondant' = 'Tranchant';
     if (/contondant/i.test(degats)) damageType = 'Contondant';
     else if (/perforant/i.test(degats)) damageType = 'Perforant';
     else if (/tranchant/i.test(degats)) damageType = 'Tranchant';
 
-    // Range: si propriétés contiennent “portée X/Y” on prend la première distance, sinon “Corps à corps”
     let range = 'Corps à corps';
     const pm = (props || '').match(/portée\s*([\d,\.\/\s]+)/i);
     if (pm) {
-      // ex "24/96" => on met "24 m"
       const first = pm[1].trim().split(/[\/\s]/)[0]?.trim() || '';
       if (first) range = `${first} m`;
     }
+
     items.push({
       id: `weapon:${nom}`,
       kind: 'weapons',
       name: nom,
-      weapon: {
-        damageDice,
-        damageType,
-        properties: props || '',
-        range
-      },
       description: `Dégâts: ${degats} • Propriétés: ${props || '—'}`,
+      weapon: { damageDice, damageType, properties: props || '', range },
     });
   }
   return items;
 }
 
-// ÉQUIPEMENTS D’AVENTURIER et OUTILS: on liste les titres “## ...”
-function parseTitledList(md: string, kind: CatalogKind): CatalogItem[] {
+// Sections (## Titre (prix) ... jusqu’à prochain ## ou ---)
+function parseSectionedList(md: string, kind: CatalogKind): CatalogItem[] {
   const items: CatalogItem[] = [];
   const lines = md.split('\n');
-  for (const line of lines) {
-    const m = line.match(/^##\s+(.+?)\s*$/);
-    if (m) {
-      const name = m[1].trim();
-      items.push({
-        id: `${kind}:${name}`,
-        kind,
-        name,
-        description: '',
-      });
+  let current: { name: string; descLines: string[] } | null = null;
+
+  const flush = () => {
+    if (!current) return;
+    const name = stripPriceParentheses(current.name);
+    const description = current.descLines.join('\n').trim();
+    items.push({
+      id: `${kind}:${name}`,
+      kind,
+      name,
+      description,
+    });
+    current = null;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const h = line.match(/^##\s+(.+?)\s*$/);
+    if (h) {
+      if (current) flush();
+      current = { name: h[1].trim(), descLines: [] };
+      continue;
     }
+    if (/^---\s*$/.test(line)) {
+      if (current) {
+        flush();
+        continue;
+      }
+    }
+    if (current) current.descLines.push(line);
   }
+  if (current) flush();
+
   return items;
 }
 
-/* ============================== Modal: Catalogue d’équipement ============================== */
+/* ====================== Modal Liste d’équipement (catalogue) ====================== */
 
-function CatalogModal({
+type FilterState = {
+  weapons: boolean;
+  armors: boolean;
+  shields: boolean;
+  adventuring_gear: boolean;
+  tools: boolean;
+};
+
+function EquipmentListModal({
   onClose,
   onAddItem,
 }: {
   onClose: () => void;
   onAddItem: (item: { name: string; description?: string; meta: ItemMeta }) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<CatalogKind>('weapons');
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
-  const [list, setList] = useState<CatalogItem[]>([]);
+  const [all, setAll] = useState<CatalogItem[]>([]);
   const [quantity, setQuantity] = useState<number>(1);
-
-  // Custom fields
-  const [customName, setCustomName] = useState('');
-  const [customDesc, setCustomDesc] = useState('');
-  const [customType, setCustomType] = useState<MetaType>('equipment');
-
-  const loadTab = async (tab: CatalogKind) => {
-    if (tab === 'custom') {
-      setList([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const url = URLS[tab as keyof typeof URLS];
-      const text = await fetchText(url);
-      let items: CatalogItem[] = [];
-      if (tab === 'armors') items = parseArmors(text);
-      else if (tab === 'shields') items = parseShields(text);
-      else if (tab === 'weapons') items = parseWeapons(text);
-      else if (tab === 'adventuring_gear') items = parseTitledList(text, 'adventuring_gear');
-      else if (tab === 'tools') items = parseTitledList(text, 'tools');
-      setList(items);
-    } catch (e) {
-      console.error(e);
-      toast.error('Erreur de chargement du catalogue');
-      setList([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [filters, setFilters] = useState<FilterState>({
+    weapons: true, armors: true, shields: true, adventuring_gear: true, tools: true
+  });
+  const [showFilters, setShowFilters] = useState(false);
 
   React.useEffect(() => {
-    loadTab(activeTab);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [armorsMd, shieldsMd, weaponsMd, gearMd, toolsMd] = await Promise.all([
+          fetchText(URLS.armors),
+          fetchText(URLS.shields),
+          fetchText(URLS.weapons),
+          fetchText(URLS.adventuring_gear),
+          fetchText(URLS.tools),
+        ]);
+        const items: CatalogItem[] = [
+          ...parseArmors(armorsMd),
+          ...parseShields(shieldsMd),
+          ...parseWeapons(weaponsMd),
+          ...parseSectionedList(gearMd, 'adventuring_gear'),
+          ...parseSectionedList(toolsMd, 'tools'),
+        ];
+        setAll(items);
+      } catch (e) {
+        console.error(e);
+        toast.error('Erreur de chargement de la liste');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter(i => i.name.toLowerCase().includes(q));
-  }, [list, query]);
+    return all.filter(ci => {
+      if (!filters[ci.kind]) return false;
+      if (!q) return true;
+      return ci.name.toLowerCase().includes(q);
+    });
+  }, [all, query, filters]);
 
   const handlePick = (ci: CatalogItem) => {
     if (quantity <= 0) {
       toast.error('Quantité invalide');
       return;
     }
-    let meta: ItemMeta = { type: 'equipment', quantity };
-    if (ci.kind === 'armors' && ci.armor) {
-      meta = { type: 'armor', quantity, armor: ci.armor };
-    } else if (ci.kind === 'shields' && ci.shield) {
-      meta = { type: 'shield', quantity, shield: ci.shield };
-    } else if (ci.kind === 'weapons' && ci.weapon) {
-      meta = { type: 'weapon', quantity, weapon: ci.weapon };
-    } else if (ci.kind === 'adventuring_gear' || ci.kind === 'tools') {
-      meta = { type: 'equipment', quantity };
-    }
+    let meta: ItemMeta = { type: 'equipment', quantity, equipped: false };
+    if (ci.kind === 'armors' && ci.armor) meta = { type: 'armor', quantity, equipped: false, armor: ci.armor };
+    if (ci.kind === 'shields' && ci.shield) meta = { type: 'shield', quantity, equipped: false, shield: ci.shield };
+    if (ci.kind === 'weapons' && ci.weapon) meta = { type: 'weapon', quantity, equipped: false, weapon: ci.weapon };
+
     onAddItem({
       name: ci.name,
-      description: ci.description || '',
-      meta,
-    });
-  };
-
-  const handleAddCustom = () => {
-    if (!customName.trim()) {
-      toast.error("Nom requis");
-      return;
-    }
-    if (quantity <= 0) {
-      toast.error('Quantité invalide');
-      return;
-    }
-    const meta: ItemMeta = { type: customType, quantity };
-    onAddItem({
-      name: customName.trim(),
-      description: customDesc.trim(),
+      description: (ci.description || '').trim(),
       meta,
     });
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-gray-900/95 border border-gray-800 rounded-xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-          <div className="flex items-center gap-2">
-            <Search className="w-5 h-5 text-gray-400" />
+    <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-3" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-gray-900/95 border border-gray-800 rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800">
+          <div className="flex items-center gap-2 min-w-0">
+            <Search className="w-5 h-5 text-gray-400 shrink-0" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher dans l’onglet courant…"
-              className="input-dark px-3 py-2 rounded-md w-64"
+              placeholder="Rechercher…"
+              className="input-dark px-3 py-2 rounded-md w-40 sm:w-64 md:w-80"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={activeTab}
-              onChange={(e) => setActiveTab(e.target.value as CatalogKind)}
-              className="input-dark px-3 py-2 rounded-md"
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="hidden sm:flex items-center gap-2">
+              <label className="text-sm text-gray-400">Qté</label>
+              <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(parseInt(e.target.value) || 1)} className="input-dark w-20 px-2 py-2 rounded-md" />
+            </div>
+            <button
+              onClick={() => setShowFilters(v => !v)}
+              className="px-2 py-2 rounded-md border border-gray-700 hover:bg-gray-800/60 text-gray-200 flex items-center gap-1"
+              title="Filtres"
             >
-              <option value="weapons">Armes</option>
-              <option value="armors">Armures</option>
-              <option value="shields">Boucliers</option>
-              <option value="adventuring_gear">Équipements d’aventurier</option>
-              <option value="tools">Outils</option>
-              <option value="custom">Personnalisé</option>
-            </select>
+              <Filter className="w-4 h-4" />
+              <span className="hidden sm:inline">Filtres</span>
+            </button>
             <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg">
               <X />
             </button>
           </div>
         </div>
 
-        {activeTab === 'custom' ? (
-          <div className="p-4 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Nom</label>
-                <input className="input-dark w-full px-3 py-2 rounded-md" value={customName} onChange={e => setCustomName(e.target.value)} />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Type</label>
-                <select className="input-dark w-full px-3 py-2 rounded-md" value={customType} onChange={e => setCustomType(e.target.value as MetaType)}>
-                  <option value="equipment">Équipement</option>
-                  <option value="potion">Potion</option>
-                  <option value="weapon">Arme</option>
-                  <option value="armor">Armure</option>
-                  <option value="shield">Bouclier</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Description</label>
-              <textarea className="input-dark w-full px-3 py-2 rounded-md" rows={3} value={customDesc} onChange={e => setCustomDesc(e.target.value)} />
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="text-sm text-gray-400">Quantité</label>
-              <input type="number" min={1} className="input-dark w-24 px-3 py-2 rounded-md" value={quantity} onChange={e => setQuantity(parseInt(e.target.value) || 1)} />
-            </div>
-            <div className="pt-2">
-              <button onClick={handleAddCustom} className="btn-primary px-4 py-2 rounded-lg">Ajouter</button>
-            </div>
+        {showFilters && (
+          <div className="px-3 py-2 border-b border-gray-800 flex flex-wrap gap-2">
+            {(['weapons','armors','shields','adventuring_gear','tools'] as CatalogKind[]).map(k => (
+              <button
+                key={k}
+                onClick={() => setFilters(prev => ({ ...prev, [k]: !prev[k as keyof FilterState] }))}
+                className={`px-2 py-1 rounded text-xs border ${
+                  (filters as any)[k] ? 'border-red-500/40 text-red-300 bg-red-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-800/40'
+                }`}
+              >
+                {k === 'weapons' ? 'Armes' :
+                 k === 'armors' ? 'Armures' :
+                 k === 'shields' ? 'Boucliers' :
+                 k === 'adventuring_gear' ? 'Équipements' : 'Outils'}
+              </button>
+            ))}
           </div>
-        ) : (
-          <>
-            <div className="px-4 py-2 border-b border-gray-800">
-              <div className="flex items-center gap-3">
-                <label className="text-sm text-gray-400">Quantité</label>
-                <input type="number" min={1} className="input-dark w-24 px-3 py-2 rounded-md" value={quantity} onChange={e => setQuantity(parseInt(e.target.value) || 1)} />
-              </div>
-            </div>
-
-            <div className="p-4 overflow-y-auto max-h-[65vh] space-y-2">
-              {loading ? (
-                <div className="text-gray-400">Chargement…</div>
-              ) : filtered.length === 0 ? (
-                <div className="text-gray-500 text-sm">Aucun résultat</div>
-              ) : (
-                filtered.map(ci => (
-                  <div key={ci.id} className="p-3 rounded-md bg-gray-800/50 border border-gray-700/50 flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="text-gray-100 font-medium">{ci.name}</div>
-                      <div className="text-sm text-gray-400">
-                        {ci.kind === 'armors' && ci.armor && <>CA: {ci.armor.label} {ci.armor.stealthDisadvantage ? '• Désavantage Discrétion' : ''}</>}
-                        {ci.kind === 'shields' && ci.shield && <>Bonus de bouclier: +{ci.shield.bonus}</>}
-                        {ci.kind === 'weapons' && ci.weapon && <>Dégâts: {ci.weapon.damageDice} {ci.weapon.damageType} • Props: {ci.weapon.properties || '—'}</>}
-                        {(ci.kind === 'adventuring_gear' || ci.kind === 'tools') && (ci.description || 'Équipement')}</div>
-                    </div>
-                    <button onClick={() => handlePick(ci)} className="btn-primary px-3 py-2 rounded-lg flex items-center gap-1">
-                      <Check className="w-4 h-4" /> Ajouter
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </>
         )}
+
+        {/* List */}
+        <div className="p-3 overflow-y-auto max-h-[70vh] space-y-2">
+          {loading ? (
+            <div className="text-gray-400">Chargement…</div>
+          ) : filtered.length === 0 ? (
+            <div className="text-gray-500 text-sm">Aucun résultat</div>
+          ) : (
+            filtered.map(ci => (
+              <div key={ci.id} className="p-3 rounded-md bg-gray-800/50 border border-gray-700/50 flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-gray-100 font-medium truncate">{ci.name}</div>
+                  <div className="text-sm text-gray-400 whitespace-pre-wrap">
+                    {ci.kind === 'armors' && ci.armor && `CA: ${ci.armor.label}${ci.armor.stealthDisadvantage ? ' • Désavantage Discrétion' : ''}`}
+                    {ci.kind === 'shields' && ci.shield && `Bonus de bouclier: +${ci.shield.bonus}`}
+                    {ci.kind === 'weapons' && ci.weapon && `Dégâts: ${ci.weapon.damageDice} ${ci.weapon.damageType} • Props: ${ci.weapon.properties || '—'}`}
+                    {(ci.kind === 'adventuring_gear' || ci.kind === 'tools') && (ci.description || 'Équipement')}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="sm:hidden">
+                    <label className="text-xs text-gray-400 mr-1">Qté</label>
+                    <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(parseInt(e.target.value) || 1)} className="input-dark w-16 px-2 py-1 rounded-md" />
+                  </div>
+                  <button onClick={() => handlePick(ci)} className="btn-primary px-3 py-2 rounded-lg flex items-center gap-1 shrink-0">
+                    <Check className="w-4 h-4" /> Ajouter
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-/* ============================== Modals Armure/Bouclier (édition simple texte conservée pour autres) ============================== */
+/* ====================== Modal “Objet personnalisé” ====================== */
 
-interface EquipmentModalProps {
-  type: 'armor' | 'weapon' | 'shield' | 'potion' | 'shoes' | 'bag' | 'jewelry';
-  equipment: Equipment | null;
+function CustomItemModal({
+  onClose,
+  onAdd,
+}: {
   onClose: () => void;
-  onSave: (equipment: Equipment) => void;
-  setIsEditing: (value: boolean) => void;
-}
+  onAdd: (payload: { name: string; description: string; meta: ItemMeta }) => void;
+}) {
+  const [name, setName] = useState('');
+  const [type, setType] = useState<MetaType>('equipment');
+  const [description, setDescription] = useState('');
+  const [quantity, setQuantity] = useState(1);
 
-const EquipmentModal = ({ type, equipment, onClose, onSave, setIsEditing }: EquipmentModalProps) => {
-  // On n’utilise plus ce petit modal pour armor/shield (géré via sac + équiper)
-  if (type === 'armor' || type === 'shield') return null;
+  // Armure
+  const [armBase, setArmBase] = useState<number>(12);
+  const [armAddDex, setArmAddDex] = useState<boolean>(true);
+  const [armDexCap, setArmDexCap] = useState<number | ''>(2);
+  const [armKind, setArmKind] = useState<'light' | 'medium' | 'heavy'>('medium');
 
-  const [text, setText] = useState(
-    equipment?.description || ''
-  );
+  // Bouclier
+  const [shieldBonus, setShieldBonus] = useState<number>(2);
 
-  const handleSave = () => {
-    onSave({
-      name: getTitle(type),
-      description: text,
-      isTextArea: true
-    });
+  // Arme
+  const [wDice, setWDice] = useState('1d6');
+  const [wType, setWType] = useState<'Tranchant' | 'Perforant' | 'Contondant'>('Tranchant');
+  const [wProps, setWProps] = useState('');
+  const [wRange, setWRange] = useState('Corps à corps');
+
+  const add = () => {
+    const cleanName = stripPriceParentheses(name.trim());
+    if (!cleanName) {
+      toast.error('Nom requis');
+      return;
+    }
+    if (quantity <= 0) {
+      toast.error('Quantité invalide');
+      return;
+    }
+    let meta: ItemMeta = { type, quantity, equipped: false };
+    if (type === 'armor') {
+      const cap = armDexCap === '' ? null : Number(armDexCap);
+      const label = `${armBase}${armAddDex ? ` + modificateur de Dex${cap != null ? ` (max ${cap})` : ''}` : ''}`;
+      meta.armor = { base: armBase, addDex: armAddDex, dexCap: cap, kind: armKind, label };
+    } else if (type === 'shield') {
+      meta.shield = { bonus: shieldBonus };
+    } else if (type === 'weapon') {
+      meta.weapon = { damageDice: wDice, damageType: wType, properties: wProps, range: wRange };
+    }
+    onAdd({ name: cleanName, description: description.trim(), meta });
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full space-y-4">
-        <div className="flex items-center gap-2">
-          {type === 'potion' ? <Flask size={20} className="text-green-500" /> : null}
-          {type === 'weapon' ? <Sword size={20} className="text-red-500" /> : null}
-          <h3 className="text-lg font-semibold text-gray-100">
-            {getTitle(type)}
-          </h3>
+    <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-3" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-gray-900/95 border border-gray-800 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-lg font-semibold text-gray-100">Objet personnalisé</h3>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg">
+            <X />
+          </button>
         </div>
 
-        <textarea
-          placeholder={`Liste des ${getTitle(type).toLowerCase()} en votre possession...`}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          className="input-dark w-full px-3 py-2 rounded-md"
-          rows={8}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Nom</label>
+            <input className="input-dark w-full px-3 py-2 rounded-md" value={name} onChange={e => setName(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Type</label>
+            <select className="input-dark w-full px-3 py-2 rounded-md" value={type} onChange={e => setType(e.target.value as MetaType)}>
+              <option value="equipment">Équipement</option>
+              <option value="potion">Potion</option>
+              <option value="weapon">Arme</option>
+              <option value="armor">Armure</option>
+              <option value="shield">Bouclier</option>
+            </select>
+          </div>
+        </div>
 
-        <div className="flex gap-2 pt-4">
-          <button
-            onClick={handleSave}
-            className="btn-primary flex-1 px-4 py-2 rounded-lg"
-          >
-            Sauvegarder
-          </button>
-          <button
-            onClick={() => {
-              setIsEditing(false);
-              onClose();
-            }}
-            className="btn-secondary px-4 py-2 rounded-lg"
-          >
-            Annuler
-          </button>
+        {/* Champs spécifiques */}
+        {type === 'armor' && (
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Base CA</label>
+              <input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={armBase} onChange={e => setArmBase(parseInt(e.target.value) || 10)} />
+            </div>
+            <div className="flex items-center gap-2">
+              <input id="addDex" type="checkbox" checked={armAddDex} onChange={e => setArmAddDex(e.target.checked)} />
+              <label htmlFor="addDex" className="text-sm text-gray-300">Ajoute mod DEX</label>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Cap DEX (vide = illimité)</label>
+              <input
+                type="number"
+                className="input-dark w-full px-3 py-2 rounded-md"
+                value={armDexCap}
+                onChange={e => setArmDexCap(e.target.value === '' ? '' : parseInt(e.target.value))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Catégorie</label>
+              <select className="input-dark w-full px-3 py-2 rounded-md" value={armKind} onChange={e => setArmKind(e.target.value as any)}>
+                <option value="light">Légère</option>
+                <option value="medium">Intermédiaire</option>
+                <option value="heavy">Lourde</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {type === 'shield' && (
+          <div className="mt-3">
+            <label className="block text-sm text-gray-400 mb-1">Bonus de bouclier</label>
+            <input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={shieldBonus} onChange={e => setShieldBonus(parseInt(e.target.value) || 0)} />
+          </div>
+        )}
+
+        {type === 'weapon' && (
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Dés de dégâts</label>
+              <input className="input-dark w-full px-3 py-2 rounded-md" value={wDice} onChange={e => setWDice(e.target.value)} placeholder="1d6" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Type de dégâts</label>
+              <select className="input-dark w-full px-3 py-2 rounded-md" value={wType} onChange={e => setWType(e.target.value as any)}>
+                <option>Tranchant</option>
+                <option>Perforant</option>
+                <option>Contondant</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Propriétés</label>
+              <input className="input-dark w-full px-3 py-2 rounded-md" value={wProps} onChange={e => setWProps(e.target.value)} placeholder="Finesse, Polyvalente..." />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Portée</label>
+              <input className="input-dark w-full px-3 py-2 rounded-md" value={wRange} onChange={e => setWRange(e.target.value)} placeholder="Corps à corps, 6 m..." />
+            </div>
+          </div>
+        )}
+
+        <div className="mt-3">
+          <label className="block text-sm text-gray-400 mb-1">Description</label>
+          <textarea className="input-dark w-full px-3 py-2 rounded-md" rows={3} value={description} onChange={e => setDescription(e.target.value)} />
+        </div>
+
+        <div className="mt-3 flex items-center gap-3">
+          <label className="text-sm text-gray-400">Quantité</label>
+          <input type="number" min={1} className="input-dark w-24 px-3 py-2 rounded-md" value={quantity} onChange={e => setQuantity(parseInt(e.target.value) || 1)} />
+        </div>
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={add} className="btn-primary px-4 py-2 rounded-lg">Ajouter</button>
+          <button onClick={onClose} className="btn-secondary px-4 py-2 rounded-lg">Annuler</button>
         </div>
       </div>
     </div>
   );
-};
+}
 
-/* ================================== InfoBubble affichage (inchangé sauf affichage formule) ================================== */
+/* ====================== InfoBubble (slots) – inchangé visu formule/bonus ====================== */
 
 const getTitle = (type: 'armor' | 'weapon' | 'shield' | 'potion' | 'shoes' | 'bag' | 'jewelry') => {
   switch (type) {
@@ -595,12 +662,7 @@ const InfoBubble = ({ equipment, position, onClose, setIsEditing, type, onDelete
           <div className="flex items-center gap-1">
             {(type === 'armor' || type === 'shield') && onDelete && (
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (window.confirm("Supprimer l'objet ?")) {
-                    onDelete();
-                  }
-                }}
+                onClick={(e) => { e.stopPropagation(); if (window.confirm("Supprimer l'objet ?")) onDelete(); }}
                 className="p-2 text-gray-400 hover:bg-gray-700/50 rounded-lg transition-colors hover:text-red-500"
                 title="Supprimer l'objet"
               >
@@ -608,10 +670,7 @@ const InfoBubble = ({ equipment, position, onClose, setIsEditing, type, onDelete
               </button>
             )}
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsEditing(true);
-              }}
+              onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
               className="p-2 text-gray-400 hover:bg-gray-700/50 rounded-lg transition-colors hover:text-red-500"
               title="Modifier"
             >
@@ -621,12 +680,8 @@ const InfoBubble = ({ equipment, position, onClose, setIsEditing, type, onDelete
         </div>
 
         <div className="space-y-1">
-          {equipment.name && (
-            <h5 className="font-medium text-gray-100">{equipment.name}</h5>
-          )}
-          {equipment.description && (
-            <p className="text-sm text-gray-400">{equipment.description}</p>
-          )}
+          {equipment.name && <h5 className="font-medium text-gray-100">{equipment.name}</h5>}
+          {equipment.description && <p className="text-sm text-gray-400">{equipment.description}</p>}
 
           {type === 'armor' && equipment.armor_formula && (
             <div className="mt-2 text-sm text-gray-300 space-y-1">
@@ -651,7 +706,7 @@ const InfoBubble = ({ equipment, position, onClose, setIsEditing, type, onDelete
   );
 };
 
-/* ================================= Slot équipement (ouvre info + édition) ================================= */
+/* ====================== Equipment Slot ====================== */
 
 interface EquipmentSlotProps {
   icon: React.ReactNode;
@@ -672,50 +727,40 @@ const EquipmentSlot = ({ icon, position, equipment, onEquip, type, bubblePositio
     setShowInfo(prev => !prev);
   };
 
-  const handleClose = () => {
-    setShowInfo(false);
-  };
+  const handleClose = () => setShowInfo(false);
+  const handleEdit = () => { setShowInfo(false); setIsEditing(true); };
 
-  const handleEdit = () => {
-    setShowInfo(false);
-    setIsEditing(true);
-  };
+  return (
+    <>
+      <button
+        onClick={handleClick}
+        className={`absolute ${position} ${type === 'bag' ? 'w-24 h-24' : 'w-12 h-12'} rounded-lg hover:bg-gray-700/20 transition-all duration-200 border border-gray-600/50 hover:border-gray-500/50 flex items-center justify-center cursor-pointer`}
+        style={{ zIndex: showInfo ? 50 : 10 }}
+      >
+        <div className="w-full h-full flex items-center justify-center">
+          {type === 'bag' ? icon : React.cloneElement(icon as React.ReactElement, { size: 24 })}
+        </div>
+      </button>
 
-  return (<>
-    <button
-      onClick={handleClick}
-      className={`absolute ${position} ${type === 'bag' ? 'w-24 h-24' : 'w-12 h-12'} rounded-lg hover:bg-gray-700/20 transition-all duration-200 border border-gray-600/50 hover:border-gray-500/50 flex items-center justify-center cursor-pointer`}
-      style={{ zIndex: showInfo ? 50 : 10 }}
-    >
-      <div className="w-full h-full flex items-center justify-center">
-        {type === 'bag' ? icon : React.cloneElement(icon as React.ReactElement, { size: 24 })}
-      </div>
-    </button>
+      {showInfo && (
+        <InfoBubble
+          equipment={equipment}
+          position={bubblePosition}
+          onClose={handleClose}
+          setIsEditing={handleEdit}
+          type={type}
+          onDelete={(type === 'armor' || type === 'shield') ? () => onEquip(null) : undefined}
+        />
+      )}
 
-    {showInfo && (
-      <InfoBubble
-        equipment={equipment}
-        position={bubblePosition}
-        onClose={handleClose}
-        setIsEditing={handleEdit}
-        type={type}
-        onDelete={(type === 'armor' || type === 'shield') ? () => onEquip(null) : undefined}
-      />
-    )}
-
-    {isEditing && (
-      <EquipmentModal
-        type={type}
-        equipment={equipment}
-        onClose={() => setIsEditing(false)}
-        onSave={(eq) => onEquip(eq)}
-        setIsEditing={setIsEditing}
-      />
-    )}
-  </>);
+      {isEditing && (
+        <div /> /* Les slots armor/shield ne s’éditent plus via petit modal; on passe par le sac */
+      )}
+    </>
+  );
 };
 
-/* ================================== Composants Monnaie ================================== */
+/* ====================== Main component ====================== */
 
 interface EquipmentTabProps {
   player: Player;
@@ -726,97 +771,28 @@ interface EquipmentTabProps {
 
 type Currency = 'gold' | 'silver' | 'copper';
 
-interface CurrencyInputProps {
-  currency: Currency;
-  value: number;
-  onAdd: (amount: number) => void;
-  onSpend: (amount: number) => void;
-}
-
-const CurrencyInput = ({ currency, value, onAdd, onSpend }: CurrencyInputProps) => {
+const CurrencyInput = ({ currency, value, onAdd, onSpend }: {
+  currency: Currency; value: number; onAdd: (n: number) => void; onSpend: (n: number) => void;
+}) => {
   const [amount, setAmount] = useState<string>('');
-
-  const getCurrencyColor = (curr: Currency) => {
-    switch (curr) {
-      case 'gold': return 'text-yellow-500';
-      case 'silver': return 'text-gray-300';
-      case 'copper': return 'text-orange-400';
-      default: return 'text-gray-300';
-    }
+  const getCurrencyColor = (c: Currency) => c === 'gold' ? 'text-yellow-500' : c === 'silver' ? 'text-gray-300' : 'text-orange-400';
+  const getCurrencyName = (c: Currency) => c === 'gold' ? 'Or' : c === 'silver' ? 'Argent' : 'Cuivre';
+  const handleAction = (add: boolean) => {
+    const n = parseInt(amount) || 0;
+    if (n > 0) { (add ? onAdd : onSpend)(n); setAmount(''); }
   };
-
-  const getCurrencyName = (curr: Currency) => {
-    switch (curr) {
-      case 'gold': return 'Or';
-      case 'silver': return 'Argent';
-      case 'copper': return 'Cuivre';
-      default: return curr;
-    }
-  };
-
-  const handleAction = (isAdding: boolean) => {
-    const numAmount = parseInt(amount) || 0;
-    if (numAmount > 0) {
-      isAdding ? onAdd(numAmount) : onSpend(numAmount);
-      setAmount('');
-    }
-  };
-
   return (
     <div className="flex items-center gap-2 h-11 relative">
-      <div className={`w-16 text-center font-medium ${getCurrencyColor(currency)}`}>
-        {getCurrencyName(currency)}
-      </div>
-      <div className="w-16 h-full text-center bg-gray-800/50 rounded-md flex items-center justify-center font-bold">
-        {value}
-      </div>
+      <div className={`w-16 text-center font-medium ${getCurrencyColor(currency)}`}>{getCurrencyName(currency)}</div>
+      <div className="w-16 h-full text-center bg-gray-800/50 rounded-md flex items-center justify-center font-bold">{value}</div>
       <div className="flex-1 flex items-center justify-end gap-1">
-        <input
-          type="number"
-          min="0"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className="input-dark w-20 h-11 px-2 rounded-md text-center text-base"
-          placeholder="0"
-        />
-        <button
-          onClick={() => handleAction(true)}
-          className="h-11 w-[72px] text-base text-green-500 hover:bg-green-900/30 rounded-md transition-colors whitespace-nowrap border border-green-500/20 hover:border-green-500/40 flex items-center justify-center"
-          title="Ajouter"
-        >
-          Ajouter
-        </button>
-        <button
-          onClick={() => handleAction(false)}
-          className="h-11 w-[72px] text-base text-red-500 hover:bg-red-900/30 rounded-md transition-colors whitespace-nowrap border border-red-500/20 hover:border-red-500/40 flex items-center justify-center"
-          title="Retirer"
-        >
-          Dépenser
-        </button>
+        <input type="number" min="0" value={amount} onChange={e => setAmount(e.target.value)} className="input-dark w-20 h-11 px-2 rounded-md text-center text-base" placeholder="0" />
+        <button onClick={() => handleAction(true)} className="h-11 w-[72px] text-base text-green-500 hover:bg-green-900/30 rounded-md transition-colors whitespace-nowrap border border-green-500/20 hover:border-green-500/40">Ajouter</button>
+        <button onClick={() => handleAction(false)} className="h-11 w-[72px] text-base text-red-500 hover:bg-red-900/30 rounded-md transition-colors whitespace-nowrap border border-red-500/20 hover:border-red-500/40">Dépenser</button>
       </div>
     </div>
   );
 };
-
-/* ================================== Helpers CA (armure équipée) ================================== */
-
-function getDexModFromPlayer(player: Player): number {
-  const abilities: any = (player as any).abilities;
-  const fromArray = Array.isArray(abilities) ? abilities.find((a: any) => a?.name === 'Dextérité') : undefined;
-  if (fromArray?.modifier != null) return fromArray.modifier;
-  if (fromArray?.score != null) return Math.floor((fromArray.score - 10) / 2);
-  return 0;
-}
-
-function computeArmorAC(armorFormula: NonNullable<Equipment['armor_formula']>, dexMod: number): number {
-  const base = armorFormula.base || 10;
-  if (!armorFormula.addDex) return base;
-  const cap = armorFormula.dexCap == null ? Infinity : armorFormula.dexCap;
-  const applied = Math.max(-10, Math.min(cap, dexMod)); // borne minimale
-  return base + applied;
-}
-
-/* ================================== Composant principal ================================== */
 
 export function EquipmentTab({
   player,
@@ -824,9 +800,8 @@ export function EquipmentTab({
   onPlayerUpdate,
   onInventoryUpdate
 }: EquipmentTabProps) {
-  const [newItemName, setNewItemName] = useState('');
-  const [newItemDescription, setNewItemDescription] = useState('');
-  const [showCatalog, setShowCatalog] = useState(false);
+  const [showList, setShowList] = useState(false);
+  const [showCustom, setShowCustom] = useState(false);
 
   const [armor, setArmor] = useState<Equipment | null>(player.equipment?.armor || null);
   const [weapon, setWeapon] = useState<Equipment | null>(player.equipment?.weapon || null);
@@ -838,224 +813,176 @@ export function EquipmentTab({
 
   const saveEquipment = async (type: 'armor' | 'weapon' | 'shield' | 'potion' | 'shoes' | 'bag' | 'jewelry', equipment: Equipment | null) => {
     try {
-      const nextEquipment = {
-        ...player.equipment,
-        [type]: equipment
-      };
-
-      const { error } = await supabase
-        .from('players')
-        .update({
-          equipment: nextEquipment
-        })
-        .eq('id', player.id);
-
+      const nextEquipment = { ...player.equipment, [type]: equipment };
+      const { error } = await supabase.from('players').update({ equipment: nextEquipment }).eq('id', player.id);
       if (error) throw error;
-
-      onPlayerUpdate({
-        ...player,
-        equipment: nextEquipment
-      });
-
-      const label =
-        type === 'armor' ? 'Armure'
-        : type === 'weapon' ? 'Armes'
-        : type === 'shield' ? 'Bouclier'
-        : type === 'potion' ? 'Potions'
-        : type === 'shoes' ? 'Chaussures'
-        : type === 'bag' ? 'Sac à dos'
-        : 'Bijoux';
-
-      toast.success(`${label} ${equipment ? 'mis à jour' : 'supprimé'}`);
+      onPlayerUpdate({ ...player, equipment: nextEquipment });
     } catch (error) {
-      console.error('Erreur lors de la mise à jour de l\'équipement:', error);
+      console.error('Erreur équipement:', error);
       toast.error('Erreur lors de la mise à jour');
     }
   };
 
-  /* ======================== INVENTAIRE (Sac) ======================== */
-
-  const addItemToInventory = async () => {
-    if (!newItemName.trim()) return;
-
+  /* ===== Money ===== */
+  const updatePlayerMoney = async (currency: Currency, amount: number, isAdding: boolean) => {
+    const newAmount = Math.max(0, (player[currency] as number) + (isAdding ? amount : -amount));
     try {
-      const { error } = await supabase
-        .from('inventory_items')
-        .insert([
-          {
-            player_id: player.id,
-            name: newItemName.trim(),
-            description: newItemDescription.trim() || null
-          }
-        ]);
-
+      const { error } = await supabase.from('players').update({ [currency]: newAmount }).eq('id', player.id);
       if (error) throw error;
-
-      const { data: newInventory } = await supabase
-        .from('inventory_items')
-        .select('*')
-        .eq('player_id', player.id);
-
-      if (newInventory) {
-        onInventoryUpdate(newInventory);
-      }
-
-      setNewItemName('');
-      setNewItemDescription('');
-      toast.success('Objet ajouté à l\'inventaire');
+      onPlayerUpdate({ ...player, [currency]: newAmount } as any);
+      toast.success(`${isAdding ? 'Ajout' : 'Retrait'} de ${amount} ${currency}`);
     } catch (error) {
-      console.error('Erreur lors de l\'ajout de l\'objet:', error);
-      toast.error('Erreur lors de l\'ajout de l\'objet');
+      console.error('Erreur argent:', error);
+      toast.error('Erreur lors de la mise à jour');
     }
   };
 
-  const addFromCatalog = async (payload: { name: string; description?: string; meta: ItemMeta }) => {
+  /* ===== Inventory CRUD ===== */
+  const refreshInventory = async () => {
+    const { data } = await supabase.from('inventory_items').select('*').eq('player_id', player.id);
+    if (data) onInventoryUpdate(data);
+  };
+
+  const addFromList = async (payload: { name: string; description?: string; meta: ItemMeta }) => {
     try {
       const finalDesc = injectMetaIntoDescription(payload.description || '', payload.meta);
-      const { error } = await supabase
-        .from('inventory_items')
-        .insert([{ player_id: player.id, name: payload.name, description: finalDesc }]);
+      const { error } = await supabase.from('inventory_items').insert([{ player_id: player.id, name: payload.name, description: finalDesc }]);
       if (error) throw error;
-
-      const { data: newInventory } = await supabase
-        .from('inventory_items')
-        .select('*')
-        .eq('player_id', player.id);
-
-      if (newInventory) onInventoryUpdate(newInventory);
+      await refreshInventory();
       toast.success('Équipement ajouté');
     } catch (e) {
       console.error(e);
       toast.error('Erreur ajout équipement');
     } finally {
-      setShowCatalog(false);
+      setShowList(false);
+    }
+  };
+
+  const addCustom = async (payload: { name: string; description: string; meta: ItemMeta }) => {
+    try {
+      const finalDesc = injectMetaIntoDescription(payload.description || '', payload.meta);
+      const { error } = await supabase.from('inventory_items').insert([{ player_id: player.id, name: payload.name, description: finalDesc }]);
+      if (error) throw error;
+      await refreshInventory();
+      toast.success('Objet personnalisé ajouté');
+    } catch (e) {
+      console.error(e);
+      toast.error('Erreur ajout objet');
+    } finally {
+      setShowCustom(false);
     }
   };
 
   const removeItemFromInventory = async (itemId: string) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer cet objet ?')) {
-      try {
-        const { error } = await supabase
-          .from('inventory_items')
-          .delete()
-          .eq('id', itemId);
-
-        if (error) throw error;
-
-        onInventoryUpdate(inventory.filter(item => item.id !== itemId));
-        toast.success('Objet supprimé');
-      } catch (error) {
-        console.error('Erreur lors de la suppression de l\'objet:', error);
-        toast.error('Erreur lors de la suppression');
-      }
-    }
-  };
-
-  /* ======================== ÉQUIPER / DÉSÉQUIPER depuis le sac ======================== */
-
-  const equipArmorFromItem = async (item: InventoryItem, meta: ItemMeta) => {
-    if (!meta.armor) {
-      toast.error('Données armure manquantes');
-      return;
-    }
-    const eq: Equipment = {
-      name: item.name,
-      description: item.description?.replace(new RegExp(`${META_PREFIX}.*$`, 'm'), '').trim() || '',
-      armor_formula: {
-        base: meta.armor.base,
-        addDex: meta.armor.addDex,
-        dexCap: meta.armor.dexCap ?? null,
-        label: meta.armor.label,
-        strengthReq: meta.armor.strengthReq ?? null,
-        stealthDisadvantage: meta.armor.stealthDisadvantage ?? false,
-        kind: meta.armor.kind
-      }
-    };
-    setArmor(eq);
-    await saveEquipment('armor', eq);
-  };
-
-  const unequipArmor = async () => {
-    setArmor(null);
-    await saveEquipment('armor', null);
-  };
-
-  const equipShieldFromItem = async (item: InventoryItem, meta: ItemMeta) => {
-    if (!meta.shield) {
-      toast.error('Données bouclier manquantes');
-      return;
-    }
-    const eq: Equipment = {
-      name: item.name,
-      description: item.description?.replace(new RegExp(`${META_PREFIX}.*$`, 'm'), '').trim() || '',
-      shield_bonus: meta.shield.bonus
-    };
-    setShield(eq);
-    await saveEquipment('shield', eq);
-  };
-
-  const unequipShield = async () => {
-    setShield(null);
-    await saveEquipment('shield', null);
-  };
-
-  const equipWeaponFromItem = async (item: InventoryItem, meta: ItemMeta) => {
-    if (!meta.weapon) {
-      toast.error('Données arme manquantes');
-      return;
-    }
+    if (!window.confirm('Supprimer cet objet ?')) return;
     try {
-      // Crée une attaque dans CombatTab
-      const newAttack = await attackService.addAttack({
-        player_id: player.id,
-        name: item.name,
-        damage_dice: meta.weapon.damageDice,
-        damage_type: meta.weapon.damageType,
-        range: meta.weapon.range || 'Corps à corps',
-        properties: meta.weapon.properties || '',
-        manual_attack_bonus: null,
-        manual_damage_bonus: null,
-        expertise: false,
-        attack_type: 'physical',
-        spell_level: null,
-        ammo_count: 0
-      });
-      if (newAttack) {
-        toast.success('Arme équipée (attaque créée)');
-      }
+      const { error } = await supabase.from('inventory_items').delete().eq('id', itemId);
+      if (error) throw error;
+      onInventoryUpdate(inventory.filter(i => i.id !== itemId));
+      toast.success('Objet supprimé');
     } catch (e) {
       console.error(e);
-      toast.error("Erreur lors de la création de l'attaque");
+      toast.error('Erreur suppression');
     }
   };
 
-  /* ======================== Argent ======================== */
+  const updateItemMeta = async (item: InventoryItem, nextMeta: ItemMeta) => {
+    const nextDesc = injectMetaIntoDescription(visibleDescription(item.description), nextMeta);
+    const { error } = await supabase.from('inventory_items').update({ description: nextDesc }).eq('id', item.id);
+    if (error) throw error;
+  };
 
-  const updatePlayerMoney = async (currency: Currency, amount: number, isAdding: boolean) => {
-    const newAmount = Math.max(0, player[currency] + (isAdding ? amount : -amount));
+  /* ===== Equip / Unequip toggle (unique) ===== */
+  const toggleEquip = async (item: InventoryItem) => {
+    const meta = parseMeta(item.description);
+    if (!meta) return;
+
+    const nextEquipped = !meta.equipped;
+    const nextMeta: ItemMeta = { ...meta, equipped: nextEquipped };
 
     try {
-      const { error } = await supabase
-        .from('players')
-        .update({ [currency]: newAmount })
-        .eq('id', player.id);
+      // Persiste l’état
+      await updateItemMeta(item, nextMeta);
 
-      if (error) throw error;
+      // Applique effet gameplay
+      if (meta.type === 'armor') {
+        if (nextEquipped && meta.armor) {
+          const eq: Equipment = {
+            name: item.name,
+            description: visibleDescription(item.description),
+            armor_formula: {
+              base: meta.armor.base,
+              addDex: meta.armor.addDex,
+              dexCap: meta.armor.dexCap ?? null,
+              strengthReq: meta.armor.strengthReq ?? null,
+              stealthDisadvantage: meta.armor.stealthDisadvantage ?? false,
+              kind: meta.armor.kind,
+              label: meta.armor.label,
+            },
+          };
+          setArmor(eq); await saveEquipment('armor', eq);
+        } else {
+          setArmor(null); await saveEquipment('armor', null);
+        }
+      }
+      if (meta.type === 'shield') {
+        if (nextEquipped && meta.shield) {
+          const eq: Equipment = {
+            name: item.name,
+            description: visibleDescription(item.description),
+            shield_bonus: meta.shield.bonus,
+          };
+          setShield(eq); await saveEquipment('shield', eq);
+        } else {
+          setShield(null); await saveEquipment('shield', null);
+        }
+      }
+      if (meta.type === 'weapon') {
+        if (nextEquipped && meta.weapon) {
+          try {
+            const newAttack = await attackService.addAttack({
+              player_id: player.id,
+              name: item.name,
+              damage_dice: meta.weapon.damageDice,
+              damage_type: meta.weapon.damageType,
+              range: meta.weapon.range || 'Corps à corps',
+              properties: meta.weapon.properties || '',
+              manual_attack_bonus: null,
+              manual_damage_bonus: null,
+              expertise: false,
+              attack_type: 'physical',
+              spell_level: null,
+              ammo_count: 0
+            });
+            if (newAttack) {
+              toast.success('Attaque créée');
+            } else {
+              // Service a pu renvoyer null en cas d’échec silencieux
+              toast.error("Impossible de créer l'attaque (vérifier les permissions RLS)");
+            }
+          } catch (err: any) {
+            console.error(err);
+            toast.error("Création d'attaque impossible. Si vous voyez un code 42501 (RLS), ajoutez une policy sur la table attacks pour autoriser l'insert pour l'utilisateur courant.");
+          }
+        }
+        // Déséquiper l’arme: on ne supprime pas l’attaque existante (choix UX)
+      }
 
-      onPlayerUpdate({
-        ...player,
-        [currency]: newAmount
-      });
-
-      toast.success(`${isAdding ? 'Ajout' : 'Retrait'} de ${amount} ${currency}`);
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour de l\'argent:', error);
-      toast.error('Erreur lors de la mise à jour');
+      // Rafraîchir l’inventaire pour refléter le méta “equipped”
+      await refreshInventory();
+    } catch (e) {
+      console.error(e);
+      toast.error('Erreur bascule équiper');
     }
   };
+
+  // État d’expansion par item
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const toggleExpand = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
   return (
     <div className="space-y-6">
+      {/* Carte personnage équipable */}
       <div className="stat-card">
         <div className="stat-header flex items-center gap-3">
           <Backpack className="text-purple-500" size={24} />
@@ -1075,10 +1002,7 @@ export function EquipmentTab({
               icon={<Shield size={24} className="text-purple-500" />}
               position="top-[25%] left-1/2 -translate-x-1/2 bg-gray-800/50"
               equipment={armor || null}
-              onEquip={(equipment) => {
-                setArmor(equipment);
-                saveEquipment('armor', equipment);
-              }}
+              onEquip={(eq) => { setArmor(eq); saveEquipment('armor', eq); }}
               type="armor"
               bubblePosition="right-[5%] top-[15%]"
             />
@@ -1088,75 +1012,57 @@ export function EquipmentTab({
               icon={<Shield size={24} className="text-blue-500" />}
               position="top-[45%] left-[15%] bg-gray-800/50"
               equipment={shield || null}
-              onEquip={(equipment) => {
-                setShield(equipment as Equipment);
-                saveEquipment('shield', equipment as Equipment);
-              }}
+              onEquip={(eq) => { setShield(eq as any); saveEquipment('shield', eq as any); }}
               type="shield"
               bubblePosition="left-[5%] top-[15%]"
             />
 
-            {/* Weapon slot (placeholder: non géré en slot individuel ici) */}
+            {/* Weapon slot (informationnel) */}
             <EquipmentSlot
               icon={<Sword size={24} className="text-red-500" />}
               position="top-[45%] right-[15%] bg-gray-800/50"
               equipment={weapon || { name: 'Armes', description: 'Gérées dans Attaques', isTextArea: true }}
-              onEquip={(equipment) => {
-                setWeapon(equipment as Equipment);
-                saveEquipment('weapon', equipment as Equipment);
-              }}
+              onEquip={(eq) => { setWeapon(eq as any); saveEquipment('weapon', eq as any); }}
               type="weapon"
               bubblePosition="right-[5%] top-[15%]"
             />
 
-            {/* Potion slot */}
+            {/* Potion */}
             <EquipmentSlot
               icon={<Flask size={24} className="text-green-500" title="Potions et poisons" />}
               position="top-[5%] right-[5%] bg-gray-800/50"
               equipment={potion || { name: 'Potions et poisons', description: '', isTextArea: true }}
-              onEquip={(equipment) => {
-                setPotion(equipment as Equipment);
-                saveEquipment('potion', equipment as Equipment);
-              }}
+              onEquip={(eq) => { setPotion(eq as any); saveEquipment('potion', eq as any); }}
               type="potion"
               bubblePosition="right-[5%] top-[5%]"
             />
 
-            {/* Jewelry slot */}
+            {/* Bijoux */}
             <EquipmentSlot
               icon={<Star size={24} className="text-yellow-500" />}
               position="top-[15%] right-[5%] bg-gray-800/50"
               equipment={jewelry || { name: 'Bijoux', description: '', isTextArea: true }}
-              onEquip={(equipment) => {
-                setJewelry(equipment as Equipment);
-                saveEquipment('jewelry', equipment as Equipment);
-              }}
+              onEquip={(eq) => { setJewelry(eq as any); saveEquipment('jewelry', eq as any); }}
               type="jewelry"
               bubblePosition="right-[5%] top-[15%]"
             />
 
-            {/* Shoes slot */}
+            {/* Chaussures */}
             <EquipmentSlot
               icon={<Shield size={24} className="text-yellow-500" />}
               position="bottom-[5%] left-1/2 -translate-x-1/2 bg-gray-800/50"
               equipment={shoes || { name: 'Chaussures', description: '', isTextArea: true }}
-              onEquip={(equipment) => {
-                setShoes(equipment as Equipment);
-                saveEquipment('shoes', equipment as Equipment);
-              }}
+              onEquip={(eq) => { setShoes(eq as any); saveEquipment('shoes', eq as any); }}
               type="shoes"
               bubblePosition="right-[5%] bottom-[15%]"
             />
 
-            {/* Bag slot */}
+            {/* Sac */}
             <EquipmentSlot
               icon={<img src="https://yumzqyyogwzrmlcpvnky.supabase.co/storage/v1/object/public/static//8-2-backpack-png-pic.png" alt="Backpack" className="w-24 h-24 object-contain" />}
               position="bottom-[5%] right-[2%]"
               equipment={bag || { name: 'Sac à dos', description: '', isTextArea: true }}
-              onEquip={(equipment) => {
-                setBag(equipment as Equipment);
-                saveEquipment('bag', equipment as Equipment);
-              }}
+              onEquip={(eq) => { setBag(eq as any); saveEquipment('bag', eq as any); }}
               type="bag"
               bubblePosition="left-[5%] bottom-[5%]"
             />
@@ -1164,24 +1070,26 @@ export function EquipmentTab({
         </div>
       </div>
 
+      {/* Argent */}
       <div className="stat-card">
         <div className="stat-header flex items-center gap-3">
           <Coins className="text-green-500" size={24} />
           <h2 className="text-lg sm:text-xl font-semibold text-gray-100">Mon argent</h2>
         </div>
         <div className="p-4 space-y-2">
-          {(['gold', 'silver', 'copper'] as Currency[]).map(currency => (
+          {(['gold','silver','copper'] as Currency[]).map(curr => (
             <CurrencyInput
-              key={currency}
-              currency={currency}
-              value={player[currency]}
-              onAdd={(amount) => updatePlayerMoney(currency, amount, true)}
-              onSpend={(amount) => updatePlayerMoney(currency, amount, false)}
+              key={curr}
+              currency={curr}
+              value={player[curr] as number}
+              onAdd={(n) => updatePlayerMoney(curr, n, true)}
+              onSpend={(n) => updatePlayerMoney(curr, n, false)}
             />
           ))}
         </div>
       </div>
 
+      {/* Sac */}
       <div className="stat-card">
         <div className="stat-header flex items-center gap-3">
           <Backpack className="text-purple-500" size={24} />
@@ -1189,123 +1097,111 @@ export function EquipmentTab({
         </div>
 
         <div className="p-4">
-          {/* Barre actions ajout */}
-          <div className="flex flex-col gap-3 mb-6">
-            {/* Ajout simple (conservé) */}
-            <input
-              type="text"
-              placeholder="Nom de l'objet"
-              value={newItemName}
-              onChange={(e) => setNewItemName(e.target.value)}
-              className="input-dark w-full px-4 py-2 rounded-lg"
-            />
-            <textarea
-              placeholder="Description (optionnelle)"
-              value={newItemDescription}
-              onChange={(e) => setNewItemDescription(e.target.value)}
-              className="input-dark w-full px-4 py-2 rounded-lg resize-none"
-              rows={2}
-            />
-            <div className="flex items-center gap-2">
-              <button
-                onClick={addItemToInventory}
-                className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2 justify-center"
-              >
-                <Plus size={20} />
-                Ajouter à l'inventaire
-              </button>
-              <button
-                onClick={() => setShowCatalog(true)}
-                className="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200"
-              >
-                Ajouter depuis catalogue
-              </button>
-            </div>
+          {/* Actions d’ajout */}
+          <div className="flex flex-wrap items-center gap-2 mb-6">
+            <button
+              onClick={() => setShowList(true)}
+              className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2 justify-center"
+              title="Ouvrir la liste d’équipement"
+            >
+              <Plus size={20} />
+              Liste d’équipement
+            </button>
+            <button
+              onClick={() => setShowCustom(true)}
+              className="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200"
+              title="Créer un objet personnalisé"
+            >
+              Objet personnalisé
+            </button>
           </div>
 
-          {/* Liste inventaire avec quantités + équiper/déséquiper */}
+          {/* Liste inventaire (dépliable + bouton unique Équipé/Non équipé) */}
           <div className="space-y-2">
             {inventory.map((item) => {
               const meta = parseMeta(item.description);
-              const quantity = meta?.quantity ?? 1;
+              const qty = meta?.quantity ?? 1;
+              const desc = visibleDescription(item.description);
               const isArmor = meta?.type === 'armor';
               const isShield = meta?.type === 'shield';
               const isWeapon = meta?.type === 'weapon';
 
-              return (
-                <div key={item.id} className="inventory-item flex items-start justify-between">
-                  <div className="flex-1 mr-2">
-                    <div className="flex items-center gap-2">
-                      <h5 className="font-medium text-gray-100">{item.name}</h5>
-                      {quantity > 1 && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-gray-700/60 text-gray-300">x{quantity}</span>
-                      )}
-                      {isArmor && <span className="text-xs px-2 py-0.5 rounded bg-purple-900/30 text-purple-300">Armure</span>}
-                      {isShield && <span className="text-xs px-2 py-0.5 rounded bg-blue-900/30 text-blue-300">Bouclier</span>}
-                      {isWeapon && <span className="text-xs px-2 py-0.5 rounded bg-red-900/30 text-red-300">Arme</span>}
-                    </div>
-                    {item.description && (
-                      <p className="text-sm text-gray-400 mt-1">
-                        {item.description.split('\n').filter(l => !l.trim().startsWith(META_PREFIX)).join('\n')}
-                      </p>
-                    )}
+              // Statut “équipé” affiché: pour armor/shield, on prend la vérité serveur (slots)
+              const equippedBySlot =
+                (isArmor && armor && armor.name === item.name) ||
+                (isShield && shield && shield.name === item.name);
 
-                    {(isArmor || isShield || isWeapon) && (
-                      <div className="flex items-center gap-2 mt-2">
-                        {isArmor && (
-                          <>
-                            <button
-                              onClick={() => equipArmorFromItem(item, meta!)}
-                              className="px-2 py-1 rounded border border-purple-500/40 text-purple-300 hover:bg-purple-900/20 text-xs"
-                            >
-                              Équiper
-                            </button>
-                            {armor && armor.name === item.name && (
-                              <button
-                                onClick={unequipArmor}
-                                className="px-2 py-1 rounded border border-gray-600 text-gray-300 hover:bg-gray-700/40 text-xs"
-                              >
-                                Déséquiper
-                              </button>
-                            )}
-                          </>
-                        )}
-                        {isShield && (
-                          <>
-                            <button
-                              onClick={() => equipShieldFromItem(item, meta!)}
-                              className="px-2 py-1 rounded border border-blue-500/40 text-blue-300 hover:bg-blue-900/20 text-xs"
-                            >
-                              Équiper
-                            </button>
-                            {shield && shield.name === item.name && (
-                              <button
-                                onClick={unequipShield}
-                                className="px-2 py-1 rounded border border-gray-600 text-gray-300 hover:bg-gray-700/40 text-xs"
-                              >
-                                Déséquiper
-                              </button>
-                            )}
-                          </>
-                        )}
-                        {isWeapon && (
-                          <button
-                            onClick={() => equipWeaponFromItem(item, meta!)}
-                            className="px-2 py-1 rounded border border-red-500/40 text-red-300 hover:bg-red-900/20 text-xs"
-                          >
-                            Équiper (créer attaque)
-                          </button>
-                        )}
+              const isEquipped = equippedBySlot || !!meta?.equipped;
+
+              return (
+                <div key={item.id} className="inventory-item bg-gray-800/40 border border-gray-700/40 rounded-md">
+                  <div className="flex items-start justify-between p-2">
+                    <div className="flex-1 mr-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => toggleExpand(item.id)}
+                          className="text-left text-gray-100 font-medium hover:underline"
+                          title="Voir le détail"
+                        >
+                          {stripPriceParentheses(item.name)}
+                        </button>
+                        {qty > 1 && <span className="text-xs px-2 py-0.5 rounded bg-gray-700/60 text-gray-300">x{qty}</span>}
+                        {isArmor && <span className="text-xs px-2 py-0.5 rounded bg-purple-900/30 text-purple-300">Armure</span>}
+                        {isShield && <span className="text-xs px-2 py-0.5 rounded bg-blue-900/30 text-blue-300">Bouclier</span>}
+                        {isWeapon && <span className="text-xs px-2 py-0.5 rounded bg-red-900/30 text-red-300">Arme</span>}
                       </div>
-                    )}
+                      {/* Condensé description (1 ligne) */}
+                      {desc && (
+                        <p className="text-xs text-gray-400 mt-1 line-clamp-1">{desc}</p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {(isArmor || isShield || isWeapon) && (
+                        <button
+                          onClick={() => toggleEquip(item)}
+                          className={`px-2 py-1 rounded text-xs border ${
+                            isEquipped
+                              ? 'border-green-500/40 text-green-300 bg-green-900/20'
+                              : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'
+                          }`}
+                          title={isEquipped ? 'Cliquer pour déséquiper' : 'Cliquer pour équiper'}
+                        >
+                          {isEquipped ? 'Équipé' : 'Non équipé'}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => removeItemFromInventory(item.id)}
+                        className="p-1.5 text-gray-500 hover:text-red-500 hover:bg-red-900/30 rounded-full transition-colors"
+                        title="Supprimer l'objet"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => removeItemFromInventory(item.id)}
-                    className="p-1.5 text-gray-500 hover:text-red-500 hover:bg-red-900/30 rounded-full transition-colors"
-                    title="Supprimer l'objet"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+
+                  {/* Détail déplié */}
+                  {expanded[item.id] && (
+                    <div className="px-3 pb-3">
+                      {desc && <div className="text-sm text-gray-300 whitespace-pre-wrap">{desc}</div>}
+                      {isArmor && meta?.armor && (
+                        <div className="text-xs text-gray-400 mt-2">
+                          CA: {meta.armor.label}{meta.armor.stealthDisadvantage ? ' • Désavantage Discrétion' : ''}
+                          {meta.armor.strengthReq ? ` • For ${meta.armor.strengthReq}` : ''}
+                        </div>
+                      )}
+                      {isShield && meta?.shield && (
+                        <div className="text-xs text-gray-400 mt-2">Bonus de bouclier: +{meta.shield.bonus}</div>
+                      )}
+                      {isWeapon && meta?.weapon && (
+                        <div className="text-xs text-gray-400 mt-2">
+                          Dégâts: {meta.weapon.damageDice} {meta.weapon.damageType}
+                          {meta.weapon.properties ? ` • Props: ${meta.weapon.properties}` : ''}
+                          {meta.weapon.range ? ` • Portée: ${meta.weapon.range}` : ''}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1313,10 +1209,17 @@ export function EquipmentTab({
         </div>
       </div>
 
-      {showCatalog && (
-        <CatalogModal
-          onClose={() => setShowCatalog(false)}
-          onAddItem={addFromCatalog}
+      {showList && (
+        <EquipmentListModal
+          onClose={() => setShowList(false)}
+          onAddItem={addFromList}
+        />
+      )}
+
+      {showCustom && (
+        <CustomItemModal
+          onClose={() => setShowCustom(false)}
+          onAdd={addCustom}
         />
       )}
     </div>
