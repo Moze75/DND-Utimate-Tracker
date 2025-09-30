@@ -54,9 +54,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
   const formatFr = (v: number | string | null | undefined): string => {
     if (v == null) return '0';
     if (typeof v === 'string') {
-      // si déjà avec virgule, on laisse tel quel
       if (v.includes(',')) return v.trim();
-      // sinon, on remplace le point par la virgule (affichage uniquement)
       return v.replace('.', ',').trim();
     }
     return v.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
@@ -64,6 +62,11 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
 
   // NEW: valeur numérique fiable de la vitesse pour les calculs
   const speedNum = toNumber(stats.speed);
+
+  // Bonus d'armure depuis l'équipement (ajouté à la CA affichée)
+  const armorBonus = Number((player as any)?.equipment?.armor?.armor_bonus ?? 0) || 0;
+  const baseAC = Number(stats.armor_class || 0);
+  const totalAC = baseAC + armorBonus;
 
   /* ============================ Repos court / long ============================ */
 
@@ -423,25 +426,26 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           {/* CA */}
           <div className="flex flex-col items-center">
             <div
-              className="relative w-12 h-10 -mt-2 -mb-1 group cursor-pointer" /* élargi de w-10 à w-12 */
+              className="relative w-12 h-10 -mt-2 -mb-1 group cursor-pointer"
               onClick={() => setActiveTooltip(activeTooltip === 'ac' ? null : 'ac')}
             >
               <Shield className="absolute inset-0 w-full h-full text-gray-400 stroke-[1.5] scale-125" />
               <div className="absolute inset-0 flex items-center justify-center -translate-y-1 text-lg font-bold text-gray-100 z-10">
-                {stats.armor_class}
+                {totalAC}
               </div>
               {activeTooltip === 'ac' && (
                 <>
                   <div className="fixed inset-0" onClick={() => setActiveTooltip(null)} />
-                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-xl border border-gray-700">
+                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-xl border border-gray-700/60">
                     <h4 className="font-semibold text-gray-100 mb-1">Classe d'Armure</h4>
                     <p className="mb-2">Détermine la difficulté pour vous toucher en combat.</p>
-                    <p className="text-gray-400">Calcul de base :</p>
+                    <p className="text-gray-400">Calcul actuel :</p>
                     <ul className="list-disc list-inside text-gray-400 space-y-1">
-                      <li>10 + modificateur de Dextérité</li>
-                      <li>+ bonus d'armure (si équipée)</li>
-                      <li>+ bonus de bouclier (si équipé)</li>
+                      <li>CA de base: {baseAC}</li>
+                      <li>+ Bonus d'armure (équipement): {armorBonus >= 0 ? `+${armorBonus}` : armorBonus}</li>
+                      <li>Total: {totalAC}</li>
                     </ul>
+                    <p className="text-xs text-gray-500 mt-2">La CA de base se règle dans les Paramètres du personnage.</p>
                   </div>
                 </>
               )}
@@ -452,7 +456,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           {/* Vitesse */}
           <div className="flex flex-col items-center">
             <div
-              className="relative w-16 h-10 -mt-2 -mb-1 group cursor-pointer" /* élargi de w-12 à w-16 */
+              className="relative w-16 h-10 -mt-2 -mb-1 group cursor-pointer"
               onClick={() => setActiveTooltip(activeTooltip === 'speed' ? null : 'speed')}
             >
               <div className="text-lg font-bold text-gray-100 whitespace-nowrap">
@@ -461,7 +465,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               {activeTooltip === 'speed' && (
                 <>
                   <div className="fixed inset-0" onClick={() => setActiveTooltip(null)} />
-                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-xl border border-gray-700">
+                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-xl border border-gray-700/60">
                     <h4 className="font-semibold text-gray-100 mb-1">Vitesse</h4>
                     <p className="mb-2">Distance que vous pouvez parcourir en un tour.</p>
                     <div className="text-gray-400">
@@ -481,7 +485,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           {/* Initiative */}
           <div className="flex flex-col items-center">
             <div
-              className="relative w-12 h-10 -mt-2 -mb-1 group cursor-pointer" /* élargi de w-10 à w-12 */
+              className="relative w-12 h-10 -mt-2 -mb-1 group cursor-pointer"
               onClick={() => setActiveTooltip(activeTooltip === 'initiative' ? null : 'initiative')}
             >
               <div className="text-lg font-bold text-gray-100">
@@ -490,7 +494,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               {activeTooltip === 'initiative' && (
                 <>
                   <div className="fixed inset-0" onClick={() => setActiveTooltip(null)} />
-                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-xl border border-gray-700">
+                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-xl border border-gray-700/60">
                     <h4 className="font-semibold text-gray-100 mb-1">Initiative</h4>
                     <p className="mb-2">Détermine l'ordre d'action en combat.</p>
                     <div className="text-gray-400">
@@ -510,7 +514,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
           {/* Maîtrise */}
           <div className="flex flex-col items-center">
             <div
-              className="relative w-12 h-10 -mt-2 -mb-1 group cursor-pointer" /* élargi de w-10 à w-12 */
+              className="relative w-12 h-10 -mt-2 -mb-1 group cursor-pointer"
               onClick={() => setActiveTooltip(activeTooltip === 'proficiency' ? null : 'proficiency')}
             >
               <div className="text-lg font-bold text-gray-100">
@@ -519,7 +523,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               {activeTooltip === 'proficiency' && (
                 <>
                   <div className="fixed inset-0" onClick={() => setActiveTooltip(null)} />
-                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-xl border border-gray-700">
+                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-xl border border-gray-700/60">
                     <h4 className="font-semibold text-gray-100 mb-1">Bonus de Maîtrise</h4>
                     <p>Représente votre expertise générale.</p>
                     <div className="text-gray-400">
