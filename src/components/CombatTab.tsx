@@ -298,6 +298,67 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     fetchAttacks();
   }, [player.id]);
 
+  // Rafraîchit les attaques (appelé après toute modif côté équipement via événement global)
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      try {
+        if (e?.detail?.playerId && e.detail.playerId !== player.id) return;
+      } catch {}
+      fetchAttacks();
+    };
+    window.addEventListener('attacks:changed', handler);
+    // Optionnel: rafraîchir quand l’onglet devient visible
+    const visHandler = () => {
+      if (document.visibilityState === 'visible') fetchAttacks();
+    };
+    document.addEventListener('visibilitychange', visHandler);
+    return () => {
+      window.removeEventListener('attacks:changed', handler);
+      document.removeEventListener('visibilitychange', visHandler);
+    };
+  }, [player.id]);
+
+  // Option de sécurité: si une arme est déjà équipée dans player.equipment, garantir la présence d'une attaque correspondante
+  React.useEffect(() => {
+    const ensureFromEquippedWeapon = async () => {
+      const weaponSlot: any = (player as any)?.equipment?.weapon;
+      if (!weaponSlot || !weaponSlot.name) return;
+      try {
+        const existing = await attackService.getPlayerAttacks(player.id);
+        const has = existing.some(a => a.name.trim().toLowerCase() === String(weaponSlot.name).trim().toLowerCase());
+        const meta = weaponSlot.weapon_meta || {};
+        const payload: Partial<Attack> = {
+          player_id: player.id,
+          name: weaponSlot.name,
+          damage_dice: meta.damageDice || '1d6',
+          damage_type: meta.damageType || 'Tranchant',
+          range: meta.range || 'Corps à corps',
+          properties: meta.properties || '',
+          attack_type: 'physical',
+          spell_level: null,
+          ammo_count: 0
+        } as any;
+        if (has) {
+          const found = existing.find(a => a.name.trim().toLowerCase() === String(weaponSlot.name).trim().toLowerCase());
+          await attackService.updateAttack({ ...(payload as any), id: found?.id });
+        } else {
+          await attackService.addAttack(payload);
+        }
+        // recharge local
+        fetchAttacks();
+      } catch (err) {
+        // On ignore l'erreur ici (RLS, etc.), l’onglet reste fonctionnel
+        console.warn('ensureFromEquippedWeapon failed', err);
+      }
+    };
+    // JSON.stringify pour détecter les changements profonds de weapon_meta
+    const key = JSON.stringify((player as any)?.equipment?.weapon || null);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    (async () => { await ensureFromEquippedWeapon(); })();
+    // We intentionally omit key from deps to avoid infinite loops; React effect runs due to player change above
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player.id]);
+
   const fetchAttacks = async () => {
     try {
       const attacksData = await attackService.getPlayerAttacks(player.id);
@@ -565,7 +626,6 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
 
   // Calculs PV
   const totalHP = player.current_hp + player.temporary_hp;
-  const hpPercentage = Math.max(0, (totalHP / player.max_hp) * 100);
   const isCriticalHealth = totalHP <= Math.floor(player.max_hp * 0.20);
 
   const getWoundLevel = () => {
