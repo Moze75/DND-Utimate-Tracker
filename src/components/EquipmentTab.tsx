@@ -30,7 +30,7 @@ interface Equipment {
   shield_bonus?: number | null;
 }
 
-type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment';
+type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment' | 'jewelry';
 
 interface WeaponMeta {
   damageDice: string;
@@ -109,6 +109,11 @@ function smartCapitalize(name: string): string {
     return lower.charAt(0).toUpperCase() + lower.slice(1);
   }
   return base.charAt(0).toUpperCase() + base.slice(1);
+}
+
+// Normalisation pour comparaisons robustes
+function norm(s: string | null | undefined): string {
+  return (s ?? '').trim().toLowerCase();
 }
 
 /* ====================== Fetch + Parsing “Liste d’équipement” ====================== */
@@ -192,7 +197,8 @@ function parseArmors(md: string): CatalogItem[] {
       id: `armor:${nom}`,
       kind: 'armors',
       name: nom,
-      description: `Force: ${force || '—'} • Discrétion: ${discr || '—'}`,
+      // pas de duplication: l’étiquette montrera la formule, on garde une description courte
+      description: '',
       armor: { base, addDex, dexCap, stealthDisadvantage, strengthReq, kind, label: ca },
     });
   }
@@ -213,7 +219,8 @@ function parseShields(md: string): CatalogItem[] {
       id: `shield:${nom}`,
       kind: 'shields',
       name: nom,
-      description: `Bonus de CA: +${bonus}`,
+      // pas de duplication: l’étiquette montrera “+bonus”
+      description: '',
       shield: { bonus },
     });
   }
@@ -248,7 +255,8 @@ function parseWeapons(md: string): CatalogItem[] {
       id: `weapon:${nom}`,
       kind: 'weapons',
       name: nom,
-      description: `Dégâts: ${degats} • Propriétés: ${props || '—'}`,
+      // pas de duplication: l’étiquette montrera dégâts/propriétés
+      description: '',
       weapon: { damageDice, damageType, properties: props || '', range },
     });
   }
@@ -310,7 +318,6 @@ function EquipmentListModal({
   const [filters, setFilters] = useState<FilterState>({
     weapons: true, armors: true, shields: true, adventuring_gear: true, tools: true
   });
-  const [showFilters, setShowFilters] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   React.useEffect(() => {
@@ -361,9 +368,12 @@ function EquipmentListModal({
     if (ci.kind === 'shields' && ci.shield) meta = { type: 'shield', quantity, equipped: false, shield: ci.shield };
     if (ci.kind === 'weapons' && ci.weapon) meta = { type: 'weapon', quantity, equipped: false, weapon: ci.weapon };
 
+    // pas de description redondante pour arme/armure/bouclier
+    const description = (ci.kind === 'adventuring_gear' || ci.kind === 'tools') ? (ci.description || '').trim() : '';
+
     onAddItem({
       name: ci.name,
-      description: (ci.description || '').trim(),
+      description,
       meta,
     });
   };
@@ -373,38 +383,18 @@ function EquipmentListModal({
   return (
     <div className="fixed inset-0 bg-black/60 z-[80] flex items-stretch justify-stretch" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-gray-900 w-screen h-screen flex flex-col">
-        {/* Header compact */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800">
-          <div className="flex items-center gap-2 min-w-0">
+        {/* Header plein écran: recherche à gauche, filtres à droite */}
+        <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-800 flex-wrap">
+          <div className="flex items-center gap-2 min-w-[220px] flex-1">
             <Search className="w-5 h-5 text-gray-400 shrink-0" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Rechercher…"
-              className="input-dark px-3 py-2 rounded-md w-40 sm:w-64 md:w-96"
+              className="input-dark px-3 py-2 rounded-md w-full"
             />
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="hidden sm:flex items-center gap-2">
-              <label className="text-sm text-gray-400">Qté</label>
-              <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(parseInt(e.target.value) || 1)} className="input-dark w-20 px-2 py-2 rounded-md" />
-            </div>
-            <button
-              onClick={() => setShowFilters(v => !v)}
-              className="px-2 py-2 rounded-md border border-gray-700 hover:bg-gray-800/60 text-gray-200 flex items-center gap-1"
-              title="Filtres"
-            >
-              <Filter className="w-4 h-4" />
-              <span className="hidden sm:inline">Filtres</span>
-            </button>
-            <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg">
-              <X />
-            </button>
-          </div>
-        </div>
-
-        {showFilters && (
-          <div className="px-3 py-2 border-b border-gray-800 flex flex-wrap gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             {(['weapons','armors','shields','adventuring_gear','tools'] as CatalogKind[]).map(k => (
               <button
                 key={k}
@@ -419,8 +409,15 @@ function EquipmentListModal({
                  k === 'adventuring_gear' ? 'Équipements' : 'Outils'}
               </button>
             ))}
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-400">Qté</label>
+              <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(parseInt(e.target.value) || 1)} className="input-dark w-16 px-2 py-1 rounded-md" />
+            </div>
+            <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg">
+              <X />
+            </button>
           </div>
-        )}
+        </div>
 
         {/* Liste défilable pleine page */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
@@ -450,10 +447,6 @@ function EquipmentListModal({
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <div className="hidden sm:flex items-center gap-2">
-                        <label className="text-xs text-gray-400">Qté</label>
-                        <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(parseInt(e.target.value) || 1)} className="input-dark w-16 px-2 py-1 rounded-md" />
-                      </div>
                       <button onClick={() => handlePick(ci)} className="btn-primary px-3 py-2 rounded-lg flex items-center gap-1">
                         <Check className="w-4 h-4" /> Ajouter
                       </button>
@@ -461,10 +454,10 @@ function EquipmentListModal({
                   </div>
                   {isOpen && (
                     <div className="px-3 pb-3">
-                      {ci.kind === 'adventuring_gear' || ci.kind === 'tools' ? (
+                      {(ci.kind === 'adventuring_gear' || ci.kind === 'tools') ? (
                         <div className="text-sm text-gray-300 whitespace-pre-wrap">{(ci.description || '').trim()}</div>
                       ) : (
-                        <div className="text-sm text-gray-300 whitespace-pre-wrap">{(ci.description || '').trim()}</div>
+                        <div className="text-sm text-gray-400">Aucun détail supplémentaire</div>
                       )}
                     </div>
                   )}
@@ -551,10 +544,11 @@ function CustomItemModal({
             <label className="block text-sm text-gray-400 mb-1">Type</label>
             <select className="input-dark w-full px-3 py-2 rounded-md" value={type} onChange={e => setType(e.target.value as MetaType)}>
               <option value="equipment">Équipement</option>
-              <option value="potion">Potion</option>
+              <option value="potion">Potion / Poison</option>
               <option value="weapon">Arme</option>
               <option value="armor">Armure</option>
               <option value="shield">Bouclier</option>
+              <option value="jewelry">Bijoux</option>
             </select>
           </div>
         </div>
@@ -642,7 +636,7 @@ function CustomItemModal({
 
 /* ====================== Popup des slots (avec bouton Équipé) ====================== */
 
-const getTitle = (type: 'armor' | 'weapon' | 'shield' | 'potion' | 'shoes' | 'bag' | 'jewelry') => {
+const getTitle = (type: 'armor' | 'weapon' | 'shield' | 'potion' | 'jewelry' | 'bag') => {
   switch (type) {
     case 'potion': return 'Potions';
     case 'shield': return 'Bouclier';
@@ -677,7 +671,7 @@ const InfoBubble = ({ equipment, position, onClose, setIsEditing, type, onToggle
       }}
     >
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[69]" onClick={onClose} />
-      <div className="relative p-4 bg-gray-900/95 text-sm text-gray-300 rounded-lg shadow-lg w-[min(28rem,95vw)] border border-gray-700/50 z-[70]">
+      <div className="relative p-4 bg-gray-900/95 text-sm text-gray-300 rounded-lg shadow-lg w-[min(32rem,95vw)] border border-gray-700/50 z-[70]">
         <div className="flex items-center justify-between mb-2">
           <h4 className="font-semibold text-gray-100 text-lg">{getTitle(type)}</h4>
           <div className="flex items-center gap-1">
@@ -794,7 +788,7 @@ const EquipmentSlot = ({
       )}
 
       {isEditing && (
-        <div /> /* plus d'édition directe ici; édition via sac */
+        <div /> /* édition via sac uniquement */
       )}
     </>
   );
@@ -954,6 +948,7 @@ export function EquipmentTab({
 
   const addFromList = async (payload: { name: string; description?: string; meta: ItemMeta }) => {
     try {
+      // Pas de redondance: description déjà nettoyée côté modal
       const finalDesc = injectMetaIntoDescription(payload.description || '', payload.meta);
       const { error } = await supabase.from('inventory_items').insert([{ player_id: player.id, name: smartCapitalize(payload.name), description: finalDesc }]);
       if (error) throw error;
@@ -1001,6 +996,24 @@ export function EquipmentTab({
     if (error) throw error;
   };
 
+  // Déséquipe tous les autres objets d’un type (armure ou bouclier) pour garantir l’unicité
+  const unequipOthersOfType = async (type: 'armor' | 'shield', keepItemId?: string) => {
+    const updates: Promise<any>[] = [];
+    for (const it of inventory) {
+      const meta = parseMeta(it.description);
+      if (!meta) continue;
+      if ((type === 'armor' && meta.type === 'armor') || (type === 'shield' && meta.type === 'shield')) {
+        if (it.id !== keepItemId && meta.equipped) {
+          updates.push(updateItemMeta(it, { ...meta, equipped: false }));
+        }
+      }
+    }
+    if (updates.length) {
+      await Promise.allSettled(updates);
+      await refreshInventory();
+    }
+  };
+
   /* ===== Equip / Unequip toggle (unique) ===== */
   const toggleEquip = async (item: InventoryItem) => {
     const meta = parseMeta(item.description);
@@ -1010,7 +1023,11 @@ export function EquipmentTab({
     const nextMeta: ItemMeta = { ...meta, equipped: nextEquipped };
 
     try {
-      // Persiste l’état (important pour le rendu immédiat)
+      // Garantit 1 seule armure/bouclier équipée à la fois
+      if (meta.type === 'armor' && nextEquipped) await unequipOthersOfType('armor', item.id);
+      if (meta.type === 'shield' && nextEquipped) await unequipOthersOfType('shield', item.id);
+
+      // Persiste l’état
       await updateItemMeta(item, nextMeta);
 
       // Applique effet gameplay
@@ -1070,7 +1087,7 @@ export function EquipmentTab({
             }
           } catch (err: any) {
             console.error(err);
-            toast.error("Création d'attaque impossible. Si vous voyez un code 42501 (RLS), ajoutez une policy sur la table attacks pour autoriser l'insert.");
+            toast.error("Création d'attaque impossible. Si vous voyez un code 42501 (RLS), ajoutez une policy d'insert sur attacks.");
           }
         }
       }
@@ -1083,18 +1100,15 @@ export function EquipmentTab({
     }
   };
 
-  // Toggle depuis slot (déséquipe si quelque chose est équipé)
+  // Toggle depuis slot: bascule l’état (si rien d’équipé, ouvre la liste)
   const toggleFromSlot = async (slot: 'armor' | 'shield') => {
-    // trouver l’item de l’inventaire correspondant pour basculer son méta
     const equippedName = slot === 'armor' ? armor?.name : shield?.name;
     if (!equippedName) {
-      // si rien d’équipé, ouvrir la liste
       setShowList(true);
       return;
     }
-    const item = inventory.find(i => stripPriceParentheses(i.name) === stripPriceParentheses(equippedName));
+    const item = inventory.find(i => norm(stripPriceParentheses(i.name)) === norm(stripPriceParentheses(equippedName)));
     if (!item) {
-      // fallback: simplement vider le slot
       if (slot === 'armor') { setArmor(null); await saveEquipment('armor', null); }
       if (slot === 'shield') { setShield(null); await saveEquipment('shield', null); }
       return;
@@ -1108,21 +1122,28 @@ export function EquipmentTab({
     await refreshInventory();
   };
 
-  // État d’expansion par item dans le sac
+  // État d’expansion du sac
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const toggleExpand = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
   // Filtre du sac
   const [bagFilter, setBagFilter] = useState('');
+  const [bagKinds, setBagKinds] = useState<Record<MetaType, boolean>>({
+    armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true
+  });
+
   const filteredInventory = useMemo(() => {
     const q = bagFilter.trim().toLowerCase();
-    if (!q) return inventory;
     return inventory.filter(i => {
+      const meta = parseMeta(i.description);
+      const kind: MetaType = (meta?.type || 'equipment') as MetaType;
+      if (!bagKinds[kind]) return false;
+      if (!q) return true;
       const name = stripPriceParentheses(i.name).toLowerCase();
       const desc = visibleDescription(i.description).toLowerCase();
       return name.includes(q) || desc.includes(q);
     });
-  }, [inventory, bagFilter]);
+  }, [inventory, bagFilter, bagKinds]);
 
   return (
     <div className="space-y-6">
@@ -1249,8 +1270,8 @@ export function EquipmentTab({
         </div>
 
         <div className="p-4">
-          {/* Barre actions (liste + personnalisé) + filtre */}
-          <div className="flex flex-wrap items-center gap-2 mb-4">
+          {/* Barre actions + filtre: recherche à gauche, filtres à droite */}
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
             <button
               onClick={() => setShowList(true)}
               className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2 justify-center"
@@ -1268,14 +1289,32 @@ export function EquipmentTab({
               Objet personnalisé
             </button>
 
-            <div className="ml-auto flex items-center gap-2">
+            <div className="flex-1 min-w-[220px] flex items-center gap-2">
               <Search className="w-4 h-4 text-gray-400" />
               <input
                 value={bagFilter}
                 onChange={(e) => setBagFilter(e.target.value)}
                 placeholder="Filtrer le sac…"
-                className="input-dark px-3 py-2 rounded-md w-48 sm:w-64"
+                className="input-dark px-3 py-2 rounded-md w-full"
               />
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {(['armor','shield','weapon','equipment','potion','jewelry'] as MetaType[]).map(k => (
+                <button
+                  key={k}
+                  onClick={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
+                  className={`px-2 py-1 rounded text-xs border ${
+                    bagKinds[k] ? 'border-red-500/40 text-red-300 bg-red-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-800/40'
+                  }`}
+                >
+                  {k === 'armor' ? 'Armure' :
+                   k === 'shield' ? 'Bouclier' :
+                   k === 'weapon' ? 'Arme' :
+                   k === 'potion' ? 'Potion/Poison' :
+                   k === 'jewelry' ? 'Bijoux' : 'Équipement'}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -1291,8 +1330,8 @@ export function EquipmentTab({
 
               // Statut “équipé” (slots pour armure/bouclier, méta pour arme)
               const equippedBySlot =
-                (isArmor && armor && stripPriceParentheses(armor.name) === stripPriceParentheses(item.name)) ||
-                (isShield && shield && stripPriceParentheses(shield.name) === stripPriceParentheses(item.name));
+                (isArmor && armor && norm(stripPriceParentheses(armor.name)) === norm(stripPriceParentheses(item.name))) ||
+                (isShield && shield && norm(stripPriceParentheses(shield.name)) === norm(stripPriceParentheses(item.name)));
 
               const isEquipped = equippedBySlot || !!meta?.equipped;
 
@@ -1313,9 +1352,8 @@ export function EquipmentTab({
                         {isShield && <span className="text-xs px-2 py-0.5 rounded bg-blue-900/30 text-blue-300">Bouclier</span>}
                         {isWeapon && <span className="text-xs px-2 py-0.5 rounded bg-red-900/30 text-red-300">Arme</span>}
                       </div>
-                      {/* Condensé description (pleine largeur quand déplié plus bas) */}
                       {desc && (
-                        <p className="text-xs text-gray-400 mt-1 line-clamp-1">{desc}</p>
+                        <p className="text-sm text-gray-300 mt-2 whitespace-pre-wrap">{desc}</p>
                       )}
                     </div>
 
@@ -1353,22 +1391,24 @@ export function EquipmentTab({
                   {/* Détail déplié – pleine largeur */}
                   {expanded[item.id] && (
                     <div className="px-3 pb-3">
-                      {desc && <div className="text-sm text-gray-300 whitespace-pre-wrap">{desc}</div>}
                       {isArmor && meta?.armor && (
-                        <div className="text-xs text-gray-400 mt-2">
+                        <div className="text-xs text-gray-400">
                           CA: {meta.armor.label}{meta.armor.stealthDisadvantage ? ' • Désavantage Discrétion' : ''}
                           {meta.armor.strengthReq ? ` • For ${meta.armor.strengthReq}` : ''}
                         </div>
                       )}
                       {isShield && meta?.shield && (
-                        <div className="text-xs text-gray-400 mt-2">Bonus de bouclier: +{meta.shield.bonus}</div>
+                        <div className="text-xs text-gray-400">Bonus de bouclier: +{meta.shield.bonus}</div>
                       )}
                       {isWeapon && meta?.weapon && (
-                        <div className="text-xs text-gray-400 mt-2">
+                        <div className="text-xs text-gray-400">
                           Dégâts: {meta.weapon.damageDice} {meta.weapon.damageType}
                           {meta.weapon.properties ? ` • Props: ${meta.weapon.properties}` : ''}
                           {meta.weapon.range ? ` • Portée: ${meta.weapon.range}` : ''}
                         </div>
+                      )}
+                      {desc && !(isArmor || isShield || isWeapon) && (
+                        <div className="text-xs text-gray-400 mt-1">{/* description juste pour les autres */}</div>
                       )}
                     </div>
                   )}
