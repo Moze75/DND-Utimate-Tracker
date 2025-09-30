@@ -192,10 +192,26 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
 
           {type === 'weapon' && equipment.weapon_meta && (
             <div className="mt-1 text-sm text-gray-300 space-y-1">
-              <div className="flex items-center justify-between"><span className="text-gray-400">Dés</span><span className="font-medium text-gray-100">{equipment.weapon_meta.damageDice}</span></div>
-              <div className="flex items-center justify-between"><span className="text-gray-400">Type</span><span className="font-medium text-gray-100">{equipment.weapon_meta.damageType}</span></div>
-              {equipment.weapon_meta.properties && <div className="flex items-center justify-between"><span className="text-gray-400">Propriété</span><span className="font-medium text-gray-100">{equipment.weapon_meta.properties}</span></div>}
-              {equipment.weapon_meta.range && <div className="flex items-center justify-between"><span className="text-gray-400">Portée</span><span className="font-medium text-gray-100">{equipment.weapon_meta.range}</span></div>}
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Dés</span>
+                <span className="font-medium text-gray-100">{equipment.weapon_meta.damageDice}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Type</span>
+                <span className="font-medium text-gray-100">{equipment.weapon_meta.damageType}</span>
+              </div>
+              {equipment.weapon_meta.properties && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400">Propriété</span>
+                  <span className="font-medium text-gray-100">{equipment.weapon_meta.properties}</span>
+                </div>
+              )}
+              {equipment.weapon_meta.range && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400">Portée</span>
+                  <span className="font-medium text-gray-100">{equipment.weapon_meta.range}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -550,7 +566,7 @@ export function EquipmentTab({
     const equipped =
       (isArmor && armor?.inventory_item_id === item.id) ||
       (isShield && shield?.inventory_item_id === item.id) ||
-      (isWeapon && meta.equipped === true);
+      (isWeapon && (meta.equipped === true || weapon?.inventory_item_id === item.id)); // corrigé: tient compte du slot weapon
     setConfirmPayload({ mode: equipped ? 'unequip' : 'equip', item });
     setConfirmOpen(true);
   };
@@ -760,10 +776,11 @@ export function EquipmentTab({
               const isArmor = meta?.type === 'armor';
               const isShield = meta?.type === 'shield';
               const isWeapon = meta?.type === 'weapon';
+
               const isEquipped =
                 (isArmor && armor?.inventory_item_id === item.id) ||
                 (isShield && shield?.inventory_item_id === item.id) ||
-                (isWeapon && meta?.equipped === true);
+                (isWeapon && (meta?.equipped === true || weapon?.inventory_item_id === item.id)); // corrigé
 
               return (
                 <div key={item.id} className="bg-gray-800/40 border border-gray-700/40 rounded-md">
