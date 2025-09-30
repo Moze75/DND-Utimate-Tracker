@@ -18,7 +18,7 @@ import toast from 'react-hot-toast';
 import { Avatar } from './Avatar';
 import { CONDITIONS } from './ConditionsSection';
 import { PlayerProfileSettingsModal } from './PlayerProfileSettingsModal';
-import { SwipeNavigator } from './SwipeNavigator'; // <-- pour le geste en bord d'écran
+import { SwipeNavigator } from './SwipeNavigator';
 
 /* ============================ Helpers ============================ */
 
@@ -40,7 +40,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
     inspirations: player.stats?.inspirations || 0,
   };
 
-  // NEW: helper pour convertir une valeur potentiellement "10,5" en nombre 10.5
+  // Convertit "10,5" -> 10.5 en nombre
   const toNumber = (v: unknown): number => {
     if (typeof v === 'number') return v;
     if (typeof v === 'string') {
@@ -50,7 +50,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
     return 0;
   };
 
-  // NEW: helper pour afficher avec une virgule si nécessaire (fr-FR)
+  // Affiche avec virgule si nécessaire (fr-FR)
   const formatFr = (v: number | string | null | undefined): string => {
     if (v == null) return '0';
     if (typeof v === 'string') {
@@ -60,13 +60,14 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
     return v.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
   };
 
-  // NEW: valeur numérique fiable de la vitesse pour les calculs
+  // Vitesse en nombre fiable (pour calculs)
   const speedNum = toNumber(stats.speed);
 
-  // Bonus d'armure depuis l'équipement (ajouté à la CA affichée)
+  // CA totale = CA de base + bonus d'armure + bonus de bouclier
   const armorBonus = Number((player as any)?.equipment?.armor?.armor_bonus ?? 0) || 0;
+  const shieldBonus = Number((player as any)?.equipment?.shield?.shield_bonus ?? 0) || 0;
   const baseAC = Number(stats.armor_class || 0);
-  const totalAC = baseAC + armorBonus;
+  const totalAC = baseAC + armorBonus + shieldBonus;
 
   /* ============================ Repos court / long ============================ */
 
@@ -443,6 +444,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
                     <ul className="list-disc list-inside text-gray-400 space-y-1">
                       <li>CA de base: {baseAC}</li>
                       <li>+ Bonus d'armure (équipement): {armorBonus >= 0 ? `+${armorBonus}` : armorBonus}</li>
+                      <li>+ Bonus de bouclier (équipement): {shieldBonus >= 0 ? `+${shieldBonus}` : shieldBonus}</li>
                       <li>Total: {totalAC}</li>
                     </ul>
                     <p className="text-xs text-gray-500 mt-2">La CA de base se règle dans les Paramètres du personnage.</p>
