@@ -4,7 +4,7 @@ import {
   Star,
   Dice1 as DiceD20,
   Brain,
-  Shield,
+  Shield as ShieldIcon,
   Plus,
   Minus,
   User,
@@ -27,11 +27,31 @@ export interface PlayerProfileProps {
   onUpdate: (player: Player) => void;
 }
 
+const getDexModFromPlayer = (player: Player): number => {
+  const abilities: any = (player as any).abilities;
+  const fromArray = Array.isArray(abilities) ? abilities.find((a: any) => a?.name === 'Dextérité') : undefined;
+  if (fromArray?.modifier != null) return fromArray.modifier;
+  if (fromArray?.score != null) return Math.floor((fromArray.score - 10) / 2);
+  return 0;
+};
+
+function computeArmorAC(armor_formula: {
+  base: number;
+  addDex: boolean;
+  dexCap?: number | null;
+}, dexMod: number): number {
+  if (!armor_formula) return 0;
+  const base = armor_formula.base || 10;
+  if (!armor_formula.addDex) return base;
+  const cap = armor_formula.dexCap == null ? Infinity : armor_formula.dexCap;
+  const applied = Math.max(-10, Math.min(cap, dexMod));
+  return base + applied;
+}
+
 export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
   const [editing, setEditing] = useState(false);
   const [activeTooltip, setActiveTooltip] = useState<'ac' | 'speed' | 'initiative' | 'proficiency' | null>(null);
 
-  // Dérive les stats pour l’affichage (fallbacks sûrs)
   const stats: PlayerStats = player.stats || {
     armor_class: 10,
     initiative: 0,
@@ -40,7 +60,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
     inspirations: player.stats?.inspirations || 0,
   };
 
-  // Convertit "10,5" -> 10.5 en nombre
   const toNumber = (v: unknown): number => {
     if (typeof v === 'number') return v;
     if (typeof v === 'string') {
@@ -50,7 +69,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
     return 0;
   };
 
-  // Affiche avec virgule si nécessaire (fr-FR)
   const formatFr = (v: number | string | null | undefined): string => {
     if (v == null) return '0';
     if (typeof v === 'string') {
@@ -60,16 +78,18 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
     return v.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
   };
 
-  // Vitesse en nombre fiable (pour calculs)
   const speedNum = toNumber(stats.speed);
 
-  // CA totale = CA de base + bonus d'armure + bonus de bouclier
-  const armorBonus = Number((player as any)?.equipment?.armor?.armor_bonus ?? 0) || 0;
+  // Calcul CA:
+  const dexMod = getDexModFromPlayer(player);
+  const armorFormula = (player as any)?.equipment?.armor?.armor_formula || null;
   const shieldBonus = Number((player as any)?.equipment?.shield?.shield_bonus ?? 0) || 0;
-  const baseAC = Number(stats.armor_class || 0);
-  const totalAC = baseAC + armorBonus + shieldBonus;
 
-  /* ============================ Repos court / long ============================ */
+  const baseACFromStats = Number(stats.armor_class || 0);
+  const armorAC = armorFormula ? computeArmorAC(armorFormula, dexMod) : baseACFromStats;
+  const totalAC = armorAC + shieldBonus;
+
+  /* ============================ Repos court / long (inchangé) ============================ */
 
   const handleShortRest = async () => {
     if (!player.hit_dice || player.hit_dice.total - player.hit_dice.used <= 0) {
@@ -100,7 +120,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
       const constitutionMod = player.abilities?.find(a => a.name === 'Constitution')?.modifier || 0;
       const healing = Math.max(1, roll + constitutionMod);
 
-      // Restaure 1 Conduit divin au Paladin (si utilisé)
       const nextCR: any = { ...(player.class_resources || {}) };
       let recoveredLabel = '';
       if (player.class === 'Paladin' && typeof nextCR.used_channel_divinity === 'number') {
@@ -145,7 +164,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
       const nextCR: any = { ...(player.class_resources || {}) };
       nextCR.used_rage = 0;
       nextCR.used_bardic_inspiration = 0;
-      nextCR.used_channel_divinity = 0; // Clerc & Paladin
+      nextCR.used_channel_divinity = 0;
       nextCR.used_wild_shape = 0;
       nextCR.used_sorcery_points = 0;
       nextCR.used_action_surge = 0;
@@ -154,8 +173,8 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
       nextCR.used_ki_points = 0;
       nextCR.used_lay_on_hands = 0;
       nextCR.used_favored_foe = 0;
-      nextCR.used_innate_sorcery = 0;              // Ensorceleur — Sorcellerie innée
-      nextCR.used_supernatural_metabolism = 0;     // Moine — Métabolisme surnaturel
+      nextCR.used_innate_sorcery = 0;
+      nextCR.used_supernatural_metabolism = 0;
 
       const { error } = await supabase
         .from('players')
@@ -204,8 +223,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
     }
   };
 
-  /* ============================ Icône de classe (optionnel) ============================ */
-
   const getClassIcon = (playerClass: string | null | undefined) => {
     switch (playerClass) {
       case 'Guerrier':
@@ -217,7 +234,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
         return <Sparkles className="w-5 h-5 text-purple-500" />;
       case 'Clerc':
       case 'Druide':
-        return <Shield className="w-5 h-5 text-yellow-500" />;
+        return <ShieldIcon className="w-5 h-5 text-yellow-500" />;
       default:
         return <User className="w-5 h-5 text-gray-500" />;
     }
@@ -227,8 +244,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
 
   return (
     <>
-      {/* Zone de capture du swipe gauche->droite (bord d'écran) */}
-      {/* Masquée sur desktop pour éviter les conflits, active surtout sur mobile */}
       <div className="fixed inset-y-0 left-0 w-4 sm:w-6 z-40 md:hidden">
         <SwipeNavigator threshold={45} onSwipeRight={() => setEditing(true)}>
           <div className="w-full h-full" aria-hidden />
@@ -238,7 +253,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
       <div className="stat-card">
         <div className="stat-header flex items-start justify-between">
           <div className="flex flex-col gap-4 w-full">
-            {/* États actifs */}
             {player.active_conditions && player.active_conditions.length > 0 && (
               <div className="flex gap-1 flex-wrap">
                 {player.active_conditions
@@ -255,13 +269,11 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               </div>
             )}
 
-            {/* Carte avatar + actions */}
             <div
               className="grid items-start gap-3 sm:gap-4"
               style={{ gridTemplateColumns: 'minmax(0,1fr) 8rem' }}
             >
               <div className="relative w-full min-w-0 aspect-[7/10] sm:aspect-[2/3] rounded-lg overflow-hidden bg-gray-800/50 flex items-center justify-center">
-                {/* Bouton paramètres en haut-gauche (icône hamburger) */}
                 <button
                   onClick={() => setEditing(true)}
                   className="absolute top-2 left-2 w-9 h-9 rounded-full bg-gray-900/40 backdrop-blur-sm text-white hover:bg-gray-800/50 hover:text-white flex items-center justify-center z-10 transition-colors"
@@ -292,7 +304,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
                 </div>
               </div>
 
-              {/* Colonne boutons (repos / inspirations / concentration) */}
               <div className="flex flex-col gap-3 sm:gap-4 items-stretch w-32 justify-start">
                 {/* Inspirations */}
                 <div className="w-32 rounded text-sm bg-gray-800/50 flex flex-col">
@@ -380,7 +391,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
                   </div>
                 )}
 
-                {/* Concentration toggle */}
+                {/* Concentration */}
                 <button
                   onClick={async () => {
                     try {
@@ -430,7 +441,7 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               className="relative w-12 h-10 -mt-2 -mb-1 group cursor-pointer"
               onClick={() => setActiveTooltip(activeTooltip === 'ac' ? null : 'ac')}
             >
-              <Shield className="absolute inset-0 w-full h-full text-gray-400 stroke-[1.5] scale-125" />
+              <ShieldIcon className="absolute inset-0 w-full h-full text-gray-400 stroke-[1.5] scale-125" />
               <div className="absolute inset-0 flex items-center justify-center -translate-y-1 text-lg font-bold text-gray-100 z-10">
                 {totalAC}
               </div>
@@ -442,12 +453,17 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
                     <p className="mb-2">Détermine la difficulté pour vous toucher en combat.</p>
                     <p className="text-gray-400">Calcul actuel :</p>
                     <ul className="list-disc list-inside text-gray-400 space-y-1">
-                      <li>CA de base: {baseAC}</li>
-                      <li>+ Bonus d'armure (équipement): {armorBonus >= 0 ? `+${armorBonus}` : armorBonus}</li>
+                      {armorFormula ? (
+                        <>
+                          <li>Armure équipée: {computeArmorAC(armorFormula, dexMod)} (Formule: {armorFormula.base}{armorFormula.addDex ? ` + mod DEX${armorFormula.dexCap != null ? ` (max ${armorFormula.dexCap})` : ''}` : ''})</li>
+                        </>
+                      ) : (
+                        <li>CA de base (profil): {baseACFromStats}</li>
+                      )}
                       <li>+ Bonus de bouclier (équipement): {shieldBonus >= 0 ? `+${shieldBonus}` : shieldBonus}</li>
                       <li>Total: {totalAC}</li>
                     </ul>
-                    <p className="text-xs text-gray-500 mt-2">La CA de base se règle dans les Paramètres du personnage.</p>
+                    <p className="text-xs text-gray-500 mt-2">L’armure équipée remplace la CA de base. La CA de base est configurable dans les paramètres si vous n’utilisez pas d’armure.</p>
                   </div>
                 </>
               )}
@@ -493,22 +509,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               <div className="text-lg font-bold text-gray-100">
                 {stats.initiative >= 0 ? '+' : ''}{stats.initiative}
               </div>
-              {activeTooltip === 'initiative' && (
-                <>
-                  <div className="fixed inset-0" onClick={() => setActiveTooltip(null)} />
-                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-xl border border-gray-700/60">
-                    <h4 className="font-semibold text-gray-100 mb-1">Initiative</h4>
-                    <p className="mb-2">Détermine l'ordre d'action en combat.</p>
-                    <div className="text-gray-400">
-                      <p>Calcul :</p>
-                      <ul className="list-disc list-inside">
-                        <li>1d20 + modificateur de Dextérité</li>
-                        <li>+ bonus spéciaux éventuels</li>
-                      </ul>
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
             <div className="text-xs uppercase tracking-wide text-gray-500 -mt-1 text-center -ml-4">INIT</div>
           </div>
@@ -522,25 +522,6 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
               <div className="text-lg font-bold text-gray-100">
                 +{stats.proficiency_bonus}
               </div>
-              {activeTooltip === 'proficiency' && (
-                <>
-                  <div className="fixed inset-0" onClick={() => setActiveTooltip(null)} />
-                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-300 rounded-lg max-w-sm w-[90vw] shadow-xl border border-gray-700/60">
-                    <h4 className="font-semibold text-gray-100 mb-1">Bonus de Maîtrise</h4>
-                    <p>Représente votre expertise générale.</p>
-                    <div className="text-gray-400">
-                      <p>S'applique à :</p>
-                      <ul className="list-disc list-inside space-y-1">
-                        <li>Jets d'attaque avec armes maîtrisées</li>
-                        <li>DD des sorts</li>
-                        <li>Compétences maîtrisées</li>
-                        <li>Jets de sauvegarde maîtrisés</li>
-                      </ul>
-                      <p className="mt-2">Note : Ne s'applique pas aux dégâts !</p>
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
             <div className="text-xs uppercase tracking-wide text-gray-500 -mt-1 text-center -ml-6">MAÎT</div>
           </div>
