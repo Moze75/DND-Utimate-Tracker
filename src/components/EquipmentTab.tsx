@@ -103,27 +103,55 @@ const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
 /* ====================== Markdown renderer (tables + simple lists) ====================== */
 
-function isMarkdownTableBlock(lines: string[]) {
-  return lines.length >= 2 && lines[0].trim().startsWith('|') && lines[0].includes('|');
+function isMarkdownTableLine(line: string) {
+  const l = line.trim();
+  return l.startsWith('|') && l.endsWith('|') && l.includes('|');
 }
-function parseMarkdownTableBlock(lines: string[]) {
-  const rows: string[][] = [];
-  for (const line of lines) {
-    const l = line.trim();
-    if (!(l.startsWith('|') && l.endsWith('|') && l.includes('|'))) continue;
-    const cells = l.substring(1, l.length - 1).split('|').map(c => c.trim());
-    if (cells.every(c => /^[-:\s]+$/.test(c))) continue;
-    rows.push(cells);
+function parseMarkdownTables(md: string): string[][][] {
+  // Returns an array of tables, each table is an array of rows, each row is an array of cells
+  const tables: string[][][] = [];
+  const lines = md.split('\n');
+  let current: string[][] | null = null;
+
+  for (const raw of lines) {
+    const line = raw.trimRight();
+    if (isMarkdownTableLine(line)) {
+      const cells = line.substring(1, line.length - 1).split('|').map(c => c.trim());
+      // If this is a "separator" row (---), keep it so we can detect header, but don't push as a data row
+      if (!current) current = [];
+      current.push(cells);
+    } else {
+      if (current && current.length > 0) {
+        // finalize table
+        tables.push(current);
+      }
+      current = null;
+    }
   }
-  return rows;
+  if (current && current.length > 0) tables.push(current);
+  return tables;
 }
+
 function MarkdownLite({ text }: { text: string }) {
+  // Split into blocks separated by empty lines
   const blocks = text.split(/\n{2,}/g).map(b => b.split('\n'));
   return (
     <div className="space-y-2">
       {blocks.map((lines, idx) => {
-        if (isMarkdownTableBlock(lines)) {
-          const rows = parseMarkdownTableBlock(lines);
+        // Table block
+        if (lines.length >= 2 && isMarkdownTableLine(lines[0])) {
+          // Collect contiguous table lines for this block
+          const tableLines: string[] = [];
+          for (const l of lines) {
+            if (isMarkdownTableLine(l)) tableLines.push(l);
+          }
+          const rows: string[][] = [];
+          for (const tl of tableLines) {
+            const cells = tl.substring(1, tl.length - 1).split('|').map(c => c.trim());
+            // ignore pure separator rows
+            if (cells.every(c => /^[-:\s]+$/.test(c))) continue;
+            rows.push(cells);
+          }
           if (rows.length === 0) return null;
           const header = rows[0];
           const body = rows.slice(1);
@@ -150,6 +178,7 @@ function MarkdownLite({ text }: { text: string }) {
             </div>
           );
         }
+        // bullet lists (- ) basic
         if (lines.every(l => l.trim().startsWith('- '))) {
           return (
             <ul key={idx} className="list-disc pl-5 space-y-1">
@@ -157,6 +186,7 @@ function MarkdownLite({ text }: { text: string }) {
             </ul>
           );
         }
+        // paragraph
         return <p key={idx} className="text-sm text-gray-300 whitespace-pre-wrap">{lines.join('\n')}</p>;
       })}
     </div>
@@ -308,7 +338,109 @@ function parseWeapons(md: string): CatalogItem[] {
   }
   return items;
 }
-// Outils & Équipements d'aventurier: sections "## Titre" + texte (peuvent contenir des tableaux)
+
+// OUTILS: parser robuste
+function parseTools(md: string): CatalogItem[] {
+  const items: CatalogItem[] = [];
+
+  // 1) Extraire toutes les tables du doc comme des outils individuels
+  const tables = parseMarkdownTables(md);
+  const noiseRow = (s: string) =>
+    !s ||
+    /^autres? outils?$/i.test(s) ||
+    /^types? d'?outils?$/i.test(s) ||
+    /^outils?$/i.test(s) ||
+    /^sommaire$/i.test(s) ||
+    /^table des matières$/i.test(s) ||
+    /^généralités?$/i.test(s) ||
+    /^introduction$/i.test(s);
+
+  for (const table of tables) {
+    if (table.length === 0) continue;
+    // Build header
+    let header = table[0];
+    // If the second row looks like a separator (---), ignore it (already filtered in parser above in most cases)
+    const body = table.slice(1);
+
+    // Try to detect a header row; if the first row looks like all words (not values) and body has numbers,
+    // keep as header; otherwise treat first row as data and synthesize generic header.
+    const headerLooksLikeHeader = header.some(c => /nom|outil|description|prix|coût|co[ûu]t/i.test(c));
+    if (!headerLooksLikeHeader) {
+      header = header.map((_, i) => (i === 0 ? 'Nom' : `Col${i + 1}`));
+    }
+
+    for (const row of body) {
+      const name = stripPriceParentheses(row[0] || '').trim();
+      if (!name || noiseRow(name)) continue;
+
+      // Build description from header/value pairs
+      const parts: string[] = [];
+      for (let i = 1; i < Math.min(row.length, header.length); i++) {
+        const h = header[i]?.trim();
+        const v = (row[i] || '').trim();
+        if (!v) continue;
+        if (/prix|co[ûu]t/i.test(h)) continue; // masque la valeur/prix
+        parts.push(`${smartCapitalize(h)}: ${v}`);
+      }
+      const desc = parts.join('\n');
+
+      items.push({
+        id: `tools:${name}`,
+        kind: 'tools',
+        name,
+        description: desc
+      });
+    }
+  }
+
+  // 2) Fallback: sections ## / ### avec contenu (on évite "Autres outils", "Types", etc.)
+  const lines = md.split('\n');
+  const sections: { name: string; desc: string }[] = [];
+  let current: { name: string; buf: string[] } | null = null;
+
+  const isHeader = (line: string) => /^#{2,3}\s+/.test(line);
+  const headerName = (line: string) => line.replace(/^#{2,3}\s+/, '').trim();
+
+  for (const raw of lines) {
+    if (isHeader(raw)) {
+      if (current) {
+        const nm = stripPriceParentheses(current.name);
+        const ds = current.buf.join('\n').trim();
+        if (nm && ds && !noiseRow(nm)) sections.push({ name: nm, desc: ds });
+      }
+      current = { name: headerName(raw), buf: [] };
+    } else {
+      if (current) current.buf.push(raw);
+    }
+  }
+  if (current) {
+    const nm = stripPriceParentheses(current.name);
+    const ds = current.buf.join('\n').trim();
+    if (nm && ds && !noiseRow(nm)) sections.push({ name: nm, desc: ds });
+  }
+
+  // Ajoute les sections (en évitant de dupliquer les lignes déjà créées depuis les tables)
+  const seen = new Set(items.map(i => norm(i.name)));
+  for (const sec of sections) {
+    if (seen.has(norm(sec.name))) continue;
+    items.push({
+      id: `tools:${sec.name}`,
+      kind: 'tools',
+      name: sec.name,
+      description: sec.desc
+    });
+  }
+
+  // Nettoyage & dédup
+  const dedup = new Map<string, CatalogItem>();
+  for (const it of items) {
+    const key = it.id;
+    if (!dedup.has(key)) dedup.set(key, it);
+  }
+  return [...dedup.values()];
+}
+
+// Équipements d’aventurier: sections ## / ### (rendu Markdown)
 function parseSectionedList(md: string, kind: CatalogKind): CatalogItem[] {
   const items: CatalogItem[] = [];
   const lines = md.split('\n');
@@ -316,18 +448,15 @@ function parseSectionedList(md: string, kind: CatalogKind): CatalogItem[] {
 
   const isNoiseName = (n: string) =>
     !n ||
-    /^types?$/i.test(n) ||
     /^sommaire$/i.test(n) ||
     /^table des matières$/i.test(n) ||
-    /^inutiles?$/i.test(n) ||
-    /^type inutile$/i.test(n);
+    /^introduction$/i.test(n);
 
   const flush = () => {
     if (!current) return;
     const rawName = current.name || '';
     const cleanName = stripPriceParentheses(rawName);
     const desc = current.descLines.join('\n').trim();
-    // Drop éléments vides/parasites
     if (!cleanName.trim() || isNoiseName(cleanName) || !desc) {
       current = null;
       return;
@@ -337,16 +466,9 @@ function parseSectionedList(md: string, kind: CatalogKind): CatalogItem[] {
   };
 
   for (const line of lines) {
-    const h = line.match(/^##\s+(.+?)\s*$/); // titres de niveau 2
-    if (h) {
-      if (current) flush();
-      current = { name: h[1].trim(), descLines: [] };
-      continue;
-    }
-    // délimiteurs de sections
-    if (/^---\s*$/.test(line)) {
-      if (current) { flush(); continue; }
-    }
+    const h = line.match(/^#{2,3}\s+(.+?)\s*$/); // supporte ## et ###
+    if (h) { if (current) flush(); current = { name: h[1].trim(), descLines: [] }; continue; }
+    if (/^---\s*$/.test(line)) { if (current) { flush(); continue; } }
     if (current) current.descLines.push(line);
   }
   if (current) flush();
@@ -394,14 +516,18 @@ function EquipmentListModal({
           fetchText(URLS.armors), fetchText(URLS.shields), fetchText(URLS.weapons),
           fetchText(URLS.adventuring_gear), fetchText(URLS.tools),
         ]);
+
+        const listArmors = parseArmors(armorsMd);
+        const listShields = parseShields(shieldsMd);
+        const listWeapons = parseWeapons(weaponsMd);
+        const listGear = parseSectionedList(gearMd, 'adventuring_gear');
+        const listTools = parseTools(toolsMd);
+
         const list: CatalogItem[] = [
-          ...parseArmors(armorsMd),
-          ...parseShields(shieldsMd),
-          ...parseWeapons(weaponsMd),
-          ...parseSectionedList(gearMd, 'adventuring_gear'),
-          ...parseSectionedList(toolsMd, 'tools'),
+          ...listArmors, ...listShields, ...listWeapons, ...listGear, ...listTools
         ];
-        // Nettoyage (supprime doublons & entrées vides)
+
+        // Deduplicate by id and drop empty names
         const seen = new Set<string>();
         const cleaned = list.filter(ci => {
           const nm = (ci.name || '').trim();
@@ -441,6 +567,7 @@ function EquipmentListModal({
     return all.filter(ci => {
       if (!effectiveFilters[ci.kind]) return false;
       if (allowedKinds && !allowedKinds.includes(ci.kind)) return false;
+      // Recherche
       if (!q) return true;
       if (smartCapitalize(ci.name).toLowerCase().includes(q)) return true;
       if ((ci.kind === 'adventuring_gear' || ci.kind === 'tools') && (ci.description || '').toLowerCase().includes(q)) return true;
@@ -449,6 +576,7 @@ function EquipmentListModal({
   }, [all, query, effectiveFilters, allowedKinds, noneSelected]);
 
   const handlePick = (ci: CatalogItem) => {
+    // Ajout défaut: quantité 1, non équipé
     let meta: ItemMeta = { type: 'equipment', quantity: 1, equipped: false };
     if (ci.kind === 'armors' && ci.armor) meta = { type: 'armor', quantity: 1, equipped: false, armor: ci.armor };
     if (ci.kind === 'shields' && ci.shield) meta = { type: 'shield', quantity: 1, equipped: false, shield: ci.shield };
@@ -515,6 +643,20 @@ function EquipmentListModal({
           ) : (
             filtered.map(ci => {
               const isOpen = !!expanded[ci.id];
+              const preview = (
+                <>
+                  {ci.kind === 'armors' && ci.armor && <div>CA: {ci.armor.label}</div>}
+                  {ci.kind === 'shields' && ci.shield && <div>Bonus de bouclier: +{ci.shield.bonus}</div>}
+                  {ci.kind === 'weapons' && ci.weapon && (
+                    <div className="space-y-0.5">
+                      <div>Dégâts: {ci.weapon.damageDice} {ci.weapon.damageType}</div>
+                      {ci.weapon.properties && <div>Propriété: {ci.weapon.properties}</div>}
+                      {ci.weapon.range && <div>Portée: {ci.weapon.range}</div>}
+                    </div>
+                  )}
+                  {(ci.kind === 'adventuring_gear' || ci.kind === 'tools') && (ci.description ? 'Voir le détail' : 'Équipement')}
+                </>
+              );
               return (
                 <div key={ci.id} className="bg-gray-800/50 border border-gray-700/50 rounded-md">
                   <div className="flex items-start justify-between p-3 gap-3">
@@ -522,18 +664,7 @@ function EquipmentListModal({
                       <button className="text-gray-100 font-medium hover:underline break-words text-left" onClick={() => toggleExpand(ci.id)}>
                         {smartCapitalize(ci.name)}
                       </button>
-                      <div className="text-xs text-gray-400 mt-1 space-y-0.5">
-                        {ci.kind === 'armors' && ci.armor && <div>CA: {ci.armor.label}</div>}
-                        {ci.kind === 'shields' && ci.shield && <div>Bonus de bouclier: +{ci.shield.bonus}</div>}
-                        {ci.kind === 'weapons' && ci.weapon && (
-                          <>
-                            <div>Dégâts: {ci.weapon.damageDice} {ci.weapon.damageType}</div>
-                            {ci.weapon.properties && <div>Propriété: {ci.weapon.properties}</div>}
-                            {ci.weapon.range && <div>Portée: {ci.weapon.range}</div>}
-                          </>
-                        )}
-                        {(ci.kind === 'adventuring_gear' || ci.kind === 'tools') && (ci.description ? 'Voir le détail' : 'Équipement')}
-                      </div>
+                      <div className="text-xs text-gray-400 mt-1">{preview}</div>
                     </div>
                     <button onClick={() => handlePick(ci)} className="btn-primary px-3 py-2 rounded-lg flex items-center gap-1">
                       <Check className="w-4 h-4" /> Ajouter
@@ -926,6 +1057,7 @@ export function EquipmentTab({
   const [armor, setArmor] = useState<Equipment | null>(player.equipment?.armor || null);
   const [weapon, setWeapon] = useState<Equipment | null>(player.equipment?.weapon || null);
   const [shield, setShield] = useState<Equipment | null>(player.equipment?.shield || null);
+
   // Synthèses dynamiques pour bijoux/potions (liste provenant de l’inventaire)
   const jewelryItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'jewelry'), [inventory]);
   const potionItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'potion'), [inventory]);
@@ -933,14 +1065,14 @@ export function EquipmentTab({
     name: 'Bijoux',
     description: jewelryItems.length
       ? jewelryItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n')
-      : '',
+      : 'Aucun bijou dans le sac.',
     isTextArea: true
   }), [jewelryItems]);
   const potionEquip: Equipment = useMemo(() => ({
     name: 'Potions et poisons',
     description: potionItems.length
       ? potionItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n')
-      : '',
+      : 'Aucune potion/poison dans le sac.',
     isTextArea: true
   }), [potionItems]);
 
@@ -995,6 +1127,18 @@ export function EquipmentTab({
       notifyAttacksChanged();
     } catch (err) {
       console.error('Création/mise à jour attaque échouée', err);
+    }
+  };
+
+  const removeWeaponAttacksByName = async (name: string) => {
+    try {
+      const attacks = await attackService.getPlayerAttacks(player.id);
+      const toDelete = attacks.filter(a => norm(a.name) === norm(name));
+      if (toDelete.length === 0) return;
+      await Promise.allSettled(toDelete.map(a => attackService.removeAttack(a.id)));
+      notifyAttacksChanged();
+    } catch (e) {
+      console.error('Suppression attaques (déséquipement) échouée', e);
     }
   };
 
@@ -1074,7 +1218,7 @@ export function EquipmentTab({
     if (updates.length) await Promise.allSettled(updates);
   };
 
-  // Multi-armes: ne pas forcer l’unicité dans le slot
+  // Multi-armes: ne force pas l’unicité; on gère "équipé" via meta.equipped
   const performToggle = async (item: InventoryItem, mode: 'equip' | 'unequip') => {
     const meta = parseMeta(item.description);
     if (!meta) return;
@@ -1117,12 +1261,16 @@ export function EquipmentTab({
       } else if (meta.type === 'weapon') {
         if (mode === 'unequip') {
           await updateItemMeta(item, { ...meta, equipped: false });
-          // Si le slot affiche précisément cette arme, l’effacer du slot
+          // Si le slot prévisualise précisément cette arme, on vide le slot
           if (weapon?.inventory_item_id === item.id) { setWeapon(null); await saveEquipment('weapon', null); }
+          // Supprime l’attaque correspondante dans CombatTab
+          await removeWeaponAttacksByName(item.name);
           toast.success('Arme déséquipée');
         } else if (mode === 'equip') {
-          // Marque l’arme comme équipée, et si le slot est vide, y placer un aperçu
+          // Marque l’arme comme équipée (persistance via meta)
           await updateItemMeta(item, { ...meta, equipped: true });
+
+          // Si aucune arme n'est affichée dans le slot, montrer un aperçu de celle-ci
           if (!weapon) {
             const eq: Equipment = {
               name: item.name,
@@ -1145,6 +1293,8 @@ export function EquipmentTab({
             setWeapon(eq);
             await saveEquipment('weapon', eq);
           }
+
+          // Upsert de l’attaque
           await createOrUpdateWeaponAttack(item.name, meta.weapon);
           toast.success('Arme équipée');
         }
@@ -1167,7 +1317,7 @@ export function EquipmentTab({
     const equipped =
       (isArmor && armor?.inventory_item_id === item.id) ||
       (isShield && shield?.inventory_item_id === item.id) ||
-      (isWeapon && (parseMeta(item.description)?.equipped === true)); // armes: basé sur meta.equipped
+      (isWeapon && meta.equipped === true);
 
     setConfirmPayload({ mode: equipped ? 'unequip' : 'equip', item });
     setConfirmOpen(true);
@@ -1267,7 +1417,7 @@ export function EquipmentTab({
               isEquipped={!!weapon}
             />
 
-            {/* Potion: affiche la synthèse des objets de type potion/poison */}
+            {/* Potion: synthèse des objets de type potion/poison */}
             <EquipmentSlot
               icon={<Flask size={24} className="text-green-500" />}
               position="top-[5%] right-[5%]"
@@ -1279,7 +1429,7 @@ export function EquipmentTab({
               isEquipped={false}
             />
 
-            {/* Bijoux: affiche la synthèse des objets de type jewelry */}
+            {/* Bijoux: synthèse des objets de type jewelry */}
             <EquipmentSlot
               icon={<Star size={24} className="text-yellow-500" />}
               position="top-[15%] right-[5%]"
@@ -1391,7 +1541,7 @@ export function EquipmentTab({
               const isEquipped =
                 (isArmor && armor?.inventory_item_id === item.id) ||
                 (isShield && shield?.inventory_item_id === item.id) ||
-                (isWeapon && meta?.equipped === true); // armes: multiple via meta.equipped
+                (isWeapon && meta?.equipped === true);
 
               return (
                 <div key={item.id} className="bg-gray-800/40 border border-gray-700/40 rounded-md">
