@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { InventoryItem } from '../../types/dnd';
 
-/* Types & utils locaux alignés */
+/* Types & utils alignés */
 type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment' | 'jewelry' | 'tool';
 interface WeaponMeta { damageDice: string; damageType: 'Tranchant' | 'Perforant' | 'Contondant'; properties: string; range: string; }
 interface ArmorMeta { base: number; addDex: boolean; dexCap?: number | null; label: string; }
@@ -76,12 +76,11 @@ export function InventoryItemEditModal({
 
   const save = async () => {
     try {
-      // Construire un meta cohérent selon le type choisi
       let nextMeta: ItemMeta = {
         ...(existingMeta || {} as ItemMeta),
         type,
         quantity: Math.max(1, quantity),
-        // ne modifie pas equipped ici (l’équipement/déséquipement se fait ailleurs)
+        // on ne modifie pas equipped ici
       };
 
       if (type === 'weapon') {
@@ -92,7 +91,6 @@ export function InventoryItemEditModal({
           range: wRange || 'Corps à corps',
         };
       } else {
-        // si on change vers un autre type, on peut nettoyer les champs spécifiques arme
         delete (nextMeta as any).weapon;
       }
 
