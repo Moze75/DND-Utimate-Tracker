@@ -15,10 +15,10 @@ interface Equipment {
   description: string;
   isTextArea?: boolean;
 
-  // Id de la ligne d’inventaire dont provient cet équipement (pour lever toute ambiguïté)
+  // Id de la ligne d’inventaire dont provient l’équipement
   inventory_item_id?: string | null;
 
-  // Armure: calcul par formule (remplace la CA de base)
+  // Armure: formule pour calculer la CA (remplace la CA de base)
   armor_formula?: {
     base: number;
     addDex: boolean;
@@ -26,11 +26,12 @@ interface Equipment {
     label?: string;
   } | null;
 
-  // Bouclier: simple bonus
+  // Bouclier: bonus simple
   shield_bonus?: number | null;
 }
 
-type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment' | 'jewelry';
+// Ajout du type 'tool' pour filtrer les outils dans le sac
+type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment' | 'jewelry' | 'tool';
 
 interface WeaponMeta {
   damageDice: string;
@@ -38,14 +39,12 @@ interface WeaponMeta {
   properties: string;
   range: string;
 }
-
 interface ArmorMeta {
   base: number;
   addDex: boolean;
   dexCap?: number | null;
   label: string;
 }
-
 interface ShieldMeta {
   bonus: number;
 }
@@ -53,7 +52,7 @@ interface ShieldMeta {
 interface ItemMeta {
   type: MetaType;
   quantity?: number;
-  equipped?: boolean;
+  equipped?: boolean;     // pour armes; pour armures/boucliers, on synchronise quand même ce flag
   weapon?: WeaponMeta;
   armor?: ArmorMeta;
   shield?: ShieldMeta;
@@ -84,7 +83,6 @@ function injectMetaIntoDescription(desc: string | null | undefined, meta: ItemMe
   return (noOldMeta ? `${noOldMeta}\n` : '') + metaLine;
 }
 
-// Nettoyages nom/description
 function stripPriceParentheses(name: string): string {
   return name.replace(/\s*\((?:\d+|\w+|\s|,|\.|\/|-)+\s*p[oa]?\)\s*$/i, '').trim();
 }
@@ -153,16 +151,17 @@ function parseArmors(md: string): CatalogItem[] {
     const [nomRaw, ca] = row;
     if (!nomRaw || /armures/i.test(nomRaw)) continue;
     const nom = stripPriceParentheses(nomRaw);
-    // 12 + mod Dex (max 2) | 18
+
     let base = 10, addDex = false, dexCap: number | null = null;
     const dexMatch = ca.match(/(\d+)\s*\+\s*modificateur de Dex(?:\s*\(max\s*(\d+)\))?/i);
     if (dexMatch) { base = +dexMatch[1]; addDex = true; dexCap = dexMatch[2] ? +dexMatch[2] : null; }
     else { const m = ca.match(/^\s*(\d+)\s*$/); if (m) { base = +m[1]; addDex = false; dexCap = null; } }
+
     items.push({
       id: `armor:${nom}`,
       kind: 'armors',
       name: nom,
-      description: '', // pas de redondance
+      description: '',
       armor: { base, addDex, dexCap, label: ca },
     });
   }
@@ -182,7 +181,7 @@ function parseShields(md: string): CatalogItem[] {
       id: `shield:${nom}`,
       kind: 'shields',
       name: nom,
-      description: '', // pas de redondance
+      description: '',
       shield: { bonus },
     });
   }
@@ -209,7 +208,7 @@ function parseWeapons(md: string): CatalogItem[] {
       id: `weapon:${nom}`,
       kind: 'weapons',
       name: nom,
-      description: '', // pas de redondance
+      description: '',
       weapon: { damageDice, damageType, properties: props || '', range },
     });
   }
@@ -235,7 +234,7 @@ function parseSectionedList(md: string, kind: CatalogKind): CatalogItem[] {
   return items;
 }
 
-/* ====================== Modal Liste d’équipement (plein écran, filtres OK) ====================== */
+/* ====================== Modal Liste d’équipement (plein écran) ====================== */
 
 type FilterState = {
   weapons: boolean;
@@ -261,7 +260,7 @@ function EquipmentListModal({
   });
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  // Scroll-lock et 100dvh pour éviter la bande visible en haut
+  // Scroll-lock + couverture totale
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -299,10 +298,9 @@ function EquipmentListModal({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return all.filter(ci => {
-      // filtre strict par type
-      if (!filters[ci.kind]) return false;
+      if (!filters[ci.kind]) return false;     // filtre strict par type
       if (!q) return true;
-      // Recherche par nom, et par description uniquement pour Équipements/Outils
+      // match nom + (desc seulement pour gear/tools)
       if (ci.name.toLowerCase().includes(q)) return true;
       if ((ci.kind === 'adventuring_gear' || ci.kind === 'tools') && (ci.description || '').toLowerCase().includes(q)) return true;
       return false;
@@ -311,10 +309,13 @@ function EquipmentListModal({
 
   const handlePick = (ci: CatalogItem) => {
     if (quantity <= 0) { toast.error('Quantité invalide'); return; }
+    // meta.equipped=false par défaut
     let meta: ItemMeta = { type: 'equipment', quantity, equipped: false };
     if (ci.kind === 'armors' && ci.armor) meta = { type: 'armor', quantity, equipped: false, armor: ci.armor };
     if (ci.kind === 'shields' && ci.shield) meta = { type: 'shield', quantity, equipped: false, shield: ci.shield };
     if (ci.kind === 'weapons' && ci.weapon) meta = { type: 'weapon', quantity, equipped: false, weapon: ci.weapon };
+    if (ci.kind === 'tools') meta = { type: 'tool', quantity, equipped: false };
+
     const description = (ci.kind === 'adventuring_gear' || ci.kind === 'tools') ? (ci.description || '').trim() : '';
     onAddItem({ name: ci.name, description, meta });
   };
@@ -323,7 +324,6 @@ function EquipmentListModal({
 
   return (
     <div className="fixed inset-0 z-[9999]">
-      {/* Couche opaque et conteneur plein écran */}
       <div className="fixed inset-0 bg-black/70" onClick={onClose} />
       <div className="fixed inset-0 bg-gray-900 flex flex-col" style={{ height: '100dvh' }}>
         {/* Header: recherche à gauche, filtres + Qté à droite */}
@@ -346,10 +346,11 @@ function EquipmentListModal({
                   filters[k] ? 'border-red-500/40 text-red-300 bg-red-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-800/40'
                 }`}
               >
-                {k === 'weapons' ? 'Armes' :
-                 k === 'armors' ? 'Armures' :
-                 k === 'shields' ? 'Boucliers' :
-                 k === 'adventuring_gear' ? 'Équipements' : 'Outils'}
+                {k === 'weapons' ? 'Armes'
+                  : k === 'armors' ? 'Armures'
+                  : k === 'shields' ? 'Boucliers'
+                  : k === 'adventuring_gear' ? 'Équipements'
+                  : 'Outils'}
               </button>
             ))}
             <div className="flex items-center gap-2">
@@ -425,8 +426,6 @@ function CustomItemModal({
   const [type, setType] = useState<MetaType>('equipment');
   const [description, setDescription] = useState('');
   const [quantity, setQuantity] = useState(1);
-
-  // Champs spécifiques
   const [armBase, setArmBase] = useState<number>(12);
   const [armAddDex, setArmAddDex] = useState<boolean>(true);
   const [armDexCap, setArmDexCap] = useState<number | ''>(2);
@@ -482,11 +481,11 @@ function CustomItemModal({
               <option value="armor">Armure</option>
               <option value="shield">Bouclier</option>
               <option value="jewelry">Bijoux</option>
+              <option value="tool">Outils</option>
             </select>
           </div>
         </div>
 
-        {/* Spécifiques succincts */}
         {type === 'armor' && (
           <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
             <div><label className="block text-sm text-gray-400 mb-1">Base CA</label><input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={armBase} onChange={e => setArmBase(parseInt(e.target.value) || 10)} /></div>
@@ -523,14 +522,78 @@ function CustomItemModal({
   );
 }
 
-/* ====================== Popup des slots ====================== */
+function InventoryItemEditModal({
+  item,
+  onClose,
+  onSaved,
+}: {
+  item: InventoryItem;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const meta = parseMeta(item.description) || { type: 'equipment', quantity: 1, equipped: false } as ItemMeta;
+  const [name, setName] = useState(smartCapitalize(item.name));
+  const [description, setDescription] = useState(visibleDescription(item.description));
+  const [quantity, setQuantity] = useState<number>(meta.quantity ?? 1);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  const save = async () => {
+    try {
+      const nextMeta: ItemMeta = { ...meta, quantity: Math.max(1, quantity) };
+      const nextDesc = injectMetaIntoDescription(description, nextMeta);
+      const { error } = await supabase.from('inventory_items').update({
+        name: smartCapitalize(name.trim()),
+        description: nextDesc
+      }).eq('id', item.id);
+      if (error) throw error;
+      toast.success('Objet mis à jour');
+      onSaved();
+      onClose();
+    } catch (e) {
+      console.error(e);
+      toast.error('Erreur lors de la mise à jour');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9999]">
+      <div className="fixed inset-0 bg-black/70" onClick={onClose} />
+      <div className="fixed inset-0 bg-gray-900/95 w-screen h-screen overflow-y-auto p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold text-gray-100">Modifier l’objet</h3>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg">
+            <X />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div><label className="block text-sm text-gray-400 mb-1">Nom</label><input className="input-dark w-full px-3 py-2 rounded-md" value={name} onChange={e => setName(e.target.value)} /></div>
+          <div><label className="block text-sm text-gray-400 mb-1">Description</label><textarea className="input-dark w-full px-3 py-2 rounded-md" rows={6} value={description} onChange={e => setDescription(e.target.value)} /></div>
+          <div className="flex items-center gap-3"><label className="text-sm text-gray-400">Quantité</label><input type="number" min={1} className="input-dark w-24 px-3 py-2 rounded-md" value={quantity} onChange={e => setQuantity(parseInt(e.target.value) || 1)} /></div>
+          <div className="pt-2 flex justify-end gap-2">
+            <button onClick={save} className="btn-primary px-4 py-2 rounded-lg">Sauvegarder</button>
+            <button onClick={onClose} className="btn-secondary px-4 py-2 rounded-lg">Annuler</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ====================== Popup slot ====================== */
 
 const getTitle = (type: 'armor' | 'weapon' | 'shield' | 'potion' | 'jewelry' | 'bag') =>
-  type === 'armor' ? 'Armure' :
-  type === 'shield' ? 'Bouclier' :
-  type === 'weapon' ? 'Armes' :
-  type === 'potion' ? 'Potions' :
-  type === 'jewelry' ? 'Bijoux' : 'Sac à dos';
+  type === 'armor' ? 'Armure'
+  : type === 'shield' ? 'Bouclier'
+  : type === 'weapon' ? 'Armes'
+  : type === 'potion' ? 'Potions'
+  : type === 'jewelry' ? 'Bijoux'
+  : 'Sac à dos';
 
 interface InfoBubbleProps {
   equipment: Equipment | null;
@@ -552,9 +615,7 @@ const InfoBubble = ({ equipment, onClose, setIsEditing, type, onToggleEquip, isE
           {(type === 'armor' || type === 'shield') && (
             <button
               onClick={(e) => { e.stopPropagation(); onToggleEquip?.(); }}
-              className={`px-2 py-1 rounded text-xs border ${
-                isEquipped ? 'border-green-500/40 text-green-300 bg-green-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'
-              }`}
+              className={`px-2 py-1 rounded text-xs border ${isEquipped ? 'border-green-500/40 text-green-300 bg-green-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'}`}
             >
               {isEquipped ? 'Équipé' : 'Non équipé'}
             </button>
@@ -642,71 +703,6 @@ const EquipmentSlot = ({
   );
 };
 
-/* ====================== Modals d’édition inventaire ====================== */
-
-function InventoryItemEditModal({
-  item,
-  onClose,
-  onSaved,
-}: {
-  item: InventoryItem;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const meta = parseMeta(item.description) || { type: 'equipment', quantity: 1, equipped: false } as ItemMeta;
-  const [name, setName] = useState(smartCapitalize(item.name));
-  const [description, setDescription] = useState(visibleDescription(item.description));
-  const [quantity, setQuantity] = useState<number>(meta.quantity ?? 1);
-
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, []);
-
-  const save = async () => {
-    try {
-      const nextMeta: ItemMeta = { ...meta, quantity: Math.max(1, quantity) };
-      const nextDesc = injectMetaIntoDescription(description, nextMeta);
-      const { error } = await supabase.from('inventory_items').update({
-        name: smartCapitalize(name.trim()),
-        description: nextDesc
-      }).eq('id', item.id);
-      if (error) throw error;
-      toast.success('Objet mis à jour');
-      onSaved();
-      onClose();
-    } catch (e) {
-      console.error(e);
-      toast.error('Erreur lors de la mise à jour');
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[9999]">
-      <div className="fixed inset-0 bg-black/70" onClick={onClose} />
-      <div className="fixed inset-0 bg-gray-900/95 w-screen h-screen overflow-y-auto p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-gray-100">Modifier l’objet</h3>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg">
-            <X />
-          </button>
-        </div>
-
-        <div className="space-y-3">
-          <div><label className="block text-sm text-gray-400 mb-1">Nom</label><input className="input-dark w-full px-3 py-2 rounded-md" value={name} onChange={e => setName(e.target.value)} /></div>
-          <div><label className="block text-sm text-gray-400 mb-1">Description</label><textarea className="input-dark w-full px-3 py-2 rounded-md" rows={6} value={description} onChange={e => setDescription(e.target.value)} /></div>
-          <div className="flex items-center gap-3"><label className="text-sm text-gray-400">Quantité</label><input type="number" min={1} className="input-dark w-24 px-3 py-2 rounded-md" value={quantity} onChange={e => setQuantity(parseInt(e.target.value) || 1)} /></div>
-          <div className="pt-2 flex justify-end gap-2">
-            <button onClick={save} className="btn-primary px-4 py-2 rounded-lg">Sauvegarder</button>
-            <button onClick={onClose} className="btn-secondary px-4 py-2 rounded-lg">Annuler</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ====================== Composant principal ====================== */
 
 interface EquipmentTabProps {
@@ -748,7 +744,7 @@ export function EquipmentTab({
   const [showCustom, setShowCustom] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
 
-  // Slots
+  // Slots (avec id d’inventaire)
   const [armor, setArmor] = useState<Equipment | null>(player.equipment?.armor || null);
   const [weapon, setWeapon] = useState<Equipment | null>(player.equipment?.weapon || null);
   const [shield, setShield] = useState<Equipment | null>(player.equipment?.shield || null);
@@ -786,10 +782,18 @@ export function EquipmentTab({
     if (data) onInventoryUpdate(data);
   };
 
+  // Mise à jour optimiste de l’inventaire après modification du meta
+  const applyInventoryMetaLocal = (itemId: string, nextMeta: ItemMeta) => {
+    const next = inventory.map(it => it.id === itemId
+      ? { ...it, description: injectMetaIntoDescription(visibleDescription(it.description), nextMeta) }
+      : it
+    );
+    onInventoryUpdate(next);
+  };
+
   const addFromList = async (payload: { name: string; description?: string; meta: ItemMeta }) => {
     try {
-      // garantis non équipé à l’ajout
-      const meta: ItemMeta = { ...payload.meta, equipped: false };
+      const meta: ItemMeta = { ...payload.meta, equipped: false }; // par défaut non équipé
       const finalDesc = injectMetaIntoDescription(payload.description || '', meta);
       const { error } = await supabase.from('inventory_items').insert([{ player_id: player.id, name: smartCapitalize(payload.name), description: finalDesc }]);
       if (error) throw error;
@@ -832,94 +836,106 @@ export function EquipmentTab({
   };
 
   const updateItemMeta = async (item: InventoryItem, nextMeta: ItemMeta) => {
+    // Optimiste
+    applyInventoryMetaLocal(item.id, nextMeta);
     const nextDesc = injectMetaIntoDescription(visibleDescription(item.description), nextMeta);
     const { error } = await supabase.from('inventory_items').update({ description: nextDesc }).eq('id', item.id);
     if (error) throw error;
   };
 
-  // Déséquipe tous les autres de même type (unicité d’armure/bouclier)
   const unequipOthersOfType = async (type: 'armor' | 'shield', keepItemId?: string) => {
     const updates: Promise<any>[] = [];
     for (const it of inventory) {
       const meta = parseMeta(it.description);
       if (!meta) continue;
       if ((type === 'armor' && meta.type === 'armor') || (type === 'shield' && meta.type === 'shield')) {
-        if (it.id !== keepItemId && meta.equipped) updates.push(updateItemMeta(it, { ...meta, equipped: false }));
+        if (it.id !== keepItemId && meta.equipped) {
+          const next = { ...meta, equipped: false };
+          applyInventoryMetaLocal(it.id, next);
+          updates.push(
+            supabase.from('inventory_items').update({ description: injectMetaIntoDescription(visibleDescription(it.description), next) }).eq('id', it.id)
+          );
+        }
       }
     }
     if (updates.length) {
       await Promise.allSettled(updates);
-      await refreshInventory();
     }
   };
 
   // Bascule Équipé/Non équipé (depuis le sac)
   const toggleEquip = async (item: InventoryItem) => {
     const meta = parseMeta(item.description);
-    if (!meta) return;
-
-    const nextEquipped = !meta.equipped;
-    const nextMeta: ItemMeta = { ...meta, equipped: nextEquipped };
+    if (!meta) {
+      toast.error("Objet sans métadonnées. Ouvrez Paramètres et précisez sa nature.");
+      return;
+    }
 
     try {
-      // Unicité
-      if (meta.type === 'armor' && nextEquipped) await unequipOthersOfType('armor', item.id);
-      if (meta.type === 'shield' && nextEquipped) await unequipOthersOfType('shield', item.id);
-
-      // Persiste l’état
-      await updateItemMeta(item, nextMeta);
-
-      // Applique sur slots
       if (meta.type === 'armor') {
-        if (nextEquipped && meta.armor) {
+        const isEquippedSlot = armor?.inventory_item_id === item.id;
+        if (isEquippedSlot) {
+          // Déséquiper
+          setArmor(null);
+          await saveEquipment('armor', null);
+          await updateItemMeta(item, { ...meta, equipped: false });
+        } else {
+          // Équiper (unicité)
+          await unequipOthersOfType('armor', item.id);
           const eq: Equipment = {
             name: item.name,
             description: visibleDescription(item.description),
             inventory_item_id: item.id,
-            armor_formula: { base: meta.armor.base, addDex: meta.armor.addDex, dexCap: meta.armor.dexCap ?? null, label: meta.armor.label },
+            armor_formula: meta.armor ? { base: meta.armor.base, addDex: meta.armor.addDex, dexCap: meta.armor.dexCap ?? null, label: meta.armor.label } : null,
           };
-          setArmor(eq); await saveEquipment('armor', eq);
-        } else {
-          setArmor(null); await saveEquipment('armor', null);
+          setArmor(eq);
+          await saveEquipment('armor', eq);
+          await updateItemMeta(item, { ...meta, equipped: true });
         }
-      }
-      if (meta.type === 'shield') {
-        if (nextEquipped && meta.shield) {
+      } else if (meta.type === 'shield') {
+        const isEquippedSlot = shield?.inventory_item_id === item.id;
+        if (isEquippedSlot) {
+          setShield(null);
+          await saveEquipment('shield', null);
+          await updateItemMeta(item, { ...meta, equipped: false });
+        } else {
+          await unequipOthersOfType('shield', item.id);
           const eq: Equipment = {
             name: item.name,
             description: visibleDescription(item.description),
             inventory_item_id: item.id,
-            shield_bonus: meta.shield.bonus,
+            shield_bonus: meta.shield?.bonus ?? null,
           };
-          setShield(eq); await saveEquipment('shield', eq);
-        } else {
-          setShield(null); await saveEquipment('shield', null);
+          setShield(eq);
+          await saveEquipment('shield', eq);
+          await updateItemMeta(item, { ...meta, equipped: true });
+        }
+      } else if (meta.type === 'weapon') {
+        const nextEquipped = !meta.equipped;
+        await updateItemMeta(item, { ...meta, equipped: nextEquipped });
+        // Tentative de création d'attaque à l’équipement
+        if (nextEquipped && meta.weapon) {
+          try {
+            await attackService.addAttack({
+              player_id: player.id,
+              name: item.name,
+              damage_dice: meta.weapon.damageDice,
+              damage_type: meta.weapon.damageType,
+              range: meta.weapon.range || 'Corps à corps',
+              properties: meta.weapon.properties || '',
+              manual_attack_bonus: null,
+              manual_damage_bonus: null,
+              expertise: false,
+              attack_type: 'physical',
+              spell_level: null,
+              ammo_count: 0
+            });
+          } catch (_) {
+            // On ne bloque pas la bascule si l’insert échoue (RLS, etc.)
+          }
         }
       }
-      if (meta.type === 'weapon' && nextEquipped && meta.weapon) {
-        // armes: on garde seulement le flag meta.equipped, et on crée l’attaque si besoin
-        try {
-          const newAttack = await attackService.addAttack({
-            player_id: player.id,
-            name: item.name,
-            damage_dice: meta.weapon.damageDice,
-            damage_type: meta.weapon.damageType,
-            range: meta.weapon.range || 'Corps à corps',
-            properties: meta.weapon.properties || '',
-            manual_attack_bonus: null,
-            manual_damage_bonus: null,
-            expertise: false,
-            attack_type: 'physical',
-            spell_level: null,
-            ammo_count: 0
-          });
-          if (newAttack) toast.success('Attaque créée');
-        } catch (err) {
-          console.error(err);
-          // pas bloquant pour la bascule
-        }
-      }
-
+      // On recharge pour consolider l’état
       await refreshInventory();
     } catch (e) {
       console.error(e);
@@ -927,24 +943,18 @@ export function EquipmentTab({
     }
   };
 
-  // Bascule via slot (utilise l’id stocké sur le slot)
   const toggleFromSlot = async (slot: 'armor' | 'shield') => {
     const eq = slot === 'armor' ? armor : shield;
     if (!eq) { setShowList(true); return; }
-
-    // On cherche d’abord par id
-    let item: InventoryItem | undefined;
-    if (eq.inventory_item_id) item = inventory.find(i => i.id === eq.inventory_item_id);
-    // fallback par nom si pas d’id
-    if (!item) item = inventory.find(i => norm(stripPriceParentheses(i.name)) === norm(stripPriceParentheses(eq.name)));
-
+    // Priorité à l’id d’inventaire
+    const item = eq.inventory_item_id
+      ? inventory.find(i => i.id === eq.inventory_item_id)
+      : inventory.find(i => norm(stripPriceParentheses(i.name)) === norm(stripPriceParentheses(eq.name)));
     if (!item) {
-      // Aucun item correspondant => on vide juste le slot
       if (slot === 'armor') { setArmor(null); await saveEquipment('armor', null); }
       else { setShield(null); await saveEquipment('shield', null); }
       return;
     }
-
     const meta = parseMeta(item.description) || { type: slot, equipped: true } as ItemMeta;
     await updateItemMeta(item, { ...meta, equipped: false });
     if (slot === 'armor') { setArmor(null); await saveEquipment('armor', null); }
@@ -952,10 +962,10 @@ export function EquipmentTab({
     await refreshInventory();
   };
 
-  // Filtre du sac (recherche à gauche, filtres à droite)
+  // Filtres du sac (inclut Outils)
   const [bagFilter, setBagFilter] = useState('');
   const [bagKinds, setBagKinds] = useState<Record<MetaType, boolean>>({
-    armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true
+    armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true, tool: true
   });
 
   const filteredInventory = useMemo(() => {
@@ -971,7 +981,7 @@ export function EquipmentTab({
     });
   }, [inventory, bagFilter, bagKinds]);
 
-  // État d’expansion par item
+  // Expansion items
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const toggleExpand = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -992,7 +1002,6 @@ export function EquipmentTab({
               style={{ mixBlendMode: 'luminosity' }}
             />
 
-            {/* Armor */}
             <EquipmentSlot
               icon={<Shield size={24} className="text-purple-500" />}
               position="top-[25%] left-1/2 -translate-x-1/2"
@@ -1004,7 +1013,6 @@ export function EquipmentTab({
               isEquipped={!!armor}
             />
 
-            {/* Shield */}
             <EquipmentSlot
               icon={<Shield size={24} className="text-blue-500" />}
               position="top-[45%] left-[15%]"
@@ -1016,7 +1024,6 @@ export function EquipmentTab({
               isEquipped={!!shield}
             />
 
-            {/* Weapon (info) */}
             <EquipmentSlot
               icon={<Sword size={24} className="text-red-500" />}
               position="top-[45%] right-[15%]"
@@ -1028,7 +1035,6 @@ export function EquipmentTab({
               isEquipped={false}
             />
 
-            {/* Potion */}
             <EquipmentSlot
               icon={<Flask size={24} className="text-green-500" />}
               position="top-[5%] right-[5%]"
@@ -1040,7 +1046,6 @@ export function EquipmentTab({
               isEquipped={false}
             />
 
-            {/* Bijoux */}
             <EquipmentSlot
               icon={<Star size={24} className="text-yellow-500" />}
               position="top-[15%] right-[5%]"
@@ -1052,7 +1057,6 @@ export function EquipmentTab({
               isEquipped={false}
             />
 
-            {/* Sac */}
             <EquipmentSlot
               icon={<img src="https://yumzqyyogwzrmlcpvnky.supabase.co/storage/v1/object/public/static//8-2-backpack-png-pic.png" alt="Backpack" className="w-24 h-24 object-contain" />}
               position="bottom-[5%] right-[2%]"
@@ -1094,7 +1098,7 @@ export function EquipmentTab({
         </div>
 
         <div className="p-4">
-          {/* Barre actions + filtre */}
+          {/* Actions + filtre: recherche à gauche, types à droite (inclut Outils) */}
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             <button onClick={() => setShowList(true)} className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={20} /> Liste d’équipement</button>
             <button onClick={() => setShowCustom(true)} className="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"><Plus size={18} /> Objet personnalisé</button>
@@ -1105,13 +1109,18 @@ export function EquipmentTab({
             </div>
 
             <div className="flex items-center gap-2 flex-wrap justify-end">
-              {(['armor','shield','weapon','equipment','potion','jewelry'] as MetaType[]).map(k => (
+              {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
                 <button
                   key={k}
                   onClick={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
                   className={`px-2 py-1 rounded text-xs border ${bagKinds[k] ? 'border-red-500/40 text-red-300 bg-red-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-800/40'}`}
                 >
-                  {k === 'armor' ? 'Armure' : k === 'shield' ? 'Bouclier' : k === 'weapon' ? 'Arme' : k === 'potion' ? 'Potion/Poison' : k === 'jewelry' ? 'Bijoux' : 'Équipement'}
+                  {k === 'armor' ? 'Armure'
+                    : k === 'shield' ? 'Bouclier'
+                    : k === 'weapon' ? 'Arme'
+                    : k === 'potion' ? 'Potion/Poison'
+                    : k === 'jewelry' ? 'Bijoux'
+                    : k === 'tool' ? 'Outils' : 'Équipement'}
                 </button>
               ))}
             </div>
@@ -1126,7 +1135,7 @@ export function EquipmentTab({
               const isShield = meta?.type === 'shield';
               const isWeapon = meta?.type === 'weapon';
 
-              // Statut: armure/bouclier basés sur l’id mémorisé dans le slot
+              // Armure/Bouclier: état basé EXCLUSIVEMENT sur l’id d’inventaire du slot
               const isEquipped =
                 (isArmor && armor?.inventory_item_id === item.id) ||
                 (isShield && shield?.inventory_item_id === item.id) ||
@@ -1142,9 +1151,10 @@ export function EquipmentTab({
                         {isArmor && <span className="text-xs px-2 py-0.5 rounded bg-purple-900/30 text-purple-300">Armure</span>}
                         {isShield && <span className="text-xs px-2 py-0.5 rounded bg-blue-900/30 text-blue-300">Bouclier</span>}
                         {isWeapon && <span className="text-xs px-2 py-0.5 rounded bg-red-900/30 text-red-300">Arme</span>}
+                        {meta?.type === 'tool' && <span className="text-xs px-2 py-0.5 rounded bg-teal-900/30 text-teal-300">Outil</span>}
                       </div>
 
-                      {/* Détails techniques quand déplié (pas de redondance de description) */}
+                      {/* Détails techniques quand déplié (sans redondance de description) */}
                       {expanded[item.id] && (isArmor || isShield || isWeapon) && (
                         <div className="text-xs text-gray-400 mt-2">
                           {isArmor && meta?.armor && <>CA: {meta.armor.label}</>}
