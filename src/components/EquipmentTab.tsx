@@ -962,36 +962,70 @@ export function EquipmentTab({
           }}
         />
       )}
-      {editingItem && (
-        <InventoryItemEditModal
-          item={editingItem}
-          onClose={() => setEditingItem(null)}
-          onSaved={() => refreshInventory(0)}
-        />
-      )}
+ {editingItem && (
+  <InventoryItemEditModal
+    item={editingItem}
+    lockType={editLockType}
+    onClose={() => {
+      setEditingItem(null);
+      setEditLockType(false);
+      prevEditMetaRef.current = null;
+    }}
+    onSaved={async () => {
+      const editedId = editingItem?.id;
+      
+      if (!editedId) return;
 
-      {showWeaponsModal && (
-        <WeaponsManageModal
-          inventory={inventory}
-          onClose={() => setShowWeaponsModal(false)}
-          onEquip={(it) => performToggle(it, 'equip')}
-          onUnequip={(it) => performToggle(it, 'unequip')}
-        />
-      )}
+      try {
+        // 1. Récupérer l'item mis à jour depuis la DB
+        const { data, error } = await supabase
+          .from('inventory_items')
+          .select('*')
+          .eq('id', editedId)
+          .maybeSingle();
 
-      <ConfirmEquipModal
-        open={confirmOpen}
-        mode={confirmPayload?.mode || 'equip'}
-        itemName={confirmPayload?.itemName || ''}
-        onCancel={() => { setConfirmOpen(false); setConfirmPayload(null); }}
-        onConfirm={async () => {
-          if (!confirmPayload) return;
-          setConfirmOpen(false);
-          const latest = inventory.find(i => i.id === confirmPayload.itemId);
-          if (!latest) { toast.error("Objet introuvable"); setConfirmPayload(null); return; }
-          await performToggle(latest, confirmPayload.mode);
-          setConfirmPayload(null);
-        }}
+        if (error) throw error;
+
+        if (data) {
+          // 2. Mise à jour optimiste IMMEDIATE de l'état local
+          const updatedInventory = inventory.map(item => 
+            item.id === editedId ? data : item
+          );
+          onInventoryUpdate(updatedInventory);
+
+          // 3. Vérifier les changements de type pour gérer les équipements
+          const newMeta = parseMeta(data.description);
+          const prevType = prevEditMetaRef.current?.type;
+          const newType = newMeta?.type;
+
+          if (prevType && newType && prevType !== newType) {
+            // Si c'était une arme équipée et qu'on change de type -> retirer les attaques liées
+            if (prevType === 'weapon' && prevEditMetaRef.current?.equipped) {
+              await removeWeaponAttacksByName(data.name);
+            }
+            // Si c'était une armure/bouclier équipé -> libérer le slot correspondant
+            if (prevType === 'armor' && armor?.inventory_item_id === editedId) {
+              await saveEquipment('armor', null);
+            }
+            if (prevType === 'shield' && shield?.inventory_item_id === editedId) {
+              await saveEquipment('shield', null);
+            }
+          }
+
+          toast.success('Objet modifié avec succès');
+        }
+      } catch (e) {
+        console.error('Erreur lors de la mise à jour de l\'objet:', e);
+        // En cas d'erreur, faire un refresh complet
+        await refreshInventory(0);
+        toast.error('Erreur lors de la mise à jour');
+      } finally {
+        // Nettoyage
+        prevEditMetaRef.current = null;
+      }
+    }}
+  />
+)}
       />
  
       {/* Filtres: MODALE CENTRÉE */}
