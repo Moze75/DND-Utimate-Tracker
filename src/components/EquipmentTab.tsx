@@ -333,10 +333,6 @@ export function EquipmentTab({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmPayload, setConfirmPayload] = useState<{ mode: 'equip' | 'unequip'; itemId: string; itemName: string } | null>(null);
 
-  // NOUVEAU: gestion verrouillage type et mémo ancien meta pendant édition
-  const [editLockType, setEditLockType] = useState(false);
-  const prevEditMetaRef = useRef<ItemMeta | null>(null);
-
   useEffect(() => {
     stableEquipmentRef.current = { armor, shield, bag };
   }, [armor, shield, bag]);
@@ -369,7 +365,7 @@ export function EquipmentTab({
         if (fmt) parts.push(`(${fmt})`);
       }
       return `• ${parts.join(' ')}`;
-    }); 
+    });
     return {
       name: 'Armes équipées',
       description: lines.length ? lines.join('\n') : 'Aucune arme équipée.',
@@ -638,12 +634,7 @@ export function EquipmentTab({
     const eq = slot === 'armor' ? armor : shield;
     if (!eq?.inventory_item_id) return;
     const item = inventory.find(i => i.id === eq.inventory_item_id);
-    if (item) {
-      // NOUVEAU: verrouiller le type depuis slot équipé + mémoriser ancien meta
-      setEditLockType(true);
-      prevEditMetaRef.current = parseMeta(item.description) || null;
-      setEditingItem(item);
-    }
+    if (item) setEditingItem(item);
   };
   const toggleFromSlot = (slot: 'armor' | 'shield') => {
     const eq = slot === 'armor' ? armor : shield;
@@ -804,7 +795,7 @@ export function EquipmentTab({
       <div className="stat-card">
         <div className="stat-header flex items-center gap-3">
           <Backpack className="text-purple-500" size={24} />
-        <h2 className="text-lg sm:text-xl font-semibold text-gray-100">Sac</h2>
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-100">Sac</h2>
         </div>
 
         <div className="p-4">
@@ -845,14 +836,11 @@ export function EquipmentTab({
                   <div className="flex items-start justify-between p-2">
                     <div className="flex-1 mr-2">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => toggleExpand(item.id)} className="text-left text-gray-100 font-medium hover:underline break-words">
-                          {smartCapitalize(item.name)}
-                        </button>
+                        <button onClick={() => toggleExpand(item.id)} className="text-left text-gray-100 font-medium hover:underline break-words">{smartCapitalize(item.name)}</button>
                         {qty > 1 && <span className="text-xs px-2 py-0.5 rounded bg-gray-700/60 text-gray-300">x{qty}</span>}
                         {isArmor && <span className="text-xs px-2 py-0.5 rounded bg-purple-900/30 text-purple-300">Armure</span>}
                         {isShield && <span className="text-xs px-2 py-0.5 rounded bg-blue-900/30 text-blue-300">Bouclier</span>}
                         {isWeapon && <span className="text-xs px-2 py-0.5 rounded bg-red-900/30 text-red-300">Arme</span>}
-                        {meta?.type === 'equipment' && <span className="text-xs px-2 py-0.5 rounded bg-gray-800/60 text-gray-300">Équipement</span>}
                         {meta?.type === 'tool' && <span className="text-xs px-2 py-0.5 rounded bg-teal-900/30 text-teal-300">Outil</span>}
                         {meta?.type === 'jewelry' && <span className="text-xs px-2 py-0.5 rounded bg-yellow-900/30 text-yellow-300">Bijou</span>}
                         {meta?.type === 'potion' && <span className="text-xs px-2 py-0.5 rounded bg-green-900/30 text-green-300">Potion/Poison</span>}
@@ -904,16 +892,7 @@ export function EquipmentTab({
                           }
                         </button>
                       )}
-                      <button
-                        onClick={() => {
-                          // NOUVEAU: depuis le sac, on autorise le changement de type + mémorise l'ancien meta
-                          setEditLockType(false);
-                          prevEditMetaRef.current = parseMeta(item.description) || null;
-                          setEditingItem(item);
-                        }}
-                        className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-700/40 rounded-full"
-                        title="Paramètres"
-                      >
+                      <button onClick={() => setEditingItem(item)} className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-700/40 rounded-full" title="Paramètres">
                         <Settings size={16} />
                       </button>
                       <button onClick={() => {
@@ -983,70 +962,13 @@ export function EquipmentTab({
           }}
         />
       )}
-{editingItem && (
-  <InventoryItemEditModal
-    item={editingItem}
-    lockType={editLockType}
-    onClose={() => {
-      setEditingItem(null);
-      setEditLockType(false);
-      prevEditMetaRef.current = null;
-    }}
-    onSaved={async () => {
-      const editedId = editingItem?.id;
-      
-      if (!editedId) return;
-
-      try {
-        // 1. Récupérer l'item mis à jour depuis la DB
-        const { data, error } = await supabase
-          .from('inventory_items')
-          .select('*')
-          .eq('id', editedId)
-          .maybeSingle();
-
-        if (error) throw error;
-
-        if (data) {
-          // 2. Mise à jour optimiste IMMEDIATE de l'état local
-          const updatedInventory = inventory.map(item => 
-            item.id === editedId ? data : item
-          );
-          onInventoryUpdate(updatedInventory);
-
-          // 3. Vérifier les changements de type pour gérer les équipements
-          const newMeta = parseMeta(data.description);
-          const prevType = prevEditMetaRef.current?.type;
-          const newType = newMeta?.type;
-
-          if (prevType && newType && prevType !== newType) {
-            // Si c'était une arme équipée et qu'on change de type -> retirer les attaques liées
-            if (prevType === 'weapon' && prevEditMetaRef.current?.equipped) {
-              await removeWeaponAttacksByName(data.name);
-            }
-            // Si c'était une armure/bouclier équipé -> libérer le slot correspondant
-            if (prevType === 'armor' && armor?.inventory_item_id === editedId) {
-              await saveEquipment('armor', null);
-            }
-            if (prevType === 'shield' && shield?.inventory_item_id === editedId) {
-              await saveEquipment('shield', null);
-            }
-          }
-
-          toast.success('Objet modifié avec succès');
-        }
-      } catch (e) {
-        console.error('Erreur lors de la mise à jour de l\'objet:', e);
-        // En cas d'erreur, faire un refresh complet
-        await refreshInventory(0);
-        toast.error('Erreur lors de la mise à jour');
-      } finally {
-        // Nettoyage
-        prevEditMetaRef.current = null;
-      }
-    }}
-  />
-)}
+      {editingItem && (
+        <InventoryItemEditModal
+          item={editingItem}
+          onClose={() => setEditingItem(null)}
+          onSaved={() => refreshInventory(0)}
+        />
+      )}
 
       {showWeaponsModal && (
         <WeaponsManageModal
@@ -1071,7 +993,7 @@ export function EquipmentTab({
           setConfirmPayload(null);
         }}
       />
-
+ 
       {/* Filtres: MODALE CENTRÉE */}
       {filtersOpen && (
         <div className="fixed inset-0 z-[11000]" onClick={(e) => { if (e.target === e.currentTarget) setFiltersOpen(false); }}>
