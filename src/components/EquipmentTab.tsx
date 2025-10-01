@@ -107,7 +107,7 @@ function ConfirmEquipModal({
   open, mode, itemName, onConfirm, onCancel
 }: { open: boolean; mode: 'equip' | 'unequip'; itemName: string; onConfirm: () => void; onCancel: () => void; }) {
   if (!open) return null;
-  const title = mode === 'equip' ? 'Équiper cet objet ?' : 'Déséquipier cet objet ?';
+  const title = mode === 'equip' ? 'Équiper cet objet ?' : 'Déséquiper cet objet ?';
   const label = mode === 'equip' ? 'Équiper' : 'Déséquiper';
   return (
     <div className="fixed inset-0 z-[10000]" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
@@ -303,12 +303,13 @@ const CurrencyInput = ({ currency, value, onAdd, onSpend }: {
 export function EquipmentTab({
   player, inventory, onPlayerUpdate, onInventoryUpdate
 }: EquipmentTabProps) {
-  // États locaux (pas d’arme “principale”)
+  // États locaux
   const [armor, setArmor] = useState<Equipment | null>(player.equipment?.armor || null);
   const [shield, setShield] = useState<Equipment | null>(player.equipment?.shield || null);
   const [bag, setBag] = useState<Equipment | null>(player.equipment?.bag || null);
   const stableEquipmentRef = useRef<{ armor: Equipment | null; shield: Equipment | null; bag: Equipment | null; } | null>(null);
 
+  // Séquenceur d’actualisation
   const refreshSeqRef = useRef(0);
 
   const [showList, setShowList] = useState(false);
@@ -318,7 +319,7 @@ export function EquipmentTab({
   const [showWeaponsModal, setShowWeaponsModal] = useState(false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmPayload, setConfirmPayload] = useState<{ mode: 'equip' | 'unequip'; item: InventoryItem } | null>(null);
+  const [confirmPayload, setConfirmPayload] = useState<{ mode: 'equip' | 'unequip'; itemId: string; itemName: string } | null>(null);
 
   useEffect(() => {
     stableEquipmentRef.current = { armor, shield, bag };
@@ -333,7 +334,6 @@ export function EquipmentTab({
   const jewelryItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'jewelry'), [inventory]);
   const potionItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'potion'), [inventory]);
 
-  // Armes équipées (meta.equipped)
   const equippedWeapons = useMemo(() => {
     return inventory
       .map(it => ({ it, meta: parseMeta(it.description) }))
@@ -341,7 +341,6 @@ export function EquipmentTab({
       .map(({ it, meta }) => ({ it, w: meta?.weapon }));
   }, [inventory]);
 
-  // Résumé slot “Armes”
   const weaponsSummary: Equipment = useMemo(() => {
     const lines = equippedWeapons.map(({ it, w }) => {
       const parts: string[] = [smartCapitalize(it.name)];
@@ -368,7 +367,7 @@ export function EquipmentTab({
       bag: override?.bag !== undefined ? override.bag : base.bag,
       potion: (player.equipment as any)?.potion ?? null,
       jewelry: (player.equipment as any)?.jewelry ?? null,
-      weapon: (player.equipment as any)?.weapon ?? null // On ne l’utilise plus, mais on ne l’écrase pas non plus
+      weapon: (player.equipment as any)?.weapon ?? null
     } as any;
   };
 
@@ -446,24 +445,23 @@ export function EquipmentTab({
     if (error) throw error;
   };
 
-  // LECTURE FRAÎCHE D’UN ITEM puis SET meta.equipped de manière atomique
+  // Lire l’item FRAIS puis setter meta.equipped (armes)
   const fetchInventoryItem = async (id: string): Promise<InventoryItem | null> => {
     const { data, error } = await supabase.from('inventory_items').select('*').eq('id', id).maybeSingle();
     if (error) { console.error('fetchInventoryItem error', error); return null; }
     return data as any;
   };
-  const setWeaponEquipped = async (item: InventoryItem, enabled: boolean) => {
-    const fresh = await fetchInventoryItem(item.id);
-    const currentDesc = fresh?.description ?? item.description;
+  const setWeaponEquipped = async (itemId: string, enabled: boolean) => {
+    const fresh = await fetchInventoryItem(itemId);
+    const currentDesc = fresh?.description ?? inventory.find(i => i.id === itemId)?.description ?? '';
     const currentMeta = parseMeta(currentDesc) || { type: 'weapon', quantity: 1, equipped: false } as ItemMeta;
     const nextMeta: ItemMeta = { ...currentMeta, equipped: enabled };
-    // Mettre à jour localement (optimiste)
-    applyInventoryMetaLocal(item.id, nextMeta);
-    // Pousser en base
+    // Optimiste
+    applyInventoryMetaLocal(itemId, nextMeta);
+    // Base
     const nextDesc = injectMetaIntoDescription(visibleDescription(currentDesc), nextMeta);
-    const { error } = await supabase.from('inventory_items').update({ description: nextDesc }).eq('id', item.id);
+    const { error } = await supabase.from('inventory_items').update({ description: nextDesc }).eq('id', itemId);
     if (error) throw error;
-    // Recharger l’inventaire depuis la base (source de vérité)
     await refreshInventory();
   };
 
@@ -529,11 +527,11 @@ export function EquipmentTab({
         }
       } else if (meta.type === 'weapon') {
         if (mode === 'unequip') {
-          await setWeaponEquipped(item, false);
+          await setWeaponEquipped(item.id, false);
           await removeWeaponAttacksByName(item.name);
           toast.success('Arme déséquipée');
         } else if (mode === 'equip') {
-          await setWeaponEquipped(item, true);
+          await setWeaponEquipped(item.id, true);
           await createOrUpdateWeaponAttack(item.name, meta.weapon);
           toast.success('Arme équipée');
         }
@@ -554,7 +552,7 @@ export function EquipmentTab({
       (isArmor && armor?.inventory_item_id === item.id) ||
       (isShield && shield?.inventory_item_id === item.id) ||
       (isWeapon && meta.equipped === true);
-    setConfirmPayload({ mode: equipped ? 'unequip' : 'equip', item });
+    setConfirmPayload({ mode: equipped ? 'unequip' : 'equip', itemId: item.id, itemName: item.name });
     setConfirmOpen(true);
   };
 
@@ -570,11 +568,11 @@ export function EquipmentTab({
     if (!eq) return;
     const item = eq.inventory_item_id ? inventory.find(i => i.id === eq.inventory_item_id) : undefined;
     if (!item) return;
-    setConfirmPayload({ mode: 'unequip', item });
+    setConfirmPayload({ mode: 'unequip', itemId: item.id, itemName: item.name });
     setConfirmOpen(true);
   };
 
-  /* Sac: recherche + Filtres (modale centrée) */
+  /* Sac: recherche et filtres (modale centrée) */
   const [bagFilter, setBagFilter] = useState('');
   const [bagKinds, setBagKinds] = useState<Record<MetaType, boolean>>({
     armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true, tool: true
@@ -595,7 +593,6 @@ export function EquipmentTab({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const toggleExpand = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
-  // Synthèses modales bijoux/potions
   const jewelryText = jewelryItems.length ? jewelryItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n') : 'Aucun bijou dans le sac.';
   const potionText = potionItems.length ? potionItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n') : 'Aucune potion/poison dans le sac.';
 
@@ -886,20 +883,23 @@ export function EquipmentTab({
         <WeaponsManageModal
           inventory={inventory}
           onClose={() => setShowWeaponsModal(false)}
-          onEquip={(it) => performToggle(it, 'equip')}
-          onUnequip={(it) => performToggle(it, 'unequip')}
+          onEquip={async (it) => { await performToggle(it, 'equip'); }}
+          onUnequip={async (it) => { await performToggle(it, 'unequip'); }}
         />
       )}
 
       <ConfirmEquipModal
         open={confirmOpen}
         mode={confirmPayload?.mode || 'equip'}
-        itemName={confirmPayload?.item?.name || ''}
+        itemName={confirmPayload?.itemName || ''}
         onCancel={() => { setConfirmOpen(false); setConfirmPayload(null); }}
         onConfirm={async () => {
           if (!confirmPayload) return;
           setConfirmOpen(false);
-          await performToggle(confirmPayload.item, confirmPayload.mode);
+          // IMPORTANT: retrouver l’item le plus frais avant d’agir
+          const latest = inventory.find(i => i.id === confirmPayload.itemId);
+          if (!latest) { toast.error("Objet introuvable"); setConfirmPayload(null); return; }
+          await performToggle(latest, confirmPayload.mode);
           setConfirmPayload(null);
         }}
       />
