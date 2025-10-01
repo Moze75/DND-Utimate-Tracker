@@ -47,7 +47,7 @@ export function WeaponsManageModal({
   onUnequip: (item: InventoryItem) => Promise<void> | void;
 }) {
   const [q, setQ] = React.useState('');
-  const [pendingId, setPendingId] = React.useState<string | null>(null); // évite les doubles clics
+  const [pendingId, setPendingId] = React.useState<string | null>(null);
   
   const weapons = React.useMemo(() => {
     return inventory
@@ -55,8 +55,9 @@ export function WeaponsManageModal({
       .filter(({ meta }) => (meta?.type === 'weapon'));
   }, [inventory]);
 
-  const equipped = weapons.filter(w => w.meta?.equipped);
-  const others = weapons.filter(w => !w.meta?.equipped);
+  // CORRECTION : Filtrage correct basé sur meta.equipped
+  const equipped = weapons.filter(w => w.meta?.equipped === true);
+  const others = weapons.filter(w => w.meta?.equipped !== true);
 
   const filterByQuery = (arr: { it: InventoryItem; meta: ItemMeta | null }[]) => {
     const query = q.trim().toLowerCase();
@@ -78,6 +79,9 @@ export function WeaponsManageModal({
         list.map(({ it, meta }) => {
           const w = meta?.weapon;
           const isPending = pendingId === it.id;
+          // CORRECTION : Affichage correct basé sur meta.equipped
+          const isEquipped = meta?.equipped === true;
+          
           return (
             <div key={it.id} className="rounded-md border border-gray-700/50 bg-gray-800/40 p-2">
               <div className="flex items-start justify-between gap-2">
@@ -85,6 +89,8 @@ export function WeaponsManageModal({
                   <div className="flex items-center gap-2">
                     <Sword size={16} className="text-red-400 shrink-0" />
                     <div className="font-medium text-gray-100 truncate">{smartCapitalize(it.name)}</div>
+                    {/* Ajout d'un indicateur visuel pour debug */}
+                    {isEquipped && <span className="text-xs px-1 py-0.5 rounded bg-green-900/30 text-green-300">✓</span>}
                   </div>
                   {w && (
                     <div className="mt-1 text-xs text-gray-400 space-y-0.5">
@@ -95,7 +101,8 @@ export function WeaponsManageModal({
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {meta?.equipped ? (
+                  {/* CORRECTION : Logique correcte pour afficher le bon bouton */}
+                  {isEquipped ? (
                     <button
                       onClick={async (e) => {
                         e.stopPropagation();
@@ -163,7 +170,6 @@ export function WeaponsManageModal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="fixed inset-0 bg-black/70" />
-      {/* Conteneur centré */}
       <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(720px,95vw)] max-h-[90vh] overflow-y-auto bg-gray-900/95 rounded-lg border border-gray-700 shadow-xl">
         <div className="flex items-center justify-between p-3 border-b border-gray-800 sticky top-0 bg-gray-900/95">
           <h3 className="text-gray-100 font-semibold">Mes armes</h3>
