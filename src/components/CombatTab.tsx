@@ -299,24 +299,23 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
   }, [player.id]);
 
   // Rafraîchit les attaques (appelé après toute modif côté équipement via événement global)
-  React.useEffect(() => {
-    const handler = (e: any) => {
-      try {
-        if (e?.detail?.playerId && e.detail.playerId !== player.id) return;
-      } catch {}
-      fetchAttacks();
-    };
-    window.addEventListener('attacks:changed', handler);
-    // Optionnel: rafraîchir quand l’onglet devient visible
-    const visHandler = () => {
-      if (document.visibilityState === 'visible') fetchAttacks();
-    };
-    document.addEventListener('visibilitychange', visHandler);
-    return () => {
-      window.removeEventListener('attacks:changed', handler);
-      document.removeEventListener('visibilitychange', visHandler);
-    };
-  }, [player.id]);
+ React.useEffect(() => {
+  const handler = (e: any) => {
+    try {
+      if (e?.detail?.playerId && e.detail.playerId !== player.id) return;
+    } catch {}
+    fetchAttacks();
+  };
+  window.addEventListener('attacks:changed', handler);
+  const visHandler = () => {
+    if (document.visibilityState === 'visible') fetchAttacks();
+  };
+  document.addEventListener('visibilitychange', visHandler);
+  return () => {
+    window.removeEventListener('attacks:changed', handler);
+    document.removeEventListener('visibilitychange', visHandler);
+  };
+}, [player.id]);
 
 
   const fetchAttacks = async () => {
