@@ -17,6 +17,7 @@ interface ItemMeta {
   armor?: ArmorMeta;
   shield?: ShieldMeta;
 }
+
 const META_PREFIX = '#meta:';
 const stripPriceParentheses = (name: string) =>
   name.replace(/\s*\((?:\d+|\w+|\s|,|\.|\/|-)+\s*p[oa]?\)\s*$/i, '').trim();
@@ -67,197 +68,299 @@ export function InventoryItemEditModal({
   const [wDice, setWDice] = React.useState(existingMeta.weapon?.damageDice || '1d6');
   const [wType, setWType] = React.useState<'Tranchant' | 'Perforant' | 'Contondant'>(existingMeta.weapon?.damageType || 'Tranchant');
   const [wProps, setWProps] = React.useState(existingMeta.weapon?.properties || '');
-  const [wRange, setWRange] = React.useState(existingMeta.weapon?.range || 'Corps à corps');
+  const [wRange, setWRange] = React.useState(existingMeta.weapon?.range || '');
 
   // Armor fields
-  const [armorBase, setArmorBase] = React.useState(existingMeta.armor?.base ?? 10);
-  const [armorAddDex, setArmorAddDex] = React.useState(existingMeta.armor?.addDex ?? false);
-  const [armorDexCap, setArmorDexCap] = React.useState(existingMeta.armor?.dexCap ?? null);
-  const [armorLabel, setArmorLabel] = React.useState(existingMeta.armor?.label ?? '');
+  const [aBase, setABase] = React.useState<number>(existingMeta.armor?.base || 10);
+  const [aAddDex, setAAddDex] = React.useState<boolean>(existingMeta.armor?.addDex || false);
+  const [aDexCap, setADexCap] = React.useState<number | null>(existingMeta.armor?.dexCap || null);
+  const [aLabel, setALabel] = React.useState(existingMeta.armor?.label || '');
 
   // Shield fields
-  const [shieldBonus, setShieldBonus] = React.useState(existingMeta.shield?.bonus ?? 2);
+  const [sBonus, setSBonus] = React.useState<number>(existingMeta.shield?.bonus || 2);
 
-  React.useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, []);
+  const [saving, setSaving] = React.useState(false);
 
-  const save = async () => {
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+
     try {
-      // Reconstruire uniquement à partir des champs contrôlés (ne pas merger avec existingMeta)
-      let nextMeta: ItemMeta = {
+      // Construire les nouvelles métadonnées
+      const newMeta: ItemMeta = {
         type,
-        quantity: Math.max(1, quantity)
+        quantity,
+        equipped: existingMeta.equipped || false,
       };
 
+      // Ajouter les métadonnées spécifiques selon le type
       if (type === 'weapon') {
-        nextMeta.weapon = {
-          damageDice: wDice || '1d6',
+        newMeta.weapon = {
+          damageDice: wDice,
           damageType: wType,
-          properties: wProps || '',
-          range: wRange || 'Corps à corps',
+          properties: wProps,
+          range: wRange,
         };
       } else if (type === 'armor') {
-        nextMeta.armor = {
-          base: armorBase,
-          addDex: armorAddDex,
-          dexCap: armorDexCap,
-          label: armorLabel || `${armorBase}${armorAddDex ? ' + mod DEX' : ''}${armorDexCap ? ` (max ${armorDexCap})` : ''}`,
+        newMeta.armor = {
+          base: aBase,
+          addDex: aAddDex,
+          dexCap: aDexCap,
+          label: aLabel,
         };
       } else if (type === 'shield') {
-        nextMeta.shield = { bonus: shieldBonus };
+        newMeta.shield = {
+          bonus: sBonus,
+        };
       }
 
-      // Nettoyage des champs non pertinents
-      if (type !== 'weapon') delete nextMeta.weapon;
-      if (type !== 'armor') delete nextMeta.armor;
-      if (type !== 'shield') delete nextMeta.shield;
+      // Injecter les métadonnées dans la description
+      const finalDescription = injectMetaIntoDescription(description, newMeta);
 
-      const nextDesc = injectMetaIntoDescription(description, nextMeta);
-      const { error } = await supabase.from('inventory_items').update({
-        name: smartCapitalize(name.trim()),
-        description: nextDesc
-      }).eq('id', item.id);
+      // Sauvegarder en base de données
+      const { error } = await supabase
+        .from('inventory_items')
+        .update({
+          name: name.trim(),
+          description: finalDescription,
+        })
+        .eq('id', item.id);
+
       if (error) throw error;
-      toast.success('Objet mis à jour');
+
+      toast.success('Objet modifié avec succès');
       onSaved();
       onClose();
-    } catch (e) {
-      console.error(e);
-      toast.error('Erreur lors de la mise à jour');
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde:', error);
+      toast.error('Erreur lors de la modification');
+    } finally {
+      setSaving(false);
     }
   };
 
-  // BADGE dynamique selon catégorie
-  const badgeType = (type: MetaType) => {
-    const mapping: Record<MetaType, { label: string; className: string }> = {
-      armor:      { label: 'Armure',        className: 'bg-purple-900/30 text-purple-300' },
-      shield:     { label: 'Bouclier',      className: 'bg-blue-900/30 text-blue-300' },
-      weapon:     { label: 'Arme',          className: 'bg-red-900/30 text-red-300' },
-      equipment:  { label: 'Équipement',    className: 'bg-gray-800/60 text-gray-300' },
-      potion:     { label: 'Potion/Poison', className: 'bg-green-900/30 text-green-300' },
-      jewelry:    { label: 'Bijou',         className: 'bg-yellow-900/30 text-yellow-300' },
-      tool:       { label: 'Outil',         className: 'bg-teal-900/30 text-teal-300' }
-    };
-    return (
-      <span className={`inline-block px-2 py-1 rounded text-xs font-semibold mt-1 ${mapping[type].className}`}>
-        {mapping[type].label}
-      </span>
-    );
+  const getTypeLabel = (t: MetaType) => {
+    switch (t) {
+      case 'armor': return 'Armure';
+      case 'shield': return 'Bouclier';
+      case 'weapon': return 'Arme';
+      case 'potion': return 'Potion/Poison';
+      case 'jewelry': return 'Bijoux';
+      case 'tool': return 'Outils';
+      case 'equipment': return 'Équipement';
+      default: return 'Équipement';
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-[9999]">
-      <div className="fixed inset-0 bg-black/70" onClick={onClose} />
-      <div className="fixed inset-0 bg-gray-900/95 w-screen h-screen overflow-y-auto p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-gray-100">Paramètres de l'objet</h3>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg"><X /></button>
+    <div className="fixed inset-0 z-[12000]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="fixed inset-0 bg-black/60" />
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(32rem,95vw)] max-h-[90vh] overflow-y-auto bg-gray-900/95 border border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-100">Modifier l'objet</h3>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg">
+            <X size={20} />
+          </button>
         </div>
 
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Nom</label>
-              <input className="input-dark w-full px-3 py-2 rounded-md" value={name} onChange={e => setName(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Type d'objet</label>
-              <select 
-                className={`input-dark w-full px-3 py-2 rounded-md ${lockType ? 'opacity-50 cursor-not-allowed' : ''}`}
-                value={type} 
-                onChange={e => setType(e.target.value as MetaType)}
-                disabled={lockType}
-              >
-                <option value="equipment">Équipement</option>
-                <option value="potion">Potion / Poison</option>
-                <option value="weapon">Arme</option>
-                <option value="armor">Armure</option>
-                <option value="shield">Bouclier</option>
-                <option value="jewelry">Bijoux</option>
-                <option value="tool">Outils</option>
-              </select>
-              {badgeType(type)}
-              {lockType && (
-                <p className="text-xs text-yellow-400 mt-1">
-                  Le type ne peut pas être modifié pour un objet équipé depuis un slot
-                </p>
-              )}
-            </div>
+        <div className="space-y-4">
+          {/* Nom */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Nom</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="input-dark w-full px-3 py-2 rounded-md"
+              placeholder="Nom de l'objet"
+            />
           </div>
 
+          {/* Type de catégorie */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Catégorie</label>
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value as MetaType)}
+              disabled={lockType}
+              className="input-dark w-full px-3 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <option value="equipment">Équipement</option>
+              <option value="armor">Armure</option>
+              <option value="shield">Bouclier</option>
+              <option value="weapon">Arme</option>
+              <option value="potion">Potion/Poison</option>
+              <option value="jewelry">Bijoux</option>
+              <option value="tool">Outils</option>
+            </select>
+            {lockType && (
+              <p className="text-xs text-gray-500 mt-1">
+                Type verrouillé car l'objet est actuellement équipé
+              </p>
+            )}
+          </div>
+
+          {/* Quantité */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Quantité</label>
+            <input
+              type="number"
+              min="1"
+              value={quantity}
+              onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+              className="input-dark w-full px-3 py-2 rounded-md"
+            />
+          </div>
+
+          {/* Champs spécifiques selon le type */}
           {type === 'weapon' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Dés de dégâts</label>
-                <input className="input-dark w-full px-3 py-2 rounded-md" value={wDice} onChange={e => setWDice(e.target.value)} />
+            <div className="space-y-3 border-t border-gray-700 pt-4">
+              <h4 className="text-sm font-medium text-gray-300">Propriétés d'arme</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Dés de dégâts</label>
+                  <input
+                    type="text"
+                    value={wDice}
+                    onChange={(e) => setWDice(e.target.value)}
+                    className="input-dark w-full px-2 py-1 text-sm rounded"
+                    placeholder="1d6"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Type de dégâts</label>
+                  <select
+                    value={wType}
+                    onChange={(e) => setWType(e.target.value as any)}
+                    className="input-dark w-full px-2 py-1 text-sm rounded"
+                  >
+                    <option value="Tranchant">Tranchant</option>
+                    <option value="Perforant">Perforant</option>
+                    <option value="Contondant">Contondant</option>
+                  </select>
+                </div>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Type de dégâts</label>
-                <select className="input-dark w-full px-3 py-2 rounded-md" value={wType} onChange={e => setWType(e.target.value as any)}>
-                  <option>Tranchant</option>
-                  <option>Perforant</option>
-                  <option>Contondant</option>
-                </select>
+                <label className="block text-xs text-gray-400 mb-1">Propriétés</label>
+                <input
+                  type="text"
+                  value={wProps}
+                  onChange={(e) => setWProps(e.target.value)}
+                  className="input-dark w-full px-2 py-1 text-sm rounded"
+                  placeholder="Légère, Finesse..."
+                />
               </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm text-gray-400 mb-1">Propriété(s)</label>
-                <input className="input-dark w-full px-3 py-2 rounded-md" value={wProps} onChange={e => setWProps(e.target.value)} placeholder="Finesse, Polyvalente..." />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm text-gray-400 mb-1">Portée</label>
-                <input className="input-dark w-full px-3 py-2 rounded-md" value={wRange} onChange={e => setWRange(e.target.value)} placeholder="Corps à corps, 6 m..." />
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Portée</label>
+                <input
+                  type="text"
+                  value={wRange}
+                  onChange={(e) => setWRange(e.target.value)}
+                  className="input-dark w-full px-2 py-1 text-sm rounded"
+                  placeholder="Corps à corps, 6/18 m..."
+                />
               </div>
             </div>
           )}
 
           {type === 'armor' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Base CA</label>
-                <input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={armorBase} onChange={e => setArmorBase(parseInt(e.target.value) || 10)} />
+            <div className="space-y-3 border-t border-gray-700 pt-4">
+              <h4 className="text-sm font-medium text-gray-300">Propriétés d'armure</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">CA de base</label>
+                  <input
+                    type="number"
+                    min="10"
+                    max="20"
+                    value={aBase}
+                    onChange={(e) => setABase(parseInt(e.target.value) || 10)}
+                    className="input-dark w-full px-2 py-1 text-sm rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Cap de Dex</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="5"
+                    value={aDexCap || ''}
+                    onChange={(e) => setADexCap(e.target.value ? parseInt(e.target.value) : null)}
+                    className="input-dark w-full px-2 py-1 text-sm rounded"
+                    placeholder="Aucun"
+                  />
+                </div>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Ajouter DEX ?</label>
-                <select className="input-dark w-full px-3 py-2 rounded-md" value={armorAddDex ? 'oui' : 'non'} onChange={e => setArmorAddDex(e.target.value === 'oui')}>
-                  <option value="oui">Oui</option>
-                  <option value="non">Non</option>
-                </select>
+                <label className="flex items-center gap-2 text-xs text-gray-400">
+                  <input
+                    type="checkbox"
+                    checked={aAddDex}
+                    onChange={(e) => setAAddDex(e.target.checked)}
+                    className="accent-red-500"
+                  />
+                  Ajouter le modificateur de Dextérité
+                </label>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Cap DEX (optionnel)</label>
-                <input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={armorDexCap ?? ''} onChange={e => setArmorDexCap(e.target.value ? parseInt(e.target.value) : null)} placeholder="Aucun cap" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Label CA</label>
-                <input className="input-dark w-full px-3 py-2 rounded-md" value={armorLabel} onChange={e => setArmorLabel(e.target.value)} />
+                <label className="block text-xs text-gray-400 mb-1">Libellé de formule</label>
+                <input
+                  type="text"
+                  value={aLabel}
+                  onChange={(e) => setALabel(e.target.value)}
+                  className="input-dark w-full px-2 py-1 text-sm rounded"
+                  placeholder="ex: 11 + Mod. Dex (max 2)"
+                />
               </div>
             </div>
           )}
 
           {type === 'shield' && (
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Bonus de bouclier</label>
-              <input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={shieldBonus} onChange={e => setShieldBonus(parseInt(e.target.value) || 2)} />
+            <div className="space-y-3 border-t border-gray-700 pt-4">
+              <h4 className="text-sm font-medium text-gray-300">Propriétés de bouclier</h4>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Bonus à la CA</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="5"
+                  value={sBonus}
+                  onChange={(e) => setSBonus(parseInt(e.target.value) || 2)}
+                  className="input-dark w-full px-2 py-1 text-sm rounded"
+                />
+              </div>
             </div>
           )}
 
+          {/* Description */}
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Description</label>
-            <textarea className="input-dark w-full px-3 py-2 rounded-md" rows={6} value={description} onChange={e => setDescription(e.target.value)} />
+            <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="input-dark w-full px-3 py-2 rounded-md"
+              rows={4}
+              placeholder="Description de l'objet"
+            />
           </div>
+        </div>
 
-          <div className="flex items-center gap-3">
-            <label className="text-sm text-gray-400">Quantité</label>
-            <input type="number" min={1} className="input-dark w-24 px-3 py-2 rounded-md" value={quantity} onChange={e => setQuantity(parseInt(e.target.value) || 1)} />
-          </div>
-
-          <div className="pt-2 flex justify-end gap-2">
-            <button onClick={save} className="btn-primary px-4 py-2 rounded-lg">Sauvegarder</button>
-            <button onClick={onClose} className="btn-secondary px-4 py-2 rounded-lg">Annuler</button>
-          </div>
+        {/* Boutons */}
+        <div className="flex justify-end gap-3 mt-6">
+          <button
+            onClick={onClose}
+            className="btn-secondary px-4 py-2 rounded-lg"
+            disabled={saving}
+          >
+            Annuler
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="btn-primary px-4 py-2 rounded-lg disabled:opacity-50"
+          >
+            {saving ? 'Sauvegarde...' : 'Sauvegarder'}
+          </button>
         </div>
       </div>
     </div>
