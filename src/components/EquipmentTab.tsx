@@ -390,7 +390,7 @@ export function EquipmentTab({
     } as any;
   };
 
-  const saveEquipment = async (slot: 'armor' | 'shield' | 'bag', eq: Equipment | null) => {
+  const saveEquipment = async (slot: 'armor' | a'shield' | 'bag', eq: Equipment | null) => {
     const snapshot = buildEquipmentSnapshot({ [slot]: eq });
     try {
       const { error } = await supabase.from('players').update({ equipment: snapshot }).eq('id', player.id);
