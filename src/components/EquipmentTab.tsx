@@ -224,7 +224,7 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
               <>
                 Aucun {type === 'armor' ? 'armure' : 'bouclier'} équipé.
                 <div className="mt-3">
-                  <button onClick={() => onRequestOpenList?.()} className="btn-primary px-3 py-2 rounded-lg">ouvrir le sac</button>
+                  <button onClick={() => onRequestOpenList?.()} className="btn-primary px-3 py-2 rounded-lg">Ouvrir le sac</button>
                 </div>
               </>
             )}
