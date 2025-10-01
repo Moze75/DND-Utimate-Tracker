@@ -19,18 +19,14 @@ interface Equipment {
   name: string;
   description: string;
   isTextArea?: boolean;
-
   inventory_item_id?: string | null;
-
   armor_formula?: {
     base: number;
     addDex: boolean;
     dexCap?: number | null;
     label?: string;
   } | null;
-
   shield_bonus?: number | null;
-
   weapon_meta?: {
     damageDice: string;
     damageType: 'Tranchant' | 'Perforant' | 'Contondant';
@@ -368,7 +364,7 @@ export function EquipmentTab({
       bag: override?.bag !== undefined ? override.bag : base.bag,
       potion: (player.equipment as any)?.potion ?? null,
       jewelry: (player.equipment as any)?.jewelry ?? null,
-      // On ne touche jamais au champ weapon
+      // On ne touche jamais au champ weapon (hérité d'anciens profils)
       weapon: (player.equipment as any)?.weapon ?? null
     } as any;
   };
@@ -580,7 +576,7 @@ export function EquipmentTab({
 
   // Synthèses modales bijoux/potions
   const jewelryText = jewelryItems.length ? jewelryItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n') : 'Aucun bijou dans le sac.';
-  const potionText = potionItems.length ? potionItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n') : 'Aucune potion/poison dans le sac.';
+  const potionText = potionItems.length ? jewelryItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n') : 'Aucune potion/poison dans le sac.';
 
   return (
     <div className="space-y-6">
@@ -742,7 +738,7 @@ export function EquipmentTab({
               const isEquipped =
                 (isArmor && armor?.inventory_item_id === item.id) ||
                 (isShield && shield?.inventory_item_id === item.id) ||
-                (isWeapon && meta?.equipped === true);
+                (isWeapon && meta?.equipped === true); // armes: uniquement meta.equipped
 
               return (
                 <div key={item.id} className="bg-gray-800/40 border border-gray-700/40 rounded-md">
