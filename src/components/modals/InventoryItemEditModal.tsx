@@ -85,10 +85,10 @@ export function InventoryItemEditModal({
 
   const save = async () => {
     try {
+      // Reconstruire uniquement à partir des champs contrôlés (ne pas merger avec existingMeta)
       let nextMeta: ItemMeta = {
-        ...(existingMeta || {} as ItemMeta),
         type,
-        quantity: Math.max(1, quantity),
+        quantity: Math.max(1, quantity)
       };
 
       if (type === 'weapon') {
@@ -98,8 +98,6 @@ export function InventoryItemEditModal({
           properties: wProps || '',
           range: wRange || 'Corps à corps',
         };
-        delete (nextMeta as any).armor;
-        delete (nextMeta as any).shield;
       } else if (type === 'armor') {
         nextMeta.armor = {
           base: armorBase,
@@ -107,17 +105,14 @@ export function InventoryItemEditModal({
           dexCap: armorDexCap,
           label: armorLabel || `${armorBase}${armorAddDex ? ' + mod DEX' : ''}${armorDexCap ? ` (max ${armorDexCap})` : ''}`,
         };
-        delete (nextMeta as any).weapon;
-        delete (nextMeta as any).shield;
       } else if (type === 'shield') {
         nextMeta.shield = { bonus: shieldBonus };
-        delete (nextMeta as any).weapon;
-        delete (nextMeta as any).armor;
-      } else {
-        delete (nextMeta as any).weapon;
-        delete (nextMeta as any).armor;
-        delete (nextMeta as any).shield;
       }
+
+      // Nettoyage des champs non pertinents
+      if (type !== 'weapon') delete nextMeta.weapon;
+      if (type !== 'armor') delete nextMeta.armor;
+      if (type !== 'shield') delete nextMeta.shield;
 
       const nextDesc = injectMetaIntoDescription(description, nextMeta);
       const { error } = await supabase.from('inventory_items').update({
