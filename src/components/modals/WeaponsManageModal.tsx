@@ -48,6 +48,7 @@ export function WeaponsManageModal({
 }) {
   const [q, setQ] = React.useState('');
   const [pendingId, setPendingId] = React.useState<string | null>(null); // évite les doubles clics
+  
   const weapons = React.useMemo(() => {
     return inventory
       .map(it => ({ it, meta: parseMeta(it.description) }))
@@ -100,13 +101,23 @@ export function WeaponsManageModal({
                         e.stopPropagation();
                         if (isPending) return;
                         setPendingId(it.id);
-                        try { await onUnequip(it); } finally { setPendingId(null); }
+                        try { 
+                          await onUnequip(it); 
+                        } catch (error) {
+                          console.error('Erreur déséquipement:', error);
+                        } finally { 
+                          setPendingId(null); 
+                        }
                       }}
                       disabled={isPending}
-                      className="px-2 py-1 rounded text-xs border border-gray-600 text-gray-300 hover:bg-gray-700/40 disabled:opacity-50"
-                      title="Déséquiper"
+                      className={`px-2 py-1 rounded text-xs border ${
+                        isPending 
+                          ? 'border-gray-500 text-gray-500 bg-gray-800/50 cursor-not-allowed'
+                          : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'
+                      }`}
+                      title={isPending ? "Traitement en cours..." : "Déséquiper"}
                     >
-                      Déséquiper
+                      {isPending ? 'En cours...' : 'Déséquiper'}
                     </button>
                   ) : (
                     <button
@@ -114,13 +125,27 @@ export function WeaponsManageModal({
                         e.stopPropagation();
                         if (isPending) return;
                         setPendingId(it.id);
-                        try { await onEquip(it); } finally { setPendingId(null); }
+                        try { 
+                          await onEquip(it); 
+                        } catch (error) {
+                          console.error('Erreur équipement:', error);
+                        } finally { 
+                          setPendingId(null); 
+                        }
                       }}
                       disabled={isPending}
-                      className="px-2 py-1 rounded text-xs border border-green-500/40 text-green-300 bg-green-900/20 hover:border-green-400/60 disabled:opacity-50"
-                      title="Équiper"
+                      className={`px-2 py-1 rounded text-xs border ${
+                        isPending 
+                          ? 'border-gray-500 text-gray-500 bg-gray-800/50 cursor-not-allowed'
+                          : 'border-green-500/40 text-green-300 bg-green-900/20 hover:border-green-400/60'
+                      }`}
+                      title={isPending ? "Traitement en cours..." : "Équiper"}
                     >
-                      <Check size={12} /> Équiper
+                      {isPending ? 'En cours...' : (
+                        <>
+                          <Check size={12} /> Équiper
+                        </>
+                      )}
                     </button>
                   )}
                 </div>
@@ -162,5 +187,5 @@ export function WeaponsManageModal({
         </div>
       </div>
     </div>
-  ); 
+  );
 }
