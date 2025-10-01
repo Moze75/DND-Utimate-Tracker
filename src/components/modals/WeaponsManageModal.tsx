@@ -55,7 +55,6 @@ export function WeaponsManageModal({
       .filter(({ meta }) => (meta?.type === 'weapon'));
   }, [inventory]);
 
-  // CORRECTION : Filtrage correct basé sur meta.equipped
   const equipped = weapons.filter(w => w.meta?.equipped === true);
   const others = weapons.filter(w => w.meta?.equipped !== true);
 
@@ -70,7 +69,11 @@ export function WeaponsManageModal({
     });
   };
 
-  const Section = ({ title, list }: { title: string; list: { it: InventoryItem; meta: ItemMeta | null }[] }) => (
+  const Section = ({ title, list, showEquipped }: { 
+    title: string; 
+    list: { it: InventoryItem; meta: ItemMeta | null }[];
+    showEquipped: boolean;
+  }) => (
     <div className="space-y-2">
       <h4 className="text-gray-200 font-semibold text-sm">{title}</h4>
       {list.length === 0 ? (
@@ -79,7 +82,6 @@ export function WeaponsManageModal({
         list.map(({ it, meta }) => {
           const w = meta?.weapon;
           const isPending = pendingId === it.id;
-          // CORRECTION : Affichage correct basé sur meta.equipped
           const isEquipped = meta?.equipped === true;
           
           return (
@@ -89,8 +91,6 @@ export function WeaponsManageModal({
                   <div className="flex items-center gap-2">
                     <Sword size={16} className="text-red-400 shrink-0" />
                     <div className="font-medium text-gray-100 truncate">{smartCapitalize(it.name)}</div>
-                    {/* Ajout d'un indicateur visuel pour debug */}
-                    {isEquipped && <span className="text-xs px-1 py-0.5 rounded bg-green-900/30 text-green-300">✓</span>}
                   </div>
                   {w && (
                     <div className="mt-1 text-xs text-gray-400 space-y-0.5">
@@ -101,59 +101,71 @@ export function WeaponsManageModal({
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* CORRECTION : Logique correcte pour afficher le bon bouton */}
-                  {isEquipped ? (
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (isPending) return;
-                        setPendingId(it.id);
-                        try { 
-                          await onUnequip(it); 
-                        } catch (error) {
-                          console.error('Erreur déséquipement:', error);
-                        } finally { 
-                          setPendingId(null); 
-                        }
-                      }}
-                      disabled={isPending}
-                      className={`px-2 py-1 rounded text-xs border ${
-                        isPending 
-                          ? 'border-gray-500 text-gray-500 bg-gray-800/50 cursor-not-allowed'
-                          : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'
-                      }`}
-                      title={isPending ? "Traitement en cours..." : "Déséquiper"}
-                    >
-                      {isPending ? 'En cours...' : 'Déséquiper'}
-                    </button>
+                  {/* CORRECTION : Affichage selon le contexte de la section */}
+                  {showEquipped ? (
+                    // Section "Armes équipées" : Badge vert + bouton déséquiper
+                    <>
+                      <span className="px-2 py-1 rounded text-xs border border-green-500/40 text-green-300 bg-green-900/20">
+                        Équipé
+                      </span>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (isPending) return;
+                          setPendingId(it.id);
+                          try { 
+                            await onUnequip(it); 
+                          } catch (error) {
+                            console.error('Erreur déséquipement:', error);
+                          } finally { 
+                            setPendingId(null); 
+                          }
+                        }}
+                        disabled={isPending}
+                        className={`px-2 py-1 rounded text-xs border ${
+                          isPending 
+                            ? 'border-gray-500 text-gray-500 bg-gray-800/50 cursor-not-allowed'
+                            : 'border-red-500/40 text-red-300 hover:bg-red-900/20'
+                        }`}
+                        title={isPending ? "Traitement en cours..." : "Déséquiper"}
+                      >
+                        {isPending ? 'En cours...' : 'Déséquiper'}
+                      </button>
+                    </>
                   ) : (
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (isPending) return;
-                        setPendingId(it.id);
-                        try { 
-                          await onEquip(it); 
-                        } catch (error) {
-                          console.error('Erreur équipement:', error);
-                        } finally { 
-                          setPendingId(null); 
-                        }
-                      }}
-                      disabled={isPending}
-                      className={`px-2 py-1 rounded text-xs border ${
-                        isPending 
-                          ? 'border-gray-500 text-gray-500 bg-gray-800/50 cursor-not-allowed'
-                          : 'border-green-500/40 text-green-300 bg-green-900/20 hover:border-green-400/60'
-                      }`}
-                      title={isPending ? "Traitement en cours..." : "Équiper"}
-                    >
-                      {isPending ? 'En cours...' : (
-                        <>
-                          <Check size={12} /> Équiper
-                        </>
-                      )}
-                    </button>
+                    // Section "Autres armes" : Badge gris + bouton équiper
+                    <>
+                      <span className="px-2 py-1 rounded text-xs border border-gray-600 text-gray-300 bg-gray-800/20">
+                        Non équipé
+                      </span>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (isPending) return;
+                          setPendingId(it.id);
+                          try { 
+                            await onEquip(it); 
+                          } catch (error) {
+                            console.error('Erreur équipement:', error);
+                          } finally { 
+                            setPendingId(null); 
+                          }
+                        }}
+                        disabled={isPending}
+                        className={`px-2 py-1 rounded text-xs border ${
+                          isPending 
+                            ? 'border-gray-500 text-gray-500 bg-gray-800/50 cursor-not-allowed'
+                            : 'border-green-500/40 text-green-300 bg-green-900/20 hover:border-green-400/60'
+                        }`}
+                        title={isPending ? "Traitement en cours..." : "Équiper"}
+                      >
+                        {isPending ? 'En cours...' : (
+                          <>
+                            <Check size={12} /> Équiper
+                          </>
+                        )}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -188,8 +200,8 @@ export function WeaponsManageModal({
             />
           </div>
 
-          <Section title="Armes équipées" list={filterByQuery(equipped)} />
-          <Section title="Autres armes dans le sac" list={filterByQuery(others)} />
+          <Section title="Armes équipées" list={filterByQuery(equipped)} showEquipped={true} />
+          <Section title="Autres armes dans le sac" list={filterByQuery(others)} showEquipped={false} />
         </div>
       </div>
     </div>
