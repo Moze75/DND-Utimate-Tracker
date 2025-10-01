@@ -145,18 +145,18 @@ export function EquipmentListModal({
                           )}
                         </div>
                       </div>
-                      <button 
-                        onClick={() => {
-                          onAddItem({ 
-                            name: item.name, 
-                            description: visibleDescription(item.description), 
-                            meta: meta || { type: 'equipment', quantity: 1, equipped: false }
-                          });
-                        }} 
-                        className="btn-primary px-3 py-2 rounded-lg"
-                      >
-                        Équiper
-                      </button>
+                  <button 
+                    onClick={() => {
+                      onAddItem({ 
+                        name: item.name, 
+                        description: visibleDescription(item.description), 
+                        meta: meta || { type: 'equipment', quantity: 1, equipped: false }
+                      });
+                    }} 
+                    className="btn-primary px-3 py-2 rounded-lg"
+                  >
+                    Équiper depuis le sac
+                  </button>
                     </div>
                   </div>
                 );
