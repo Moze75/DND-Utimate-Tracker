@@ -364,7 +364,7 @@ export function EquipmentTab({
       const parts: string[] = [smartCapitalize(it.name)];
       if (w?.damageDice || w?.damageType) {
         const dice = w.damageDice || '';
-        the dtype = w.damageType || '';
+        const dtype = w.damageType || '';
         const fmt = [dice, dtype].filter(Boolean).join(' ');
         if (fmt) parts.push(`(${fmt})`);
       }
