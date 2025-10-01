@@ -333,20 +333,6 @@ export function EquipmentTab({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmPayload, setConfirmPayload] = useState<{ mode: 'equip' | 'unequip'; itemId: string; itemName: string } | null>(null);
 
-  // Fonction pour obtenir le badge selon le type d'objet
-  const getBadgeForType = (type: MetaType) => {
-    const mapping: Record<MetaType, { label: string; className: string }> = {
-      armor:      { label: 'Armure',        className: 'bg-purple-900/30 text-purple-300' },
-      shield:     { label: 'Bouclier',      className: 'bg-blue-900/30 text-blue-300' },
-      weapon:     { label: 'Arme',          className: 'bg-red-900/30 text-red-300' },
-      equipment:  { label: 'Équipement',    className: 'bg-gray-800/60 text-gray-300' },
-      potion:     { label: 'Potion/Poison', className: 'bg-green-900/30 text-green-300' },
-      jewelry:    { label: 'Bijou',         className: 'bg-yellow-900/30 text-yellow-300' },
-      tool:       { label: 'Outil',         className: 'bg-teal-900/30 text-teal-300' }
-    };
-    return mapping[type] || mapping.equipment; // Fallback vers 'equipment' si type inconnu
-  };
-
   useEffect(() => {
     stableEquipmentRef.current = { armor, shield, bag };
   }, [armor, shield, bag]);
@@ -879,7 +865,6 @@ export function EquipmentTab({
             {filteredInventory.map(item => {
               const meta = parseMeta(item.description);
               const qty = meta?.quantity ?? 1;
-              const itemType = meta?.type || 'equipment';
               const isArmor = meta?.type === 'armor';
               const isShield = meta?.type === 'shield';
               const isWeapon = meta?.type === 'weapon';
@@ -888,19 +873,19 @@ export function EquipmentTab({
                 (isShield && shield?.inventory_item_id === item.id) ||
                 (isWeapon && meta?.equipped === true); // uniquement meta.equipped
 
-              // Obtenir le badge pour ce type d'objet
-              const badge = getBadgeForType(itemType as MetaType);
-
               return (
                 <div key={item.id} className="bg-gray-800/40 border border-gray-700/40 rounded-md">
                   <div className="flex items-start justify-between p-2">
                     <div className="flex-1 mr-2">
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
                         <button onClick={() => toggleExpand(item.id)} className="text-left text-gray-100 font-medium hover:underline break-words">{smartCapitalize(item.name)}</button>
                         {qty > 1 && <span className="text-xs px-2 py-0.5 rounded bg-gray-700/60 text-gray-300">x{qty}</span>}
-                        <span className={`text-xs px-2 py-0.5 rounded ${badge.className}`}>
-                          {badge.label}
-                        </span>
+                        {isArmor && <span className="text-xs px-2 py-0.5 rounded bg-purple-900/30 text-purple-300">Armure</span>}
+                        {isShield && <span className="text-xs px-2 py-0.5 rounded bg-blue-900/30 text-blue-300">Bouclier</span>}
+                        {isWeapon && <span className="text-xs px-2 py-0.5 rounded bg-red-900/30 text-red-300">Arme</span>}
+                        {meta?.type === 'tool' && <span className="text-xs px-2 py-0.5 rounded bg-teal-900/30 text-teal-300">Outil</span>}
+                        {meta?.type === 'jewelry' && <span className="text-xs px-2 py-0.5 rounded bg-yellow-900/30 text-yellow-300">Bijou</span>}
+                        {meta?.type === 'potion' && <span className="text-xs px-2 py-0.5 rounded bg-green-900/30 text-green-300">Potion/Poison</span>}
                       </div>
 
                       {expanded[item.id] && (isArmor || isShield || isWeapon) && (
@@ -1085,4 +1070,4 @@ export function EquipmentTab({
       )}
     </div>
   );
-}
+} 
