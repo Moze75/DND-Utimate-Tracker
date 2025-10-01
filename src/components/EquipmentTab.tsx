@@ -686,39 +686,81 @@ export function EquipmentTab({
               style={{ mixBlendMode: 'luminosity' }}
             />
 
-            <EquipmentSlot
-              icon={<ShieldIcon size={24} className="text-purple-500" />}
-              position="top-[27%] left-1/2 -translate-x-1/2"
-              equipment={armor || null}
-              type="armor"
-              onRequestOpenList={() => { setAllowedKinds(['armors']); setShowList(true); }}
-              onToggleEquipFromSlot={() => toggleFromSlot('armor')}
-              onOpenEditFromSlot={() => openEditFromSlot('armor')}
-              isEquipped={!!armor}
-            />
-
-            <EquipmentSlot
-              icon={<ShieldIcon size={24} className="text-blue-500" />}
-              position="top-[50%] left-[15%]"
-              equipment={shield || null}
-              type="shield"
-              onRequestOpenList={() => { setAllowedKinds(['shields']); setShowList(true); }}
-              onToggleEquipFromSlot={() => toggleFromSlot('shield')}
-              onOpenEditFromSlot={() => openEditFromSlot('shield')}
-              isEquipped={!!shield}
-            />
-
-            <EquipmentSlot
-              icon={<Sword size={24} className="text-red-500" />}
-              position="top-[50%] right-[15%]"
-              equipment={weaponsSummary}
-              type="weapon"
-              onRequestOpenList={() => { setAllowedKinds(['weapons']); setShowList(true); }}
-              onToggleEquipFromSlot={() => {}}
-              onOpenEditFromSlot={() => {}}
-              onOpenWeaponsManageFromSlot={() => setShowWeaponsModal(true)}
-              isEquipped={equippedWeapons.length > 0}
-            />
+               <EquipmentSlot
+                icon={<ShieldIcon size={24} className="text-purple-500" />}
+                position="top-[27%] left-1/2 -translate-x-1/2"
+                equipment={armor || null}
+                type="armor"
+                onRequestOpenList={() => {
+                  // CORRECTION: Filtrer uniquement les armures présentes dans le sac
+                  const availableArmors = inventory.filter(item => {
+                    const meta = parseMeta(item.description);
+                    return meta?.type === 'armor';
+                  });
+                  
+                  if (availableArmors.length === 0) {
+                    toast.info("Aucune armure disponible dans le sac");
+                    return;
+                  }
+                  
+                  setAllowedKinds(['armors']); 
+                  setShowList(true);
+                }}
+                onToggleEquipFromSlot={() => toggleFromSlot('armor')}
+                onOpenEditFromSlot={() => openEditFromSlot('armor')}
+                isEquipped={!!armor}
+              />
+              
+              <EquipmentSlot
+                icon={<ShieldIcon size={24} className="text-blue-500" />}
+                position="top-[50%] left-[15%]"
+                equipment={shield || null}
+                type="shield"
+                onRequestOpenList={() => {
+                  // CORRECTION: Filtrer uniquement les boucliers présents dans le sac
+                  const availableShields = inventory.filter(item => {
+                    const meta = parseMeta(item.description);
+                    return meta?.type === 'shield';
+                  });
+                  
+                  if (availableShields.length === 0) {
+                    toast.info("Aucun bouclier disponible dans le sac");
+                    return;
+                  }
+                  
+                  setAllowedKinds(['shields']); 
+                  setShowList(true);
+                }}
+                onToggleEquipFromSlot={() => toggleFromSlot('shield')}
+                onOpenEditFromSlot={() => openEditFromSlot('shield')}
+                isEquipped={!!shield}
+              />
+              
+              <EquipmentSlot
+                icon={<Sword size={24} className="text-red-500" />}
+                position="top-[50%] right-[15%]"
+                equipment={weaponsSummary}
+                type="weapon"
+                onRequestOpenList={() => {
+                  // CORRECTION: Filtrer uniquement les armes présentes dans le sac
+                  const availableWeapons = inventory.filter(item => {
+                    const meta = parseMeta(item.description);
+                    return meta?.type === 'weapon';
+                  });
+                  
+                  if (availableWeapons.length === 0) {
+                    toast.info("Aucune arme disponible dans le sac");
+                    return;
+                  }
+                  
+                  setAllowedKinds(['weapons']); 
+                  setShowList(true);
+                }}
+                onToggleEquipFromSlot={() => {}}
+                onOpenEditFromSlot={() => {}}
+                onOpenWeaponsManageFromSlot={() => setShowWeaponsModal(true)}
+                isEquipped={equippedWeapons.length > 0}
+              />
 
             <EquipmentSlot
               icon={<Flask size={24} className="text-green-500" />}
