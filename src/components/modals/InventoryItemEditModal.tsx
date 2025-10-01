@@ -68,6 +68,15 @@ export function InventoryItemEditModal({
   const [wProps, setWProps] = React.useState(existingMeta.weapon?.properties || '');
   const [wRange, setWRange] = React.useState(existingMeta.weapon?.range || 'Corps à corps');
 
+  // Armor fields
+  const [armorBase, setArmorBase] = React.useState(existingMeta.armor?.base ?? 10);
+  const [armorAddDex, setArmorAddDex] = React.useState(existingMeta.armor?.addDex ?? false);
+  const [armorDexCap, setArmorDexCap] = React.useState(existingMeta.armor?.dexCap ?? null);
+  const [armorLabel, setArmorLabel] = React.useState(existingMeta.armor?.label ?? '');
+
+  // Shield fields
+  const [shieldBonus, setShieldBonus] = React.useState(existingMeta.shield?.bonus ?? 2);
+
   React.useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -80,7 +89,6 @@ export function InventoryItemEditModal({
         ...(existingMeta || {} as ItemMeta),
         type,
         quantity: Math.max(1, quantity),
-        // on ne modifie pas equipped ici
       };
 
       if (type === 'weapon') {
@@ -90,8 +98,25 @@ export function InventoryItemEditModal({
           properties: wProps || '',
           range: wRange || 'Corps à corps',
         };
+        delete (nextMeta as any).armor;
+        delete (nextMeta as any).shield;
+      } else if (type === 'armor') {
+        nextMeta.armor = {
+          base: armorBase,
+          addDex: armorAddDex,
+          dexCap: armorDexCap,
+          label: armorLabel || `${armorBase}${armorAddDex ? ' + mod DEX' : ''}${armorDexCap ? ` (max ${armorDexCap})` : ''}`,
+        };
+        delete (nextMeta as any).weapon;
+        delete (nextMeta as any).shield;
+      } else if (type === 'shield') {
+        nextMeta.shield = { bonus: shieldBonus };
+        delete (nextMeta as any).weapon;
+        delete (nextMeta as any).armor;
       } else {
         delete (nextMeta as any).weapon;
+        delete (nextMeta as any).armor;
+        delete (nextMeta as any).shield;
       }
 
       const nextDesc = injectMetaIntoDescription(description, nextMeta);
@@ -107,6 +132,24 @@ export function InventoryItemEditModal({
       console.error(e);
       toast.error('Erreur lors de la mise à jour');
     }
+  };
+
+  // BADGE dynamique selon catégorie
+  const badgeType = (type: MetaType) => {
+    const mapping: Record<MetaType, { label: string; className: string }> = {
+      armor:      { label: 'Armure',        className: 'bg-purple-900/30 text-purple-300' },
+      shield:     { label: 'Bouclier',      className: 'bg-blue-900/30 text-blue-300' },
+      weapon:     { label: 'Arme',          className: 'bg-red-900/30 text-red-300' },
+      equipment:  { label: 'Équipement',    className: 'bg-gray-800/60 text-gray-300' },
+      potion:     { label: 'Potion/Poison', className: 'bg-green-900/30 text-green-300' },
+      jewelry:    { label: 'Bijou',         className: 'bg-yellow-900/30 text-yellow-300' },
+      tool:       { label: 'Outil',         className: 'bg-teal-900/30 text-teal-300' }
+    };
+    return (
+      <span className={`inline-block px-2 py-1 rounded text-xs font-semibold mt-1 ${mapping[type].className}`}>
+        {mapping[type].label}
+      </span>
+    );
   };
 
   return (
@@ -135,6 +178,7 @@ export function InventoryItemEditModal({
                 <option value="jewelry">Bijoux</option>
                 <option value="tool">Outils</option>
               </select>
+              {badgeType(type)}
             </div>
           </div>
 
@@ -160,6 +204,37 @@ export function InventoryItemEditModal({
                 <label className="block text-sm text-gray-400 mb-1">Portée</label>
                 <input className="input-dark w-full px-3 py-2 rounded-md" value={wRange} onChange={e => setWRange(e.target.value)} placeholder="Corps à corps, 6 m..." />
               </div>
+            </div>
+          )}
+
+          {type === 'armor' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Base CA</label>
+                <input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={armorBase} onChange={e => setArmorBase(parseInt(e.target.value) || 10)} />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Ajouter DEX ?</label>
+                <select className="input-dark w-full px-3 py-2 rounded-md" value={armorAddDex ? 'oui' : 'non'} onChange={e => setArmorAddDex(e.target.value === 'oui')}>
+                  <option value="oui">Oui</option>
+                  <option value="non">Non</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Cap DEX (optionnel)</label>
+                <input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={armorDexCap ?? ''} onChange={e => setArmorDexCap(e.target.value ? parseInt(e.target.value) : null)} />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Label CA</label>
+                <input className="input-dark w-full px-3 py-2 rounded-md" value={armorLabel} onChange={e => setArmorLabel(e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          {type === 'shield' && (
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Bonus de bouclier</label>
+              <input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={shieldBonus} onChange={e => setShieldBonus(parseInt(e.target.value) || 2)} />
             </div>
           )}
 
