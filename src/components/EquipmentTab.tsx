@@ -450,133 +450,149 @@ export function EquipmentTab({
     } catch (e) { console.error('Suppression attaques (déséquipement) échouée', e); }
   };
 
-  const applyInventoryMetaLocal = (itemId: string, nextMeta: ItemMeta) => {
-    const next = inventory.map(it => it.id === itemId
-      ? { ...it, description: injectMetaIntoDescription(visibleDescription(it.description), nextMeta) }
-      : it
-    );
-    onInventoryUpdate(next);
-  };
-  const updateItemMeta = async (item: InventoryItem, nextMeta: ItemMeta) => {
+  // CORRECTION CRITIQUE : Fonction qui met à jour l'état local ET la DB
+  const updateItemMetaComplete = async (item: InventoryItem, nextMeta: ItemMeta) => {
+    // 1. Mise à jour optimiste immédiate de l'état local
     const nextDesc = injectMetaIntoDescription(visibleDescription(item.description), nextMeta);
+    const updatedInventory = inventory.map(it => 
+      it.id === item.id 
+        ? { ...it, description: nextDesc }
+        : it
+    );
+    onInventoryUpdate(updatedInventory);
+
+    // 2. Mise à jour de la DB
     const { error } = await supabase.from('inventory_items').update({ description: nextDesc }).eq('id', item.id);
     if (error) throw error;
   };
 
   const unequipOthersOfType = async (type: 'armor' | 'shield', keepItemId?: string) => {
     const updates: Promise<any>[] = [];
+    const localUpdates: InventoryItem[] = [];
+    
     for (const it of inventory) {
       const meta = parseMeta(it.description);
       if (!meta) continue;
       if ((type === 'armor' && meta.type === 'armor') || (type === 'shield' && meta.type === 'shield')) {
         if (it.id !== keepItemId && meta.equipped) {
           const next = { ...meta, equipped: false };
-          applyInventoryMetaLocal(it.id, next);
-          updates.push(supabase.from('inventory_items').update({ description: injectMetaIntoDescription(visibleDescription(it.description), next) }).eq('id', it.id));
+          const nextDesc = injectMetaIntoDescription(visibleDescription(it.description), next);
+          localUpdates.push({ ...it, description: nextDesc });
+          updates.push(supabase.from('inventory_items').update({ description: nextDesc }).eq('id', it.id));
         }
       }
     }
+    
+    // Mise à jour optimiste locale
+    if (localUpdates.length > 0) {
+      const updatedInventory = inventory.map(it => {
+        const updated = localUpdates.find(u => u.id === it.id);
+        return updated || it;
+      });
+      onInventoryUpdate(updatedInventory);
+    }
+    
     if (updates.length) await Promise.allSettled(updates);
   };
 
-  // Equip/Unequip — armes multiples supportées (uniquement meta.equipped)
+  // CORRECTION CRITIQUE : Fonction performToggle simplifiée
   const performToggle = async (item: InventoryItem, mode: 'equip' | 'unequip') => {
     // Protection anti double-clic
-    if (pendingEquipment.has(item.id)) return;
+    if (pendingEquipment.has(item.id)) {
+      console.log('Action déjà en cours pour:', item.id);
+      return;
+    }
     
-    const meta = parseMeta(item.description);
-    if (!meta) return;
+    // Récupérer l'item le plus frais de l'état
+    const freshItem = inventory.find(i => i.id === item.id);
+    if (!freshItem) {
+      toast.error("Objet introuvable");
+      return;
+    }
+    
+    const meta = parseMeta(freshItem.description);
+    if (!meta) {
+      toast.error("Métadonnées manquantes");
+      return;
+    }
+
+    console.log(`Début ${mode} pour:`, freshItem.name, 'meta.equipped:', meta.equipped);
 
     try {
-      setPendingEquipment(prev => new Set([...prev, item.id]));
+      setPendingEquipment(prev => new Set([...prev, freshItem.id]));
 
       if (meta.type === 'armor') {
-        if (mode === 'unequip' && armor?.inventory_item_id === item.id) {
-          await updateItemMeta(item, { ...meta, equipped: false });
+        if (mode === 'unequip' && armor?.inventory_item_id === freshItem.id) {
+          await updateItemMetaComplete(freshItem, { ...meta, equipped: false });
           await saveEquipment('armor', null);
           toast.success('Armure déséquipée');
-          await refreshInventory(0);
         } else if (mode === 'equip') {
-          await unequipOthersOfType('armor', item.id);
+          await unequipOthersOfType('armor', freshItem.id);
           const eq: Equipment = {
-            name: item.name,
-            description: visibleDescription(item.description),
-            inventory_item_id: item.id,
+            name: freshItem.name,
+            description: visibleDescription(freshItem.description),
+            inventory_item_id: freshItem.id,
             armor_formula: meta.armor ? { base: meta.armor.base, addDex: meta.armor.addDex, dexCap: meta.armor.dexCap ?? null, label: meta.armor.label } : null,
             shield_bonus: null,
             weapon_meta: null,
           };
-          await updateItemMeta(item, { ...meta, equipped: true });
+          await updateItemMetaComplete(freshItem, { ...meta, equipped: true });
           await saveEquipment('armor', eq);
           toast.success('Armure équipée');
-          await refreshInventory(0);
         }
       } else if (meta.type === 'shield') {
-        if (mode === 'unequip' && shield?.inventory_item_id === item.id) {
-          await updateItemMeta(item, { ...meta, equipped: false });
+        if (mode === 'unequip' && shield?.inventory_item_id === freshItem.id) {
+          await updateItemMetaComplete(freshItem, { ...meta, equipped: false });
           await saveEquipment('shield', null);
           toast.success('Bouclier déséquipé');
-          await refreshInventory(0);
         } else if (mode === 'equip') {
-          await unequipOthersOfType('shield', item.id);
+          await unequipOthersOfType('shield', freshItem.id);
           const eq: Equipment = {
-            name: item.name,
-            description: visibleDescription(item.description),
-            inventory_item_id: item.id,
+            name: freshItem.name,
+            description: visibleDescription(freshItem.description),
+            inventory_item_id: freshItem.id,
             shield_bonus: meta.shield?.bonus ?? null,
             armor_formula: null,
             weapon_meta: null,
           };
-          await updateItemMeta(item, { ...meta, equipped: true });
+          await updateItemMetaComplete(freshItem, { ...meta, equipped: true });
           await saveEquipment('shield', eq);
           toast.success('Bouclier équipé');
-          await refreshInventory(0);
         }
       } else if (meta.type === 'weapon') {
-        // IMPORTANT: Récupérer l'item le plus frais du state
-        const freshItem = inventory.find(i => i.id === item.id);
-        if (!freshItem) {
-          toast.error("Objet introuvable");
+        // CORRECTION CRITIQUE : Logique simplifiée pour les armes
+        const targetEquipped = mode === 'equip';
+        
+        if (meta.equipped === targetEquipped) {
+          console.log('Arme déjà dans l\'état souhaité');
           return;
         }
-        const freshMeta = parseMeta(freshItem.description);
-        if (!freshMeta) return;
-
-        if (mode === 'unequip') {
-          // Mise à jour optimiste immédiate
-          const nextMeta = { ...freshMeta, equipped: false };
-          applyInventoryMetaLocal(freshItem.id, nextMeta);
-          
-          // Écriture en DB
-          await updateItemMeta(freshItem, nextMeta);
+        
+        const nextMeta = { ...meta, equipped: targetEquipped };
+        
+        // Mise à jour de l'item
+        await updateItemMetaComplete(freshItem, nextMeta);
+        
+        // Gestion des attaques
+        if (targetEquipped) {
+          await createOrUpdateWeaponAttack(freshItem.name, meta.weapon);
+          toast.success('Arme équipée');
+        } else {
           await removeWeaponAttacksByName(freshItem.name);
           toast.success('Arme déséquipée');
-          
-          // Refresh différé pour éviter de lire la valeur obsolète
-          await refreshInventory(350);
-        } else if (mode === 'equip') {
-          // Mise à jour optimiste immédiate
-          const nextMeta = { ...freshMeta, equipped: true };
-          applyInventoryMetaLocal(freshItem.id, nextMeta);
-          
-          // Écriture en DB
-          await updateItemMeta(freshItem, nextMeta);
-          await createOrUpdateWeaponAttack(freshItem.name, freshMeta.weapon);
-          toast.success('Arme équipée');
-          
-          // Refresh différé pour éviter de lire la valeur obsolète
-          await refreshInventory(350);
         }
+        
+        console.log(`${mode} terminé pour:`, freshItem.name);
       }
     } catch (e) {
-      console.error(e);
-      // En cas d'erreur, revert l'état local
+      console.error('Erreur performToggle:', e);
+      // En cas d'erreur, refresh pour récupérer l'état correct
       await refreshInventory(0);
       toast.error('Erreur lors de la bascule équipement');
     } finally {
       setPendingEquipment(prev => {
         const next = new Set(prev);
-        next.delete(item.id);
+        next.delete(freshItem.id);
         return next;
       });
     }
@@ -603,7 +619,7 @@ export function EquipmentTab({
     const equipped =
       (isArmor && armor?.inventory_item_id === freshItem.id) ||
       (isShield && shield?.inventory_item_id === freshItem.id) ||
-      (isWeapon && meta.equipped === true); // UNIQUEMENT meta.equipped
+      (isWeapon && meta.equipped === true); // UNIQUEMENT meta.equipped pour les armes
       
     setConfirmPayload({ 
       mode: equipped ? 'unequip' : 'equip', 
