@@ -318,46 +318,6 @@ export default function CombatTab({ player, onUpdate }: CombatTabProps) {
     };
   }, [player.id]);
 
-  // Option de sécurité: si une arme est déjà équipée dans player.equipment, garantir la présence d'une attaque correspondante
-  React.useEffect(() => {
-    const ensureFromEquippedWeapon = async () => {
-      const weaponSlot: any = (player as any)?.equipment?.weapon;
-      if (!weaponSlot || !weaponSlot.name) return;
-      try {
-        const existing = await attackService.getPlayerAttacks(player.id);
-        const has = existing.some(a => a.name.trim().toLowerCase() === String(weaponSlot.name).trim().toLowerCase());
-        const meta = weaponSlot.weapon_meta || {};
-        const payload: Partial<Attack> = {
-          player_id: player.id,
-          name: weaponSlot.name,
-          damage_dice: meta.damageDice || '1d6',
-          damage_type: meta.damageType || 'Tranchant',
-          range: meta.range || 'Corps à corps',
-          properties: meta.properties || '',
-          attack_type: 'physical',
-          spell_level: null,
-          ammo_count: 0
-        } as any;
-        if (has) {
-          const found = existing.find(a => a.name.trim().toLowerCase() === String(weaponSlot.name).trim().toLowerCase());
-          await attackService.updateAttack({ ...(payload as any), id: found?.id });
-        } else {
-          await attackService.addAttack(payload);
-        }
-        // recharge local
-        fetchAttacks();
-      } catch (err) {
-        // On ignore l'erreur ici (RLS, etc.), l’onglet reste fonctionnel
-        console.warn('ensureFromEquippedWeapon failed', err);
-      }
-    };
-    // JSON.stringify pour détecter les changements profonds de weapon_meta
-    const key = JSON.stringify((player as any)?.equipment?.weapon || null);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    (async () => { await ensureFromEquippedWeapon(); })();
-    // We intentionally omit key from deps to avoid infinite loops; React effect runs due to player change above
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [player.id]);
 
   const fetchAttacks = async () => {
     try {
