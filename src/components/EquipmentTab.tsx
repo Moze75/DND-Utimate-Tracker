@@ -963,47 +963,42 @@ export function EquipmentTab({
       </div>
 
       {/* Modals */}
-      {showList && (
-        <EquipmentListModal
-          onClose={() => { setShowList(false); setAllowedKinds(null); }}
-          onAddItem={async (payload) => {
-            try {
-              const meta: ItemMeta = { ...(payload.meta as any), equipped: false };
-              const finalDesc = injectMetaIntoDescription(payload.description || '', meta);
-              const { error } = await supabase.from('inventory_items').insert([{ player_id: player.id, name: smartCapitalize(payload.name), description: finalDesc }]);
-              if (error) throw error;
-              await refreshInventory(200);
-              toast.success('Équipement ajouté');
-            } catch (e) {
-              console.error(e);
-              toast.error('Erreur ajout équipement');
-            } finally {
-              setShowList(false);
-              setAllowedKinds(null);
-            }
-          }}
-          allowedKinds={allowedKinds}
-        />
-      )}
-      {showCustom && (
-        <CustomItemModal
-          onClose={() => setShowCustom(false)}
-          onAdd={async (payload) => {
-            try {
-              const finalDesc = injectMetaIntoDescription(payload.description || '', { ...payload.meta, equipped: false });
-              const { error } = await supabase.from('inventory_items').insert([{ player_id: player.id, name: smartCapitalize(payload.name), description: finalDesc }]);
-              if (error) throw error;
-              await refreshInventory(200);
-              toast.success('Objet personnalisé ajouté');
-            } catch (e) {
-              console.error(e);
-              toast.error('Erreur ajout objet');
-            } finally {
-              setShowCustom(false);
-            }
-          }}
-        />
-      )}
+        {showList && (
+          <EquipmentListModal
+            onClose={() => { setShowList(false); setAllowedKinds(null); }}
+            onAddItem={async (payload) => {
+              try {
+                // Si on vient du sac, on équipe directement
+                if (payload.meta.type === 'armor' || payload.meta.type === 'shield' || payload.meta.type === 'weapon') {
+                  const item = inventory.find(i => smartCapitalize(i.name) === payload.name);
+                  if (item) {
+                    await performToggle(item, 'equip');
+                  }
+                } else {
+                  // Sinon ajout normal
+                  const meta: ItemMeta = { ...(payload.meta as any), equipped: false };
+                  const finalDesc = injectMetaIntoDescription(payload.description || '', meta);
+                  const { error } = await supabase.from('inventory_items').insert([{ 
+                    player_id: player.id, 
+                    name: smartCapitalize(payload.name), 
+                    description: finalDesc 
+                  }]);
+                  if (error) throw error;
+                  await refreshInventory(200);
+                  toast.success('Équipement ajouté');
+                }
+              } catch (e) {
+                console.error(e);
+                toast.error('Erreur équipement');
+              } finally {
+                setShowList(false);
+                setAllowedKinds(null);
+              }
+            }}
+            allowedKinds={allowedKinds}
+            inventoryItems={allowedKinds ? inventory : null} // NOUVEAU: Passer le sac si on filtre
+          />
+        )}
       {editingItem && (
         <InventoryItemEditModal
           item={editingItem}
