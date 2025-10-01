@@ -911,7 +911,7 @@ export function EquipmentTab({
                     checked={bagKinds[k]}
                     onChange={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
                   />
-                </label>
+                </label> 
               ))}
             </div>
             <div className="mt-3 text-right">
