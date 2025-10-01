@@ -4,18 +4,8 @@ import { InventoryItem } from '../../types/dnd';
 
 const META_PREFIX = '#meta:';
 
-type WeaponMeta = {
-  damageDice: string;
-  damageType: 'Tranchant' | 'Perforant' | 'Contondant';
-  properties: string;
-  range: string;
-};
-type ItemMeta = {
-  type: 'weapon' | string;
-  equipped?: boolean;
-  weapon?: WeaponMeta;
-  quantity?: number;
-};
+type WeaponMeta = { damageDice: string; damageType: 'Tranchant' | 'Perforant' | 'Contondant'; properties: string; range: string; };
+type ItemMeta = { type: 'weapon' | string; equipped?: boolean; weapon?: WeaponMeta; quantity?: number; };
 
 function parseMeta(description: string | null | undefined): ItemMeta | null {
   if (!description) return null;
@@ -36,10 +26,7 @@ function smartCapitalize(s: string) {
 }
 
 export function WeaponsManageModal({
-  inventory,
-  onClose,
-  onEquip,
-  onUnequip,
+  inventory, onClose, onEquip, onUnequip,
 }: {
   inventory: InventoryItem[];
   onClose: () => void;
@@ -48,13 +35,12 @@ export function WeaponsManageModal({
 }) {
   const [q, setQ] = React.useState('');
   const [pendingId, setPendingId] = React.useState<string | null>(null);
+
   const weapons = React.useMemo(() => {
-    return inventory
-      .map(it => ({ it, meta: parseMeta(it.description) }))
-      .filter(({ meta }) => (meta?.type === 'weapon'));
+    return inventory.map(it => ({ it, meta: parseMeta(it.description) })).filter(({ meta }) => meta?.type === 'weapon');
   }, [inventory]);
 
-  const equipped = weapons.filter(w => !!w.meta && w.meta.equipped === true);
+  const equipped = weapons.filter(w => w.meta?.equipped);
   const others = weapons.filter(w => !w.meta?.equipped);
 
   const filterByQuery = (arr: { it: InventoryItem; meta: ItemMeta | null }[]) => {
