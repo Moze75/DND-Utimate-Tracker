@@ -47,14 +47,14 @@ export function WeaponsManageModal({
   onUnequip: (item: InventoryItem) => Promise<void> | void;
 }) {
   const [q, setQ] = React.useState('');
-  const [pendingId, setPendingId] = React.useState<string | null>(null); // évite les doubles clics
+  const [pendingId, setPendingId] = React.useState<string | null>(null);
   const weapons = React.useMemo(() => {
     return inventory
       .map(it => ({ it, meta: parseMeta(it.description) }))
       .filter(({ meta }) => (meta?.type === 'weapon'));
   }, [inventory]);
 
-  const equipped = weapons.filter(w => w.meta?.equipped);
+  const equipped = weapons.filter(w => !!w.meta && w.meta.equipped === true);
   const others = weapons.filter(w => !w.meta?.equipped);
 
   const filterByQuery = (arr: { it: InventoryItem; meta: ItemMeta | null }[]) => {
@@ -133,12 +133,8 @@ export function WeaponsManageModal({
   );
 
   return (
-    <div
-      className="fixed inset-0 z-[10050]"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
+    <div className="fixed inset-0 z-[10050]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="fixed inset-0 bg-black/70" />
-      {/* Conteneur centré */}
       <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(720px,95vw)] max-h-[90vh] overflow-y-auto bg-gray-900/95 rounded-lg border border-gray-700 shadow-xl">
         <div className="flex items-center justify-between p-3 border-b border-gray-800 sticky top-0 bg-gray-900/95">
           <h3 className="text-gray-100 font-semibold">Mes armes</h3>
