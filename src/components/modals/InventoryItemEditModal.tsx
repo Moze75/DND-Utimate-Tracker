@@ -49,11 +49,12 @@ function injectMetaIntoDescription(desc: string | null | undefined, meta: ItemMe
 }
 
 export function InventoryItemEditModal({
-  item, onClose, onSaved,
+  item, onClose, onSaved, lockType = false
 }: {
   item: InventoryItem;
   onClose: () => void;
   onSaved: () => void;
+  lockType?: boolean;
 }) {
   const existingMeta = parseMeta(item.description) || { type: 'equipment', quantity: 1, equipped: false } as ItemMeta;
 
@@ -152,7 +153,7 @@ export function InventoryItemEditModal({
       <div className="fixed inset-0 bg-black/70" onClick={onClose} />
       <div className="fixed inset-0 bg-gray-900/95 w-screen h-screen overflow-y-auto p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-gray-100">Paramètres de l’objet</h3>
+          <h3 className="text-lg font-semibold text-gray-100">Paramètres de l'objet</h3>
           <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg"><X /></button>
         </div>
 
@@ -163,8 +164,13 @@ export function InventoryItemEditModal({
               <input className="input-dark w-full px-3 py-2 rounded-md" value={name} onChange={e => setName(e.target.value)} />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Type d’objet</label>
-              <select className="input-dark w-full px-3 py-2 rounded-md" value={type} onChange={e => setType(e.target.value as MetaType)}>
+              <label className="block text-sm text-gray-400 mb-1">Type d'objet</label>
+              <select 
+                className={`input-dark w-full px-3 py-2 rounded-md ${lockType ? 'opacity-50 cursor-not-allowed' : ''}`}
+                value={type} 
+                onChange={e => setType(e.target.value as MetaType)}
+                disabled={lockType}
+              >
                 <option value="equipment">Équipement</option>
                 <option value="potion">Potion / Poison</option>
                 <option value="weapon">Arme</option>
@@ -174,6 +180,11 @@ export function InventoryItemEditModal({
                 <option value="tool">Outils</option>
               </select>
               {badgeType(type)}
+              {lockType && (
+                <p className="text-xs text-yellow-400 mt-1">
+                  Le type ne peut pas être modifié pour un objet équipé depuis un slot
+                </p>
+              )}
             </div>
           </div>
 
@@ -217,7 +228,7 @@ export function InventoryItemEditModal({
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Cap DEX (optionnel)</label>
-                <input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={armorDexCap ?? ''} onChange={e => setArmorDexCap(e.target.value ? parseInt(e.target.value) : null)} />
+                <input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={armorDexCap ?? ''} onChange={e => setArmorDexCap(e.target.value ? parseInt(e.target.value) : null)} placeholder="Aucun cap" />
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Label CA</label>
