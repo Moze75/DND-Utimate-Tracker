@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Check, Sword, Star } from 'lucide-react';
+import { X, Check, Sword } from 'lucide-react';
 import { InventoryItem } from '../../types/dnd';
 
 const META_PREFIX = '#meta:';
@@ -37,18 +37,14 @@ function smartCapitalize(s: string) {
 
 export function WeaponsManageModal({
   inventory,
-  primaryWeaponItemId,
   onClose,
   onEquip,
   onUnequip,
-  onSetPrimary,
 }: {
   inventory: InventoryItem[];
-  primaryWeaponItemId?: string | null;
   onClose: () => void;
   onEquip: (item: InventoryItem) => Promise<void> | void;
   onUnequip: (item: InventoryItem) => Promise<void> | void;
-  onSetPrimary: (item: InventoryItem) => Promise<void> | void;
 }) {
   const [q, setQ] = React.useState('');
   const weapons = React.useMemo(() => {
@@ -79,7 +75,6 @@ export function WeaponsManageModal({
       ) : (
         list.map(({ it, meta }) => {
           const w = meta?.weapon;
-          const isPrimary = primaryWeaponItemId && it.id === primaryWeaponItemId;
           return (
             <div key={it.id} className="rounded-md border border-gray-700/50 bg-gray-800/40 p-2">
               <div className="flex items-start justify-between gap-2">
@@ -87,11 +82,6 @@ export function WeaponsManageModal({
                   <div className="flex items-center gap-2">
                     <Sword size={16} className="text-red-400 shrink-0" />
                     <div className="font-medium text-gray-100 truncate">{smartCapitalize(it.name)}</div>
-                    {isPrimary && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-yellow-900/30 text-yellow-300 flex items-center gap-1">
-                        <Star size={12} /> Principale
-                      </span>
-                    )}
                   </div>
                   {w && (
                     <div className="mt-1 text-xs text-gray-400 space-y-0.5">
@@ -103,22 +93,13 @@ export function WeaponsManageModal({
                 </div>
                 <div className="flex items-center gap-2">
                   {meta?.equipped ? (
-                    <>
-                      <button
-                        onClick={() => onUnequip(it)}
-                        className="px-2 py-1 rounded text-xs border border-gray-600 text-gray-300 hover:bg-gray-700/40"
-                        title="Déséquiper"
-                      >
-                        Déséquiper
-                      </button>
-                      <button
-                        onClick={() => onSetPrimary(it)}
-                        className={`px-2 py-1 rounded text-xs border ${isPrimary ? 'border-yellow-500/40 text-yellow-300 bg-yellow-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'}`}
-                        title="Définir comme arme principale (slot)"
-                      >
-                        <Star size={12} />
-                      </button>
-                    </>
+                    <button
+                      onClick={() => onUnequip(it)}
+                      className="px-2 py-1 rounded text-xs border border-gray-600 text-gray-300 hover:bg-gray-700/40"
+                      title="Déséquiper"
+                    >
+                      Déséquiper
+                    </button>
                   ) : (
                     <button
                       onClick={() => onEquip(it)}
