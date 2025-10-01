@@ -19,14 +19,18 @@ interface Equipment {
   name: string;
   description: string;
   isTextArea?: boolean;
+
   inventory_item_id?: string | null;
+
   armor_formula?: {
     base: number;
     addDex: boolean;
     dexCap?: number | null;
     label?: string;
   } | null;
+
   shield_bonus?: number | null;
+
   weapon_meta?: {
     damageDice: string;
     damageType: 'Tranchant' | 'Perforant' | 'Contondant';
@@ -299,7 +303,7 @@ const CurrencyInput = ({ currency, value, onAdd, onSpend }: {
 export function EquipmentTab({
   player, inventory, onPlayerUpdate, onInventoryUpdate
 }: EquipmentTabProps) {
-  // États locaux (plus de notion d'arme “principale”)
+  // États locaux “sources de vérité” (plus de notion d'arme principale)
   const [armor, setArmor] = useState<Equipment | null>(player.equipment?.armor || null);
   const [shield, setShield] = useState<Equipment | null>(player.equipment?.shield || null);
   const [bag, setBag] = useState<Equipment | null>(player.equipment?.bag || null);
@@ -329,7 +333,7 @@ export function EquipmentTab({
   const jewelryItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'jewelry'), [inventory]);
   const potionItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'potion'), [inventory]);
 
-  // Armes équipées (meta.equipped)
+  // Armes équipées (uniquement via meta.equipped)
   const equippedWeapons = useMemo(() => {
     return inventory
       .map(it => ({ it, meta: parseMeta(it.description) }))
@@ -337,7 +341,7 @@ export function EquipmentTab({
       .map(({ it, meta }) => ({ it, w: meta?.weapon }));
   }, [inventory]);
 
-  // Résumé slot “Armes”
+  // Résumé pour le slot Armes
   const weaponsSummary: Equipment = useMemo(() => {
     const lines = equippedWeapons.map(({ it, w }) => {
       const parts: string[] = [smartCapitalize(it.name)];
@@ -364,7 +368,7 @@ export function EquipmentTab({
       bag: override?.bag !== undefined ? override.bag : base.bag,
       potion: (player.equipment as any)?.potion ?? null,
       jewelry: (player.equipment as any)?.jewelry ?? null,
-      // On ne touche jamais au champ weapon (hérité d'anciens profils)
+      // On ne touche pas au champ weapon hérité
       weapon: (player.equipment as any)?.weapon ?? null
     } as any;
   };
@@ -390,7 +394,7 @@ export function EquipmentTab({
     if (seq !== refreshSeqRef.current) return;
     if (!error && data) {
       onInventoryUpdate(data);
-      // IMPORTANT: ne plus promouvoir une “arme principale” ici
+      // Surtout: ne plus “promouvoir” une arme principale ici
     }
   };
 
@@ -460,7 +464,7 @@ export function EquipmentTab({
     if (updates.length) await Promise.allSettled(updates);
   };
 
-  // Equip/Unequip (armes multiples)
+  // Equip/Unequip (armes multiples: uniquement meta.equipped)
   const performToggle = async (item: InventoryItem, mode: 'equip' | 'unequip') => {
     const meta = parseMeta(item.description);
     if (!meta) return;
@@ -553,7 +557,7 @@ export function EquipmentTab({
     setConfirmOpen(true);
   };
 
-  /* Sac: recherche et filtres (modale centrée) */
+  /* Sac: recherche + Filtres (modale centrée) */
   const [bagFilter, setBagFilter] = useState('');
   const [bagKinds, setBagKinds] = useState<Record<MetaType, boolean>>({
     armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true, tool: true
@@ -576,7 +580,7 @@ export function EquipmentTab({
 
   // Synthèses modales bijoux/potions
   const jewelryText = jewelryItems.length ? jewelryItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n') : 'Aucun bijou dans le sac.';
-  const potionText = potionItems.length ? jewelryItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n') : 'Aucune potion/poison dans le sac.';
+  const potionText = potionItems.length ? potionItems.map(i => `• ${smartCapitalize(i.name)}`).join('\n') : 'Aucune potion/poison dans le sac.';
 
   return (
     <div className="space-y-6">
@@ -712,7 +716,7 @@ export function EquipmentTab({
             <button onClick={() => { setAllowedKinds(null); setShowList(true); }} className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={20} /> Liste d’équipement</button>
             <button onClick={() => setShowCustom(true)} className="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"><Plus size={18} /> Objet personnalisé</button>
 
-            {/* Filtres (modale centrée) + Recherche */}
+            {/* Filtres (modale centrée) et Recherche */}
             <div className="ml-auto flex items-center gap-2 min-w-[240px] flex-1">
               <button
                 onClick={() => setFiltersOpen(true)}
@@ -911,7 +915,7 @@ export function EquipmentTab({
                     checked={bagKinds[k]}
                     onChange={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
                   />
-                </label> 
+                </label>
               ))}
             </div>
             <div className="mt-3 text-right">
