@@ -4,8 +4,18 @@ import { InventoryItem } from '../../types/dnd';
 
 const META_PREFIX = '#meta:';
 
-type WeaponMeta = { damageDice: string; damageType: 'Tranchant' | 'Perforant' | 'Contondant'; properties: string; range: string; };
-type ItemMeta = { type: 'weapon' | string; equipped?: boolean; weapon?: WeaponMeta; quantity?: number; };
+type WeaponMeta = {
+  damageDice: string;
+  damageType: 'Tranchant' | 'Perforant' | 'Contondant';
+  properties: string;
+  range: string;
+};
+type ItemMeta = {
+  type: 'weapon' | string;
+  equipped?: boolean;
+  weapon?: WeaponMeta;
+  quantity?: number;
+};
 
 function parseMeta(description: string | null | undefined): ItemMeta | null {
   if (!description) return null;
@@ -26,7 +36,10 @@ function smartCapitalize(s: string) {
 }
 
 export function WeaponsManageModal({
-  inventory, onClose, onEquip, onUnequip,
+  inventory,
+  onClose,
+  onEquip,
+  onUnequip,
 }: {
   inventory: InventoryItem[];
   onClose: () => void;
@@ -34,10 +47,11 @@ export function WeaponsManageModal({
   onUnequip: (item: InventoryItem) => Promise<void> | void;
 }) {
   const [q, setQ] = React.useState('');
-  const [pendingId, setPendingId] = React.useState<string | null>(null);
-
+  const [pendingId, setPendingId] = React.useState<string | null>(null); // évite les doubles clics
   const weapons = React.useMemo(() => {
-    return inventory.map(it => ({ it, meta: parseMeta(it.description) })).filter(({ meta }) => meta?.type === 'weapon');
+    return inventory
+      .map(it => ({ it, meta: parseMeta(it.description) }))
+      .filter(({ meta }) => (meta?.type === 'weapon'));
   }, [inventory]);
 
   const equipped = weapons.filter(w => w.meta?.equipped);
@@ -119,8 +133,12 @@ export function WeaponsManageModal({
   );
 
   return (
-    <div className="fixed inset-0 z-[10050]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div
+      className="fixed inset-0 z-[10050]"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div className="fixed inset-0 bg-black/70" />
+      {/* Conteneur centré */}
       <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(720px,95vw)] max-h-[90vh] overflow-y-auto bg-gray-900/95 rounded-lg border border-gray-700 shadow-xl">
         <div className="flex items-center justify-between p-3 border-b border-gray-800 sticky top-0 bg-gray-900/95">
           <h3 className="text-gray-100 font-semibold">Mes armes</h3>
