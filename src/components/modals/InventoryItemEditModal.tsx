@@ -128,8 +128,14 @@ export function InventoryItemEditModal({
 
       if (error) throw error;
 
+      // Déboggage pour vérifier les métadonnées sauvegardées
+      console.log('Métadonnées sauvegardées:', newMeta);
+      console.log('Description finale:', finalDescription);
+
       toast.success('Objet modifié avec succès');
-      onSaved();
+      
+      // Appeler onSaved AVANT onClose pour que l'état se mette à jour
+      await onSaved();
       onClose();
     } catch (error) {
       console.error('Erreur lors de la sauvegarde:', error);
@@ -151,6 +157,23 @@ export function InventoryItemEditModal({
       default: return 'Équipement';
     }
   };
+
+  // Réinitialiser les champs spécifiques quand le type change
+  React.useEffect(() => {
+    if (type === 'weapon' && !existingMeta.weapon) {
+      setWDice('1d6');
+      setWType('Tranchant');
+      setWProps('');
+      setWRange('Corps à corps');
+    } else if (type === 'armor' && !existingMeta.armor) {
+      setABase(10);
+      setAAddDex(false);
+      setADexCap(null);
+      setALabel('');
+    } else if (type === 'shield' && !existingMeta.shield) {
+      setSBonus(2);
+    }
+  }, [type, existingMeta]);
 
   return (
     <div className="fixed inset-0 z-[12000]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
