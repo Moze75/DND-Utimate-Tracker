@@ -303,7 +303,7 @@ const CurrencyInput = ({ currency, value, onAdd, onSpend }: {
 export function EquipmentTab({
   player, inventory, onPlayerUpdate, onInventoryUpdate
 }: EquipmentTabProps) {
-  // États locaux “sources de vérité” (plus de notion d'arme principale)
+  // États locaux (pas d’arme “principale”)
   const [armor, setArmor] = useState<Equipment | null>(player.equipment?.armor || null);
   const [shield, setShield] = useState<Equipment | null>(player.equipment?.shield || null);
   const [bag, setBag] = useState<Equipment | null>(player.equipment?.bag || null);
@@ -333,7 +333,7 @@ export function EquipmentTab({
   const jewelryItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'jewelry'), [inventory]);
   const potionItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'potion'), [inventory]);
 
-  // Armes équipées (uniquement via meta.equipped)
+  // Armes équipées (meta.equipped)
   const equippedWeapons = useMemo(() => {
     return inventory
       .map(it => ({ it, meta: parseMeta(it.description) }))
@@ -341,7 +341,7 @@ export function EquipmentTab({
       .map(({ it, meta }) => ({ it, w: meta?.weapon }));
   }, [inventory]);
 
-  // Résumé pour le slot Armes
+  // Résumé slot “Armes”
   const weaponsSummary: Equipment = useMemo(() => {
     const lines = equippedWeapons.map(({ it, w }) => {
       const parts: string[] = [smartCapitalize(it.name)];
@@ -368,8 +368,7 @@ export function EquipmentTab({
       bag: override?.bag !== undefined ? override.bag : base.bag,
       potion: (player.equipment as any)?.potion ?? null,
       jewelry: (player.equipment as any)?.jewelry ?? null,
-      // On ne touche pas au champ weapon hérité
-      weapon: (player.equipment as any)?.weapon ?? null
+      weapon: (player.equipment as any)?.weapon ?? null // On ne l’utilise plus, mais on ne l’écrase pas non plus
     } as any;
   };
 
@@ -394,7 +393,6 @@ export function EquipmentTab({
     if (seq !== refreshSeqRef.current) return;
     if (!error && data) {
       onInventoryUpdate(data);
-      // Surtout: ne plus “promouvoir” une arme principale ici
     }
   };
 
@@ -448,6 +446,27 @@ export function EquipmentTab({
     if (error) throw error;
   };
 
+  // LECTURE FRAÎCHE D’UN ITEM puis SET meta.equipped de manière atomique
+  const fetchInventoryItem = async (id: string): Promise<InventoryItem | null> => {
+    const { data, error } = await supabase.from('inventory_items').select('*').eq('id', id).maybeSingle();
+    if (error) { console.error('fetchInventoryItem error', error); return null; }
+    return data as any;
+  };
+  const setWeaponEquipped = async (item: InventoryItem, enabled: boolean) => {
+    const fresh = await fetchInventoryItem(item.id);
+    const currentDesc = fresh?.description ?? item.description;
+    const currentMeta = parseMeta(currentDesc) || { type: 'weapon', quantity: 1, equipped: false } as ItemMeta;
+    const nextMeta: ItemMeta = { ...currentMeta, equipped: enabled };
+    // Mettre à jour localement (optimiste)
+    applyInventoryMetaLocal(item.id, nextMeta);
+    // Pousser en base
+    const nextDesc = injectMetaIntoDescription(visibleDescription(currentDesc), nextMeta);
+    const { error } = await supabase.from('inventory_items').update({ description: nextDesc }).eq('id', item.id);
+    if (error) throw error;
+    // Recharger l’inventaire depuis la base (source de vérité)
+    await refreshInventory();
+  };
+
   const unequipOthersOfType = async (type: 'armor' | 'shield', keepItemId?: string) => {
     const updates: Promise<any>[] = [];
     for (const it of inventory) {
@@ -464,7 +483,7 @@ export function EquipmentTab({
     if (updates.length) await Promise.allSettled(updates);
   };
 
-  // Equip/Unequip (armes multiples: uniquement meta.equipped)
+  // Equip/Unequip
   const performToggle = async (item: InventoryItem, mode: 'equip' | 'unequip') => {
     const meta = parseMeta(item.description);
     if (!meta) return;
@@ -510,17 +529,15 @@ export function EquipmentTab({
         }
       } else if (meta.type === 'weapon') {
         if (mode === 'unequip') {
-          await updateItemMeta(item, { ...meta, equipped: false });
+          await setWeaponEquipped(item, false);
           await removeWeaponAttacksByName(item.name);
           toast.success('Arme déséquipée');
         } else if (mode === 'equip') {
-          await updateItemMeta(item, { ...meta, equipped: true });
+          await setWeaponEquipped(item, true);
           await createOrUpdateWeaponAttack(item.name, meta.weapon);
           toast.success('Arme équipée');
         }
       }
-
-      await refreshInventory();
     } catch (e) {
       console.error(e);
       toast.error('Erreur bascule équiper');
@@ -536,7 +553,7 @@ export function EquipmentTab({
     const equipped =
       (isArmor && armor?.inventory_item_id === item.id) ||
       (isShield && shield?.inventory_item_id === item.id) ||
-      (isWeapon && meta.equipped === true); // armes: uniquement meta.equipped
+      (isWeapon && meta.equipped === true);
     setConfirmPayload({ mode: equipped ? 'unequip' : 'equip', item });
     setConfirmOpen(true);
   };
@@ -716,7 +733,7 @@ export function EquipmentTab({
             <button onClick={() => { setAllowedKinds(null); setShowList(true); }} className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={20} /> Liste d’équipement</button>
             <button onClick={() => setShowCustom(true)} className="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"><Plus size={18} /> Objet personnalisé</button>
 
-            {/* Filtres (modale centrée) et Recherche */}
+            {/* Filtres (modale centrée) + Recherche */}
             <div className="ml-auto flex items-center gap-2 min-w-[240px] flex-1">
               <button
                 onClick={() => setFiltersOpen(true)}
@@ -742,7 +759,7 @@ export function EquipmentTab({
               const isEquipped =
                 (isArmor && armor?.inventory_item_id === item.id) ||
                 (isShield && shield?.inventory_item_id === item.id) ||
-                (isWeapon && meta?.equipped === true); // armes: uniquement meta.equipped
+                (isWeapon && meta?.equipped === true);
 
               return (
                 <div key={item.id} className="bg-gray-800/40 border border-gray-700/40 rounded-md">
