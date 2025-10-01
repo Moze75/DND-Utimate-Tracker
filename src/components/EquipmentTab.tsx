@@ -93,6 +93,7 @@ function parseMeta(description: string | null | undefined): ItemMeta | null {
 }
 function injectMetaIntoDescription(desc: string | null | undefined, meta: ItemMeta): string {
   const base = (desc || '').trim();
+  // Supprimer TOUTES les lignes #meta: existantes pour éviter les doublons
   const noOldMeta = base
     .split('\n')
     .filter(l => !l.trim().startsWith(META_PREFIX))
@@ -320,6 +321,9 @@ export function EquipmentTab({
 
   const refreshSeqRef = useRef(0);
 
+  // État pour éviter les doubles clics
+  const [pendingEquipment, setPendingEquipment] = useState<Set<string>>(new Set());
+
   const [showList, setShowList] = useState(false);
   const [allowedKinds, setAllowedKinds] = useState<('armors' | 'shields' | 'weapons' | 'adventuring_gear' | 'tools')[] | null>(null);
   const [showCustom, setShowCustom] = useState(false);
@@ -364,7 +368,7 @@ export function EquipmentTab({
     });
     return {
       name: 'Armes équipées',
-      description: lines.length ? lines.join('n') : 'Aucune arme équipée.',
+      description: lines.length ? lines.join('\n') : 'Aucune arme équipée.',
       isTextArea: true
     };
   }, [equippedWeapons]);
@@ -380,6 +384,21 @@ export function EquipmentTab({
       // NOTE: on ne touche jamais player.equipment.weapon
       weapon: (player.equipment as any)?.weapon ?? null
     } as any;
+  };
+
+  const saveEquipment = async (slot: 'armor' | 'shield' | 'bag', eq: Equipment | null) => {
+    const snapshot = buildEquipmentSnapshot({ [slot]: eq });
+    try {
+      const { error } = await supabase.from('players').update({ equipment: snapshot }).eq('id', player.id);
+      if (error) throw error;
+      onPlayerUpdate({ ...player, equipment: snapshot });
+      if (slot === 'armor') setArmor(eq);
+      else if (slot === 'shield') setShield(eq);
+      else if (slot === 'bag') setBag(eq);
+    } catch (e) {
+      console.error('Erreur saveEquipment:', e);
+      throw e;
+    }
   };
 
   const refreshInventory = async (delayMs = 0) => {
@@ -439,7 +458,6 @@ export function EquipmentTab({
     onInventoryUpdate(next);
   };
   const updateItemMeta = async (item: InventoryItem, nextMeta: ItemMeta) => {
-    applyInventoryMetaLocal(item.id, nextMeta);
     const nextDesc = injectMetaIntoDescription(visibleDescription(item.description), nextMeta);
     const { error } = await supabase.from('inventory_items').update({ description: nextDesc }).eq('id', item.id);
     if (error) throw error;
@@ -463,10 +481,15 @@ export function EquipmentTab({
 
   // Equip/Unequip — armes multiples supportées (uniquement meta.equipped)
   const performToggle = async (item: InventoryItem, mode: 'equip' | 'unequip') => {
+    // Protection anti double-clic
+    if (pendingEquipment.has(item.id)) return;
+    
     const meta = parseMeta(item.description);
     if (!meta) return;
 
     try {
+      setPendingEquipment(prev => new Set([...prev, item.id]));
+
       if (meta.type === 'armor') {
         if (mode === 'unequip' && armor?.inventory_item_id === item.id) {
           await updateItemMeta(item, { ...meta, equipped: false });
@@ -510,36 +533,83 @@ export function EquipmentTab({
           await refreshInventory(0);
         }
       } else if (meta.type === 'weapon') {
+        // IMPORTANT: Récupérer l'item le plus frais du state
+        const freshItem = inventory.find(i => i.id === item.id);
+        if (!freshItem) {
+          toast.error("Objet introuvable");
+          return;
+        }
+        const freshMeta = parseMeta(freshItem.description);
+        if (!freshMeta) return;
+
         if (mode === 'unequip') {
-          // Optimiste + DB, PAS de refresh immédiat
-          await updateItemMeta(item, { ...meta, equipped: false });
-          await removeWeaponAttacksByName(item.name);
+          // Mise à jour optimiste immédiate
+          const nextMeta = { ...freshMeta, equipped: false };
+          applyInventoryMetaLocal(freshItem.id, nextMeta);
+          
+          // Écriture en DB
+          await updateItemMeta(freshItem, nextMeta);
+          await removeWeaponAttacksByName(freshItem.name);
           toast.success('Arme déséquipée');
-          await refreshInventory(300);
+          
+          // Refresh différé pour éviter de lire la valeur obsolète
+          await refreshInventory(350);
         } else if (mode === 'equip') {
-          await updateItemMeta(item, { ...meta, equipped: true });
-          await createOrUpdateWeaponAttack(item.name, meta.weapon);
+          // Mise à jour optimiste immédiate
+          const nextMeta = { ...freshMeta, equipped: true };
+          applyInventoryMetaLocal(freshItem.id, nextMeta);
+          
+          // Écriture en DB
+          await updateItemMeta(freshItem, nextMeta);
+          await createOrUpdateWeaponAttack(freshItem.name, freshMeta.weapon);
           toast.success('Arme équipée');
-          await refreshInventory(300);
+          
+          // Refresh différé pour éviter de lire la valeur obsolète
+          await refreshInventory(350);
         }
       }
     } catch (e) {
       console.error(e);
-      toast.error('Erreur bascule équiper');
+      // En cas d'erreur, revert l'état local
+      await refreshInventory(0);
+      toast.error('Erreur lors de la bascule équipement');
+    } finally {
+      setPendingEquipment(prev => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      });
     }
   };
 
   const requestToggleWithConfirm = (item: InventoryItem) => {
-    const meta = parseMeta(item.description);
+    // Protection anti double-clic
+    if (pendingEquipment.has(item.id)) return;
+    
+    // Récupérer l'item le plus frais du state
+    const freshItem = inventory.find(i => i.id === item.id);
+    if (!freshItem) {
+      toast.error("Objet introuvable");
+      return;
+    }
+    
+    const meta = parseMeta(freshItem.description);
     if (!meta) return toast.error("Objet sans métadonnées. Ouvrez Paramètres et précisez sa nature.");
+    
     const isArmor = meta.type === 'armor';
     const isShield = meta.type === 'shield';
     const isWeapon = meta.type === 'weapon';
+    
     const equipped =
-      (isArmor && armor?.inventory_item_id === item.id) ||
-      (isShield && shield?.inventory_item_id === item.id) ||
-      (isWeapon && meta.equipped === true); // IMPORTANT: se base uniquement sur meta.equipped
-    setConfirmPayload({ mode: equipped ? 'unequip' : 'equip', itemId: item.id, itemName: item.name });
+      (isArmor && armor?.inventory_item_id === freshItem.id) ||
+      (isShield && shield?.inventory_item_id === freshItem.id) ||
+      (isWeapon && meta.equipped === true); // UNIQUEMENT meta.equipped
+      
+    setConfirmPayload({ 
+      mode: equipped ? 'unequip' : 'equip', 
+      itemId: freshItem.id, 
+      itemName: freshItem.name 
+    });
     setConfirmOpen(true);
   };
 
@@ -714,7 +784,7 @@ export function EquipmentTab({
 
         <div className="p-4">
           <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <button onClick={() => { setAllowedKinds(null); setShowList(true); }} className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={20} /> Liste d’équipement</button>
+            <button onClick={() => { setAllowedKinds(null); setShowList(true); }} className="btn-primary px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={20} /> Liste d'équipement</button>
             <button onClick={() => setShowCustom(true)} className="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700/40 text-gray-200 flex items-center gap-2"><Plus size={18} /> Objet personnalisé</button>
 
             {/* Filtres (modale centrée) et Recherche */}
@@ -782,10 +852,28 @@ export function EquipmentTab({
                       {(isArmor || isShield || isWeapon) && (
                         <button
                           onClick={() => requestToggleWithConfirm(item)}
-                          className={`px-2 py-1 rounded text-xs border ${isEquipped ? 'border-green-500/40 text-green-300 bg-green-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'}`}
-                          title={isEquipped ? 'Cliquer pour déséquiper' : 'Cliquer pour équiper'}
+                          disabled={pendingEquipment.has(item.id)}
+                          className={`px-2 py-1 rounded text-xs border ${
+                            pendingEquipment.has(item.id) 
+                              ? 'border-gray-500 text-gray-500 bg-gray-800/50 cursor-not-allowed' 
+                              : isEquipped 
+                                ? 'border-green-500/40 text-green-300 bg-green-900/20' 
+                                : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'
+                          }`}
+                          title={
+                            pendingEquipment.has(item.id) 
+                              ? 'Traitement en cours...' 
+                              : isEquipped 
+                                ? 'Cliquer pour déséquiper' 
+                                : 'Cliquer pour équiper'
+                          }
                         >
-                          {isEquipped ? 'Équipé' : 'Non équipé'}
+                          {pendingEquipment.has(item.id) 
+                            ? 'En cours...' 
+                            : isEquipped 
+                              ? 'Équipé' 
+                              : 'Non équipé'
+                          }
                         </button>
                       )}
                       <button onClick={() => setEditingItem(item)} className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-700/40 rounded-full" title="Paramètres">
