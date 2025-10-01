@@ -155,7 +155,7 @@ export function EquipmentListModal({
                     }} 
                     className="btn-primary px-3 py-2 rounded-lg"
                   >
-                    Équiper depuis le sac
+                    Équiper
                   </button>
                     </div>
                   </div>
