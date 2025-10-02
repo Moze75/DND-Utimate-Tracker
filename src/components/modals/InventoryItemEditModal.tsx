@@ -50,12 +50,14 @@ function injectMetaIntoDescription(desc: string | null | undefined, meta: ItemMe
 }
 
 export function InventoryItemEditModal({
-  item, onClose, onSaved, lockType = false
+  item, onClose, onSaved, lockType = false, onInventoryUpdate, inventory
 }: {
   item: InventoryItem;
   onClose: () => void;
   onSaved: () => void;
   lockType?: boolean;
+  onInventoryUpdate?: (inventory: InventoryItem[]) => void;
+  inventory?: InventoryItem[];
 }) {
   const existingMeta = parseMeta(item.description) || { type: 'equipment', quantity: 1, equipped: false } as ItemMeta;
 
@@ -117,6 +119,20 @@ export function InventoryItemEditModal({
       // Injecter les métadonnées dans la description
       const finalDescription = injectMetaIntoDescription(description, newMeta);
 
+      // MISE À JOUR OPTIMISTE IMMEDIATE de l'état local AVANT la DB
+      if (onInventoryUpdate && inventory) {
+        const updatedItem: InventoryItem = {
+          ...item,
+          name: name.trim(),
+          description: finalDescription,
+        };
+        
+        const updatedInventory = inventory.map(it => 
+          it.id === item.id ? updatedItem : it
+        );
+        onInventoryUpdate(updatedInventory);
+      }
+
       // Sauvegarder en base de données
       const { error } = await supabase
         .from('inventory_items')
@@ -126,12 +142,15 @@ export function InventoryItemEditModal({
         })
         .eq('id', item.id);
 
-      if (error) throw error;
+      if (error) {
+        // En cas d'erreur, restaurer l'état précédent
+        if (onInventoryUpdate && inventory) {
+          onInventoryUpdate(inventory);
+        }
+        throw error;
+      }
 
       toast.success('Objet modifié avec succès');
-      
-      // CORRECTION CRITIQUE: Appeler onSaved() qui va gérer la fermeture de la modal
-      // Ne PAS appeler onClose() ici - c'est onSaved qui va s'en charger
       onSaved();
       
     } catch (error) {
