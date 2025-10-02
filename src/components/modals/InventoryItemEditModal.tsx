@@ -128,15 +128,12 @@ export function InventoryItemEditModal({
 
       if (error) throw error;
 
-      // Déboggage pour vérifier les métadonnées sauvegardées
-      console.log('Métadonnées sauvegardées:', newMeta);
-      console.log('Description finale:', finalDescription);
-
       toast.success('Objet modifié avec succès');
       
-      // Appeler onSaved AVANT onClose pour que l'état se mette à jour
-      await onSaved();
-      onClose();
+      // CORRECTION CRITIQUE: Appeler onSaved() qui va gérer la fermeture de la modal
+      // Ne PAS appeler onClose() ici - c'est onSaved qui va s'en charger
+      onSaved();
+      
     } catch (error) {
       console.error('Erreur lors de la sauvegarde:', error);
       toast.error('Erreur lors de la modification');
