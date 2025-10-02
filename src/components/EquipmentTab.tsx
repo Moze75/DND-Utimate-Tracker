@@ -187,61 +187,17 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
         </div>
       </div>
 
-          {equipment ? (
-            <div className="space-y-2">
-              {equipment.name && <h5 className="font-medium text-gray-100 break-words">{smartCapitalize(equipment.name)}</h5>}
-              
-              {/* Contenu manuel du sac */}
-          {type === 'bag' && (
-            <div className="space-y-2">
-              {equipment?.name && <h5 className="font-medium text-gray-100 break-words">{smartCapitalize(equipment.name)}</h5>}
-              
-              {/* Contenu manuel du sac */}
-              {bagText && (
-                <div className="text-sm text-gray-400 whitespace-pre-wrap border-b border-gray-700/50 pb-2">
-                  {bagText}
-                </div>
-              )}
-              
-              {/* Liste automatique des équipements */}
-              {(() => {
-                const equipmentItems = inventory.filter(item => {
-                  const meta = parseMeta(item.description);
-                  return meta?.type === 'equipment';
-                });
-          
-                if (equipmentItems.length > 0) {
-                  return (
-                    <div>
-                      <div className="text-xs text-gray-400 mb-1 font-medium">Équipements :</div>
-                      <div className="space-y-1">
-                        {equipmentItems.map(item => {
-                          const meta = parseMeta(item.description);
-                          const qty = meta?.quantity ?? 1;
-                          return (
-                            <div key={item.id} className="text-sm text-gray-300 pl-2">
-                              • {smartCapitalize(item.name)}{qty > 1 && ` x${qty}`}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                }
-                return equipmentItems.length === 0 && !bagText ? (
-                  <div className="text-sm text-gray-400">Sac vide</div>
-                ) : null;
-              })()}
-          
-              {/* Bouton modifier */}
-              <div className="mt-3">
-                <button onClick={() => onOpenBagModal?.()} className="btn-primary px-3 py-2 rounded-lg">
-                  Modifier le contenu
-                </button>
-              </div>
-            </div>
-          )}
+{equipment ? (
+  <div className="space-y-2">
+    {equipment.name && <h5 className="font-medium text-gray-100 break-words">{smartCapitalize(equipment.name)}</h5>}
     
+    {/* Contenu manuel du sac */}
+    {bagText && (
+      <div className="text-sm text-gray-400 whitespace-pre-wrap border-b border-gray-700/50 pb-2">
+        {bagText}
+      </div>
+    )}
+     
 
           {type === 'shield' && typeof equipment.shield_bonus === 'number' && (
             <div className="mt-1 text-sm text-gray-300 flex items-center justify-between">
