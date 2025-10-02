@@ -1020,38 +1020,36 @@ export function EquipmentTab({
                 onInventoryUpdate(updatedInventory);
 
                 // 3. Vérifier les changements de type pour gérer les équipements
-                const newMeta = parseMeta(data.description);
-                const prevType = prevEditMetaRef.current?.type;
-                const newType = newMeta?.type;
+      const newMeta = parseMeta(data.description);
+      const prevType = prevEditMetaRef.current?.type;
+      const newType = newMeta?.type;
 
-                if (prevType && newType && prevType !== newType) {
-                  // Si c'était une arme équipée et qu'on change de type -> retirer les attaques liées
-                  if (prevType === 'weapon' && prevEditMetaRef.current?.equipped) {
-                    await removeWeaponAttacksByName(data.name);
-                  }
-                  // Si c'était une armure/bouclier équipé -> libérer le slot correspondant
-                  if (prevType === 'armor' && armor?.inventory_item_id === editedId) {
-                    await saveEquipment('armor', null);
-                  }
-                  if (prevType === 'shield' && shield?.inventory_item_id === editedId) {
-                    await saveEquipment('shield', null);
-                  }
-                }
-
-                toast.success('Objet modifié avec succès');
-              }
-            } catch (e) {
-              console.error('Erreur lors de la mise à jour de l\'objet:', e);
-              // En cas d'erreur, faire un refresh complet
-              await refreshInventory(0);
-              toast.error('Erreur lors de la mise à jour');
-            } finally {
-              // Nettoyage
-              prevEditMetaRef.current = null; 
-            }
-          }}
-        />
-      )} 
+      if (prevType && newType && prevType !== newType) {
+        // Si c'était une arme équipée et qu'on change de type -> retirer les attaques liées
+        if (prevType === 'weapon' && prevEditMetaRef.current?.equipped) {
+          await removeWeaponAttacksByName(data.name);
+        }
+        // Si c'était une armure/bouclier équipé -> libérer le slot correspondant
+        if (prevType === 'armor' && armor?.inventory_item_id === editedId) {
+          await saveEquipment('armor', null);
+        }
+        if (prevType === 'shield' && shield?.inventory_item_id === editedId) {
+          await saveEquipment('shield', null);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Erreur lors de la mise à jour de l\'objet:', e);
+    // En cas d'erreur, faire un refresh complet
+    await refreshInventory(0);
+    toast.error('Erreur lors de la mise à jour');
+  } finally {
+    // CORRECTION CRITIQUE: Fermer la modal ici, après toutes les opérations
+    setEditingItem(null);
+    setEditLockType(false);
+    prevEditMetaRef.current = null;
+  }
+}}
 
       {showWeaponsModal && (
         <WeaponsManageModal
