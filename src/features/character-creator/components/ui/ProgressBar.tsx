@@ -85,12 +85,12 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
         {/* Image de fond */}
         <div 
           className="absolute inset-0"
-          style={{
-            backgroundImage: "url('/background/ddbground.png')",
-            backgroundSize: 'cover',
-            backgroundPosition: 'center 10%', // Descendre encore plus l'image pour voir les têtes
-            backgroundRepeat: 'no-repeat'
-          }}
+style={{
+  backgroundImage: "url('/background/ddbground.png')",
+  backgroundSize: 'contain', // Au lieu de 'cover'
+  backgroundPosition: 'center center',
+  backgroundRepeat: 'no-repeat'
+}}
         >
           {/* Overlay blanc transparent (20% d'opacité pour plus de transparence) */}
           <div className="absolute inset-0 bg-white/20"></div>
