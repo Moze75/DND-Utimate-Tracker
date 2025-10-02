@@ -79,101 +79,104 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
   };
 
   return (
-    <div className="w-full mb-8 relative">
-      {/* Image de fond avec overlay transparent */}
-      <div 
-        className="absolute inset-0 rounded-lg overflow-hidden"
-        style={{
-          backgroundImage: "url('/background/ddbground.png')",
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat'
-        }}
-      >
-        {/* Overlay blanc transparent (60% d'opacité) */}
-        <div className="absolute inset-0 bg-white/60"></div>
-      </div>
-
-      {/* Contenu par-dessus le fond */}
-      <div className="relative z-10 p-6">
-        {/* Titre principal */}
-        <div className="text-center mb-6">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            Créez votre personnage
-          </h1>
-          <p className="text-gray-700">
-            Choisissez vite mais choisissez bien
-          </p>
+    <div className="w-full mb-8">
+      {/* Bandeau pleine largeur avec image de fond */}
+      <div className="w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]">
+        {/* Image de fond */}
+        <div 
+          className="absolute inset-0"
+          style={{
+            backgroundImage: "url('/background/ddbground.png')",
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat'
+          }}
+        >
+          {/* Overlay blanc transparent (20% d'opacité pour plus de transparence) */}
+          <div className="absolute inset-0 bg-white/20"></div>
         </div>
 
-        {/* Contrôles musique */}
-        <div className="mb-4 flex items-center justify-end">
-          <button
-            type="button"
-            onClick={togglePlayback}
-            className={`text-xs sm:text-sm px-3 py-1.5 rounded-md border transition-colors
-              ${isPlaying ? 'border-red-600 text-red-800 hover:bg-red-900/30' : 'border-gray-600 text-gray-800 hover:bg-gray-800/30'}
-            `}
-            title={autoPlayBlocked && !isPlaying ? "Cliquez pour activer la musique" : (isPlaying ? "Arrêter la musique" : "Lire la musique")}
-          >
-            {isPlaying ? '⏸ Arrêter la musique' : '▶️ Lire la musique'}
-          </button>
-          {/* Elément audio caché */}
-          <audio ref={audioRef} src={MUSIC_SRC} preload="auto" loop />
-        </div>
-
-        {/* Barre de progression */}
-        <div className="w-full bg-gray-800/70 rounded-full h-2 mb-4" aria-hidden="true">
-          <div
-            className="bg-gradient-to-r from-red-600 to-red-700 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${percent}%` }}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={percent}
-            role="progressbar"
-          />
-        </div>
-
-        {/* Libellés d'étapes: wrap + gaps + scroll horizontal si trop serré */}
-        <div className="text-xs sm:text-sm text-gray-800 overflow-x-auto">
-          <ol className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 sm:gap-x-6 gap-y-2 whitespace-nowrap">
-            {steps.map((step, index) => {
-              const isDone = index < currentStep;
-              const isCurrent = index === currentStep;
-              const dotClass = isDone
-                ? 'bg-red-600'
-                : isCurrent
-                  ? 'bg-red-500 animate-pulse'
-                  : 'bg-gray-600';
-
-              const textClass = isDone
-                ? 'text-red-700'
-                : isCurrent
-                  ? 'text-gray-900'
-                  : 'text-gray-600';
-
-              return (
-                <li key={index} className="flex items-center gap-2 shrink-0">
-                  <span
-                    className={`w-2.5 h-2.5 rounded-full ${dotClass}`}
-                    aria-hidden="true"
-                  />
-                  <span className={`transition-colors font-medium ${textClass}`}>
-                    {step}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
-
-        {/* Alerte discrète si l'autoplay a été bloqué */}
-        {autoPlayBlocked && !isPlaying && (
-          <div className="mt-3 text-[11px] sm:text-xs text-gray-700">
-            Astuce: l'autoplay a été bloqué par votre navigateur. Cliquez sur "Lire la musique" pour l'activer.
+        {/* Contenu par-dessus le fond */}
+        <div className="relative z-10 px-4 py-8 max-w-6xl mx-auto">
+          {/* Titre principal */}
+          <div className="text-center mb-6">
+            <h1 className="text-4xl font-bold text-white mb-2 drop-shadow-lg">
+              Créez votre personnage
+            </h1>
+            <p className="text-gray-200 drop-shadow">
+              Choisissez vite mais choisissez bien
+            </p>
           </div>
-        )}
+
+          {/* Barre de progression */}
+          <div className="w-full bg-gray-800/70 rounded-full h-2 mb-4" aria-hidden="true">
+            <div
+              className="bg-gradient-to-r from-red-600 to-red-700 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${percent}%` }}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={percent}
+              role="progressbar"
+            />
+          </div>
+
+          {/* Libellés d'étapes */}
+          <div className="text-xs sm:text-sm text-white overflow-x-auto">
+            <ol className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 sm:gap-x-6 gap-y-2 whitespace-nowrap">
+              {steps.map((step, index) => {
+                const isDone = index < currentStep;
+                const isCurrent = index === currentStep;
+                const dotClass = isDone
+                  ? 'bg-red-600'
+                  : isCurrent
+                    ? 'bg-red-500 animate-pulse'
+                    : 'bg-gray-400';
+
+                const textClass = isDone
+                  ? 'text-red-300'
+                  : isCurrent
+                    ? 'text-white'
+                    : 'text-gray-300';
+
+                return (
+                  <li key={index} className="flex items-center gap-2 shrink-0">
+                    <span
+                      className={`w-2.5 h-2.5 rounded-full ${dotClass} drop-shadow`}
+                      aria-hidden="true"
+                    />
+                    <span className={`transition-colors font-medium ${textClass} drop-shadow`}>
+                      {step}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        </div>
       </div>
+
+      {/* Contrôles musique en dessous du bandeau */}
+      <div className="mt-4 flex items-center justify-end max-w-6xl mx-auto px-4">
+        <button
+          type="button"
+          onClick={togglePlayback}
+          className={`text-xs sm:text-sm px-3 py-1.5 rounded-md border transition-colors
+            ${isPlaying ? 'border-red-600 text-red-200 hover:bg-red-900/30' : 'border-gray-600 text-gray-300 hover:bg-gray-800/30'}
+          `}
+          title={autoPlayBlocked && !isPlaying ? "Cliquez pour activer la musique" : (isPlaying ? "Arrêter la musique" : "Lire la musique")}
+        >
+          {isPlaying ? '⏸ Arrêter la musique' : '▶️ Lire la musique'}
+        </button>
+        {/* Elément audio caché */}
+        <audio ref={audioRef} src={MUSIC_SRC} preload="auto" loop />
+      </div>
+
+      {/* Alerte discrète si l'autoplay a été bloqué */}
+      {autoPlayBlocked && !isPlaying && (
+        <div className="mt-2 text-[11px] sm:text-xs text-gray-500 max-w-6xl mx-auto px-4">
+          Astuce: l'autoplay a été bloqué par votre navigateur. Cliquez sur "Lire la musique" pour l'activer.
+        </div>
+      )}
     </div>
   );
 }
