@@ -79,9 +79,9 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
   };
 
   return (
-    <div className="w-full mb-8">
-      {/* Bandeau pleine largeur avec image de fond */}
-      <div className="w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]">
+    <div className="w-full">
+      {/* Bandeau pleine largeur avec image de fond - tout en haut */}
+      <div className="w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] -mt-8">
         {/* Image de fond */}
         <div 
           className="absolute inset-0"
@@ -100,10 +100,10 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
         <div className="relative z-10 px-4 py-8 max-w-6xl mx-auto">
           {/* Titre principal */}
           <div className="text-center mb-6">
-            <h1 className="text-4xl font-bold text-white mb-2 drop-shadow-lg">
+            <h1 className="text-4xl font-bold text-blue-900 mb-2 drop-shadow-lg">
               Créez votre personnage
             </h1>
-            <p className="text-gray-200 drop-shadow">
+            <p className="text-blue-800 drop-shadow">
               Choisissez vite mais choisissez bien
             </p>
           </div>
@@ -121,7 +121,7 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
           </div>
 
           {/* Libellés d'étapes */}
-          <div className="text-xs sm:text-sm text-white overflow-x-auto">
+          <div className="text-xs sm:text-sm text-blue-900 overflow-x-auto">
             <ol className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 sm:gap-x-6 gap-y-2 whitespace-nowrap">
               {steps.map((step, index) => {
                 const isDone = index < currentStep;
@@ -130,13 +130,13 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
                   ? 'bg-red-600'
                   : isCurrent
                     ? 'bg-red-500 animate-pulse'
-                    : 'bg-gray-400';
+                    : 'bg-blue-600';
 
                 const textClass = isDone
-                  ? 'text-red-300'
+                  ? 'text-red-700'
                   : isCurrent
-                    ? 'text-white'
-                    : 'text-gray-300';
+                    ? 'text-blue-900'
+                    : 'text-blue-700';
 
                 return (
                   <li key={index} className="flex items-center gap-2 shrink-0">
@@ -173,7 +173,7 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
 
       {/* Alerte discrète si l'autoplay a été bloqué */}
       {autoPlayBlocked && !isPlaying && (
-        <div className="mt-2 text-[11px] sm:text-xs text-gray-500 max-w-6xl mx-auto px-4">
+        <div className="mt-2 mb-8 text-[11px] sm:text-xs text-gray-500 max-w-6xl mx-auto px-4">
           Astuce: l'autoplay a été bloqué par votre navigateur. Cliquez sur "Lire la musique" pour l'activer.
         </div>
       )}
