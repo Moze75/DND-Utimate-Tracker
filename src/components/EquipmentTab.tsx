@@ -1163,9 +1163,7 @@ export function EquipmentTab({
               </button>
             </div>
             <div className="space-y-1">
-              {(['armor','shield','weapon
-                             <div className="space-y-1">
-              {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
+             {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
                 <label key={k} className="flex items-center justify-between text-sm text-gray-200 px-2 py-1 rounded hover:bg-gray-800/60 cursor-pointer">
                   <span>
                     {k === 'armor' ? 'Armure'
