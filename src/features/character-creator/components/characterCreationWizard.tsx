@@ -516,15 +516,15 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
   /* ===========================================================
      Layout général
      =========================================================== */
-  return (
-    <div className="min-h-screen bg-fantasy relative">
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          className: 'bg-gray-800 text-white border border-gray-700',
-          duration: 4000,
-        }}
-      />
+return (
+  <div className="min-h-screen bg-fantasy relative">
+    <Toaster
+      position="top-right"
+      toastOptions={{
+        className: 'bg-gray-800 text-white border border-gray-700',
+        duration: 4000,
+      }}
+    />
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
