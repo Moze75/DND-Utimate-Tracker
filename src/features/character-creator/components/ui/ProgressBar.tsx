@@ -81,7 +81,7 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
 return (
   <div className="w-full mb-8">
     {/* Bandeau pleine largeur avec image de fond - tout en haut */}
-    <div className="w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] -mt-8 h-74"> {/* ← ICI */}
+    <div className="w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] -mt-8 h-64"> {/* ← ICI */}
       {/* Image de fond */}
       <div 
         className="absolute inset-0"
