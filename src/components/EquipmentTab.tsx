@@ -712,16 +712,19 @@ export function EquipmentTab({
                 isEquipped={!!armor}
               />
 
-            <EquipmentSlot
-              icon={<ShieldIcon size={24} className="text-blue-500" />}
-              position="top-[50%] left-[15%]"
-              equipment={shield || null}
-              type="shield"
-              onRequestOpenList={() => { setAllowedKinds(['shields']); setShowList(true); }}
-              onToggleEquipFromSlot={() => toggleFromSlot('shield')}
-              onOpenEditFromSlot={() => openEditFromSlot('shield')}
-              isEquipped={!!shield}
-            />
+              <EquipmentSlot
+                icon={<ShieldIcon size={24} className="text-blue-500" />}
+                position="top-[50%] left-[15%]"
+                equipment={shield || null}
+                type="shield"
+                onRequestOpenList={() => { 
+                  setInventoryModalType('shield'); 
+                  setShowInventoryModal(true); 
+                }}
+                onToggleEquipFromSlot={() => toggleFromSlot('shield')}
+                onOpenEditFromSlot={() => openEditFromSlot('shield')}
+                isEquipped={!!shield}
+              />
 
             <EquipmentSlot
               icon={<Sword size={24} className="text-red-500" />}
