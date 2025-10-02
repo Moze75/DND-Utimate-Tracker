@@ -974,47 +974,80 @@ export function EquipmentTab({
       </div>
 
       {/* Modals */}
-      {showList && (
-        <EquipmentListModal
-          onClose={() => { setShowList(false); setAllowedKinds(null); }}
-          onAddItem={async (payload) => {
-            try {
-              const meta: ItemMeta = { ...(payload.meta as any), equipped: false };
-              const finalDesc = injectMetaIntoDescription(payload.description || '', meta);
-              const { error } = await supabase.from('inventory_items').insert([{ player_id: player.id, name: smartCapitalize(payload.name), description: finalDesc }]);
-              if (error) throw error;
-              await refreshInventory(200);
-              toast.success('Équipement ajouté');
-            } catch (e) {
-              console.error(e);
-              toast.error('Erreur ajout équipement');
-            } finally {
-              setShowList(false);
-              setAllowedKinds(null);
-            }
-          }}
-          allowedKinds={allowedKinds}
-        />
-      )}
-      {showCustom && (
-        <CustomItemModal
-          onClose={() => setShowCustom(false)}
-          onAdd={async (payload) => {
-            try {
-              const finalDesc = injectMetaIntoDescription(payload.description || '', { ...payload.meta, equipped: false });
-              const { error } = await supabase.from('inventory_items').insert([{ player_id: player.id, name: smartCapitalize(payload.name), description: finalDesc }]);
-              if (error) throw error;
-              await refreshInventory(200);
-              toast.success('Objet personnalisé ajouté');
-            } catch (e) {
-              console.error(e);
-              toast.error('Erreur ajout objet');
-            } finally {
-              setShowCustom(false);
-            }
-          }}
-        />
-      )}
+{showList && (
+  <EquipmentListModal
+    onClose={() => { setShowList(false); setAllowedKinds(null); }}
+    onAddItem={async (payload) => {
+      try {
+        const meta: ItemMeta = { ...(payload.meta as any), equipped: false };
+        const finalDesc = injectMetaIntoDescription(payload.description || '', meta);
+        
+        // Insertion avec récupération de l'objet créé
+        const { data, error } = await supabase
+          .from('inventory_items')
+          .insert([{ 
+            player_id: player.id, 
+            name: smartCapitalize(payload.name), 
+            description: finalDesc 
+          }])
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // CORRECTION: Ajout optimiste au lieu de refresh complet
+        if (data) {
+          onInventoryUpdate([...inventory, data]);
+        }
+        
+        toast.success('Équipement ajouté');
+      } catch (e) {
+        console.error(e);
+        toast.error('Erreur ajout équipement');
+      } finally {
+        setShowList(false);
+        setAllowedKinds(null);
+      }
+    }}
+    allowedKinds={allowedKinds}
+  />
+)}
+
+{showCustom && (
+  <CustomItemModal
+    onClose={() => setShowCustom(false)}
+    onAdd={async (payload) => {
+      try {
+        const finalDesc = injectMetaIntoDescription(payload.description || '', { ...payload.meta, equipped: false });
+        
+        // Insertion avec récupération de l'objet créé
+        const { data, error } = await supabase
+          .from('inventory_items')
+          .insert([{ 
+            player_id: player.id, 
+            name: smartCapitalize(payload.name), 
+            description: finalDesc 
+          }])
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // CORRECTION: Ajout optimiste au lieu de refresh complet
+        if (data) {
+          onInventoryUpdate([...inventory, data]);
+        }
+        
+        toast.success('Objet personnalisé ajouté');
+      } catch (e) {
+        console.error(e);
+        toast.error('Erreur ajout objet');
+      } finally {
+        setShowCustom(false);
+      }
+    }}
+  />
+)}
       {editingItem && (
         <InventoryItemEditModal
           item={editingItem}
