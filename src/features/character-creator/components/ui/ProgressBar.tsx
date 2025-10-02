@@ -88,7 +88,7 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
           style={{
             backgroundImage: "url('/background/ddbground.png')",
             backgroundSize: 'cover',
-            backgroundPosition: 'center 40%', // Descendre encore plus l'image pour voir les têtes
+            backgroundPosition: 'center 60%', // Descendre encore plus l'image pour voir les têtes
             backgroundRepeat: 'no-repeat'
           }}
         >
