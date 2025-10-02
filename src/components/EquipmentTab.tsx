@@ -330,6 +330,8 @@ export function EquipmentTab({
   const [showCustom, setShowCustom] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [showWeaponsModal, setShowWeaponsModal] = useState(false);
+  const [showInventoryModal, setShowInventoryModal] = useState(false);
+  const [inventoryModalType, setInventoryModalType] = useState<'armor' | 'shield'>('armor');
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmPayload, setConfirmPayload] = useState<{ mode: 'equip' | 'unequip'; itemId: string; itemName: string } | null>(null);
