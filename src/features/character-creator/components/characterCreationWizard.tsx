@@ -518,7 +518,6 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
      =========================================================== */
 
 
-        </div>
       </div>
     </div>
   ); 
