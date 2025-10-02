@@ -1072,6 +1072,18 @@ export function EquipmentTab({
           </div>
         </div>
       )}
+      {/* NOUVEAU: Modal équipement depuis le sac */}
+      {showInventoryModal && (
+        <InventoryEquipmentModal
+          onClose={() => setShowInventoryModal(false)}
+          onEquipItem={async (item) => {
+            setShowInventoryModal(false);
+            await performToggle(item, 'equip');
+          }}
+          inventory={inventory}
+          equipmentType={inventoryModalType}
+        />
+      )}
     </div>
   );
 }
