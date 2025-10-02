@@ -1192,3 +1192,106 @@ export function EquipmentTab({
                 placeholder="Listez ici le contenu de votre sac à dos..."
                 value={bagText}
                 onChange={(e) => setBagText(e.target.value)}
+                                placeholder="Listez ici le contenu de votre sac à dos..."
+                value={bagText}
+                onChange={(e) => setBagText(e.target.value)}
+                className="input-dark w-full px-3 py-2 rounded-md"
+                rows={8}
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowBagModal(false)}
+                className="btn-secondary px-4 py-2 rounded-lg"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const bagEquipment = {
+                      name: 'Sac à dos',
+                      description: bagText,
+                      isTextArea: true
+                    };
+
+                    // Sauvegarder dans Supabase (même chemin que votre ancien code)
+                    const { error } = await supabase
+                      .from('players')
+                      .update({
+                        equipment: {
+                          ...player.equipment,
+                          bag: bagEquipment
+                        }
+                      })
+                      .eq('id', player.id);
+
+                    if (error) throw error;
+
+                    // Mettre à jour l'état local
+                    setBag(bagEquipment);
+                    onPlayerUpdate({
+                      ...player,
+                      equipment: {
+                        ...player.equipment,
+                        bag: bagEquipment
+                      }
+                    });
+
+                    toast.success('Contenu du sac sauvegardé');
+                    setShowBagModal(false);
+                  } catch (error) {
+                    console.error('Erreur lors de la sauvegarde du sac:', error);
+                    toast.error('Erreur lors de la sauvegarde');
+                  }
+                }}
+                className="btn-primary px-4 py-2 rounded-lg"
+              >
+                Sauvegarder
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filtres: MODALE CENTRÉE */}
+      {filtersOpen && (
+        <div className="fixed inset-0 z-[11000]" onClick={(e) => { if (e.target === e.currentTarget) setFiltersOpen(false); }}>
+          <div className="fixed inset-0 bg-black/60" />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(22rem,92vw)] bg-gray-900/95 border border-gray-700 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-gray-100 font-semibold">Filtres du sac</h4>
+              <button onClick={() => setFiltersOpen(false)} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg" aria-label="Fermer">
+                <X />
+              </button>
+            </div>
+            <div className="space-y-1">
+              {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
+                <label key={k} className="flex items-center justify-between text-sm text-gray-200 px-2 py-1 rounded hover:bg-gray-800/60 cursor-pointer">
+                  <span>
+                    {k === 'armor' ? 'Armure'
+                      : k === 'shield' ? 'Bouclier'
+                      : k === 'weapon' ? 'Arme'
+                      : k === 'potion' ? 'Potion/Poison'
+                      : k === 'jewelry' ? 'Bijoux'
+                      : k === 'tool' ? 'Outils' : 'Équipement'}
+                  </span>
+                  <input
+                    type="checkbox"
+                    className="accent-red-500"
+                    checked={bagKinds[k]}
+                    onChange={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 text-right">
+              <button onClick={() => setFiltersOpen(false)} className="btn-primary px-3 py-2 rounded-lg">Fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
