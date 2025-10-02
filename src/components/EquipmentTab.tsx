@@ -12,6 +12,7 @@ import { EquipmentListModal } from './modals/EquipmentListModal';
 import { CustomItemModal } from './modals/CustomItemModal';
 import { InventoryItemEditModal } from './modals/InventoryItemEditModal';
 import { WeaponsManageModal } from './modals/WeaponsManageModal';
+import { InventoryEquipmentModal } from './modals/InventoryEquipmentModal';
 
 /* ====================== Types & helpers ====================== */
 
