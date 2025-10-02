@@ -79,7 +79,7 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full mb-8">
       {/* Bandeau pleine largeur avec image de fond - tout en haut */}
       <div className="w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] -mt-8">
         {/* Image de fond */}
@@ -88,7 +88,7 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
           style={{
             backgroundImage: "url('/background/ddbground.png')",
             backgroundSize: 'cover',
-            backgroundPosition: 'center',
+            backgroundPosition: 'center 20%', // Descendre l'image
             backgroundRepeat: 'no-repeat'
           }}
         >
@@ -97,9 +97,9 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
         </div>
 
         {/* Contenu par-dessus le fond */}
-        <div className="relative z-10 px-4 py-8 max-w-6xl mx-auto">
-          {/* Titre principal */}
-          <div className="text-center mb-6">
+        <div className="relative z-10 px-4 py-12 max-w-6xl mx-auto">
+          {/* Titre principal avec plus d'espace au dessus */}
+          <div className="text-center">
             <h1 className="text-4xl font-bold text-black mb-2" 
                 style={{ 
                   textShadow: '0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.6), 0 0 30px rgba(255, 255, 255, 0.4)' 
@@ -113,62 +113,58 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
               Choisissez vite mais choisissez bien
             </p>
           </div>
-
-          {/* Barre de progression */}
-          <div className="w-full bg-gray-800/70 rounded-full h-2 mb-4" aria-hidden="true">
-            <div
-              className="bg-gradient-to-r from-red-600 to-red-700 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${percent}%` }}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={percent}
-              role="progressbar"
-            />
-          </div>
-
-          {/* Libellés d'étapes */}
-          <div className="text-xs sm:text-sm overflow-x-auto">
-            <ol className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 sm:gap-x-6 gap-y-2 whitespace-nowrap">
-              {steps.map((step, index) => {
-                const isDone = index < currentStep;
-                const isCurrent = index === currentStep;
-                const dotClass = isDone
-                  ? 'bg-red-600'
-                  : isCurrent
-                    ? 'bg-red-500 animate-pulse'
-                    : 'bg-gray-700';
-
-                const textClass = isDone
-                  ? 'text-red-800'
-                  : isCurrent
-                    ? 'text-black'
-                    : 'text-gray-800';
-
-                return (
-                  <li key={index} className="flex items-center gap-2 shrink-0">
-                    <span
-                      className={`w-2.5 h-2.5 rounded-full ${dotClass}`}
-                      style={{ 
-                        boxShadow: '0 0 6px rgba(255, 255, 255, 0.6)' 
-                      }}
-                      aria-hidden="true"
-                    />
-                    <span className={`transition-colors font-medium ${textClass}`}
-                          style={{ 
-                            textShadow: '0 0 6px rgba(255, 255, 255, 0.8), 0 0 12px rgba(255, 255, 255, 0.5)' 
-                          }}>
-                      {step}
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
         </div>
       </div>
 
-      {/* Contrôles musique en dessous du bandeau */}
-      <div className="mt-4 flex items-center justify-end max-w-6xl mx-auto px-4">
+      {/* Barre de progression en dessous du bandeau */}
+      <div className="max-w-6xl mx-auto px-4 mt-6">
+        <div className="w-full bg-gray-800 rounded-full h-2 mb-3" aria-hidden="true">
+          <div
+            className="bg-gradient-to-r from-red-600 to-red-700 h-2 rounded-full transition-all duration-300"
+            style={{ width: `${percent}%` }}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percent}
+            role="progressbar"
+          />
+        </div>
+
+        {/* Libellés d'étapes avec les anciennes couleurs */}
+        <div className="text-xs sm:text-sm text-gray-400 overflow-x-auto">
+          <ol className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 sm:gap-x-6 gap-y-2 whitespace-nowrap">
+            {steps.map((step, index) => {
+              const isDone = index < currentStep;
+              const isCurrent = index === currentStep;
+              const dotClass = isDone
+                ? 'bg-red-600'
+                : isCurrent
+                  ? 'bg-red-500 animate-pulse'
+                  : 'bg-gray-600';
+
+              const textClass = isDone
+                ? 'text-red-400'
+                : isCurrent
+                  ? 'text-gray-200'
+                  : 'text-gray-500';
+
+              return (
+                <li key={index} className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full ${dotClass}`}
+                    aria-hidden="true"
+                  />
+                  <span className={`transition-colors font-medium ${textClass}`}>
+                    {step}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      </div>
+
+      {/* Contrôles musique remontés légèrement */}
+      <div className="mt-2 flex items-center justify-end max-w-6xl mx-auto px-4">
         <button
           type="button"
           onClick={togglePlayback}
@@ -185,7 +181,7 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
 
       {/* Alerte discrète si l'autoplay a été bloqué */}
       {autoPlayBlocked && !isPlaying && (
-        <div className="mt-2 mb-8 text-[11px] sm:text-xs text-gray-500 max-w-6xl mx-auto px-4">
+        <div className="mt-2 text-[11px] sm:text-xs text-gray-500 max-w-6xl mx-auto px-4">
           Astuce: l'autoplay a été bloqué par votre navigateur. Cliquez sur "Lire la musique" pour l'activer.
         </div>
       )}
