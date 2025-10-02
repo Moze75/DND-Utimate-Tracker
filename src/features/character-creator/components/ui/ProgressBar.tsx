@@ -95,14 +95,24 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
       </div>
 
       {/* Contenu par-dessus le fond */}
-      <div className="relative z-10 p-4">
+      <div className="relative z-10 p-6">
+        {/* Titre principal */}
+        <div className="text-center mb-6">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+            Créez votre personnage
+          </h1>
+          <p className="text-gray-700">
+            Choisissez vite mais choisissez bien
+          </p>
+        </div>
+
         {/* Contrôles musique */}
-        <div className="mb-2 flex items-center justify-end">
+        <div className="mb-4 flex items-center justify-end">
           <button
             type="button"
             onClick={togglePlayback}
             className={`text-xs sm:text-sm px-3 py-1.5 rounded-md border transition-colors
-              ${isPlaying ? 'border-red-600 text-red-800 hover:bg-red-900/30' : 'border-gray-600 text-gray-800 hover:bg-gray-800/60'}
+              ${isPlaying ? 'border-red-600 text-red-800 hover:bg-red-900/30' : 'border-gray-600 text-gray-800 hover:bg-gray-800/30'}
             `}
             title={autoPlayBlocked && !isPlaying ? "Cliquez pour activer la musique" : (isPlaying ? "Arrêter la musique" : "Lire la musique")}
           >
@@ -113,7 +123,7 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
         </div>
 
         {/* Barre de progression */}
-        <div className="w-full bg-gray-800/70 rounded-full h-2" aria-hidden="true">
+        <div className="w-full bg-gray-800/70 rounded-full h-2 mb-4" aria-hidden="true">
           <div
             className="bg-gradient-to-r from-red-600 to-red-700 h-2 rounded-full transition-all duration-300"
             style={{ width: `${percent}%` }}
@@ -125,7 +135,7 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
         </div>
 
         {/* Libellés d'étapes: wrap + gaps + scroll horizontal si trop serré */}
-        <div className="mt-3 text-xs sm:text-sm text-gray-800 overflow-x-auto">
+        <div className="text-xs sm:text-sm text-gray-800 overflow-x-auto">
           <ol className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 sm:gap-x-6 gap-y-2 whitespace-nowrap">
             {steps.map((step, index) => {
               const isDone = index < currentStep;
@@ -159,7 +169,7 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
 
         {/* Alerte discrète si l'autoplay a été bloqué */}
         {autoPlayBlocked && !isPlaying && (
-          <div className="mt-2 text-[11px] sm:text-xs text-gray-700">
+          <div className="mt-3 text-[11px] sm:text-xs text-gray-700">
             Astuce: l'autoplay a été bloqué par votre navigateur. Cliquez sur "Lire la musique" pour l'activer.
           </div>
         )}
