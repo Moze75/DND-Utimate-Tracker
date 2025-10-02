@@ -187,17 +187,16 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
         </div>
       </div>
 
-      {equipment ? (
-        <div className="space-y-2">
-          {equipment.name && <h5 className="font-medium text-gray-100 break-words">{smartCapitalize(equipment.name)}</h5>}
-          {equipment.description && <p className="text-sm text-gray-400 whitespace-pre-wrap">{equipment.description}</p>}
-
-          {type === 'armor' && equipment.armor_formula && (
-            <div className="mt-1 text-sm text-gray-300 flex items-center justify-between">
-              <span className="text-gray-400">Formule</span>
-              <span className="font-medium text-gray-100">{equipment.armor_formula.label || ''}</span>
-            </div>
-          )}
+{equipment ? (
+  <div className="space-y-2">
+    {equipment.name && <h5 className="font-medium text-gray-100 break-words">{smartCapitalize(equipment.name)}</h5>}
+    
+    {/* Contenu manuel du sac */}
+    {bagText && (
+      <div className="text-sm text-gray-400 whitespace-pre-wrap border-b border-gray-700/50 pb-2">
+        {bagText}
+      </div>
+    )}
 
           {type === 'shield' && typeof equipment.shield_bonus === 'number' && (
             <div className="mt-1 text-sm text-gray-300 flex items-center justify-between">
