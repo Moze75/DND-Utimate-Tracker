@@ -197,47 +197,7 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
         {bagText}
       </div>
     )}
-        {/* Liste automatique des équipements */}
-    {(() => {
-      const equipmentItems = inventory.filter(item => {
-        const meta = parseMeta(item.description);
-        return meta?.type === 'equipment';
-      });
-
-      if (equipmentItems.length > 0) {
-        return (
-          <div>
-            <div className="text-xs text-gray-400 mb-1 font-medium">Équipements :</div>
-            <div className="space-y-1">
-              {equipmentItems.map(item => {
-                const meta = parseMeta(item.description);
-                const qty = meta?.quantity ?? 1;
-                return (
-                  <div key={item.id} className="text-sm text-gray-300 pl-2">
-                    • {smartCapitalize(item.name)}{qty > 1 && ` x${qty}`}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      }
-      return equipmentItems.length === 0 && !bagText ? (
-        <div className="text-sm text-gray-400">Sac vide</div>
-      ) : null;
-    })()}
-  </div>
-) : (
-  <div className="text-sm text-gray-400">Sac vide</div>
-)}
-
-{type === 'bag' && (
-  <div className="mt-3">
-    <button onClick={() => onOpenBagModal?.()} className="btn-primary px-3 py-2 rounded-lg">
-      Modifier le contenu
-    </button>
-  </div>
-)}
+     
 
           {type === 'shield' && typeof equipment.shield_bonus === 'number' && (
             <div className="mt-1 text-sm text-gray-300 flex items-center justify-between">
