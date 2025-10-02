@@ -12,11 +12,12 @@ import { EquipmentListModal } from './modals/EquipmentListModal';
 import { CustomItemModal } from './modals/CustomItemModal';
 import { InventoryItemEditModal } from './modals/InventoryItemEditModal';
 import { WeaponsManageModal } from './modals/WeaponsManageModal';
+import { InventoryEquipmentModal } from './modals/InventoryEquipmentModal';
 
 /* ====================== Types & helpers ====================== */
 
 interface Equipment {
-  name: string; 
+  name: string;
   description: string;
   isTextArea?: boolean;
 
@@ -148,8 +149,24 @@ interface InfoBubbleProps {
   onRequestOpenList?: () => void;
   onOpenEditFromSlot?: () => void;
   onOpenWeaponsManage?: () => void;
+  onOpenBagModal?: () => void;
+  bagText?: string;
+  inventory?: InventoryItem[];
 }
-const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onRequestOpenList, onOpenEditFromSlot, onOpenWeaponsManage }: InfoBubbleProps) => (
+
+const InfoBubble = ({ 
+  equipment, 
+  type, 
+  onClose, 
+  onToggleEquip, 
+  isEquipped, 
+  onRequestOpenList, 
+  onOpenEditFromSlot, 
+  onOpenWeaponsManage, 
+  onOpenBagModal,
+  bagText,
+  inventory = []
+}: InfoBubbleProps) => (
   <div className="fixed inset-0 z-[9999]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
     <div className="fixed inset-0 bg-black/50" onClick={onClose} />
     <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 text-sm text-gray-300 rounded-lg shadow-lg w-[min(32rem,95vw)] border border-gray-700/50">
@@ -185,7 +202,7 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
         </div>
       </div>
 
-      {equipment ? (
+      {equipment && type !== 'bag' ? (
         <div className="space-y-2">
           {equipment.name && <h5 className="font-medium text-gray-100 break-words">{smartCapitalize(equipment.name)}</h5>}
           {equipment.description && <p className="text-sm text-gray-400 whitespace-pre-wrap">{equipment.description}</p>}
@@ -213,6 +230,54 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
             </div>
           )}
         </div>
+      ) : type === 'bag' ? (
+        <div className="space-y-2">
+          {equipment?.name && <h5 className="font-medium text-gray-100 break-words">{smartCapitalize(equipment.name)}</h5>}
+          
+          {/* Contenu manuel du sac */}
+          {bagText && (
+            <div className="text-sm text-gray-400 whitespace-pre-wrap border-b border-gray-700/50 pb-2">
+              {bagText}
+            </div>
+          )}
+          
+          {/* Liste automatique des équipements */}
+          {(() => {
+            const equipmentItems = inventory.filter(item => {
+              const meta = parseMeta(item.description);
+              return meta?.type === 'equipment';
+            });
+
+            if (equipmentItems.length > 0) {
+              return (
+                <div>
+                  <div className="text-xs text-gray-400 mb-1 font-medium">Équipements :</div>
+                  <div className="space-y-1">
+                    {equipmentItems.map(item => {
+                      const meta = parseMeta(item.description);
+                      const qty = meta?.quantity ?? 1;
+                      return (
+                        <div key={item.id} className="text-sm text-gray-300 pl-2">
+                          • {smartCapitalize(item.name)}{qty > 1 && ` x${qty}`}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+            return equipmentItems.length === 0 && !bagText ? (
+              <div className="text-sm text-gray-400">Sac vide</div>
+            ) : null;
+          })()}
+
+          {/* Bouton modifier */}
+          <div className="mt-3">
+            <button onClick={() => onOpenBagModal?.()} className="btn-primary px-3 py-2 rounded-lg">
+              Modifier le contenu
+            </button>
+          </div>
+        </div>
       ) : (
         (type === 'armor' || type === 'shield' || type === 'weapon') && (
           <div className="text-sm text-gray-400">
@@ -224,7 +289,7 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
               <>
                 Aucun {type === 'armor' ? 'armure' : 'bouclier'} équipé.
                 <div className="mt-3">
-                  <button onClick={() => onRequestOpenList?.()} className="btn-primary px-3 py-2 rounded-lg">Équiper depuis la liste</button>
+                  <button onClick={() => onRequestOpenList?.()} className="btn-primary px-3 py-2 rounded-lg">Équiper depuis le sac</button>
                 </div>
               </>
             )}
@@ -245,9 +310,13 @@ interface EquipmentSlotProps {
   onOpenEditFromSlot: () => void;
   isEquipped: boolean;
   onOpenWeaponsManageFromSlot?: () => void;
+  onOpenBagModal?: () => void;
+  bagText?: string;
+  inventory?: InventoryItem[];
 }
+
 const EquipmentSlot = ({
-  icon, position, equipment, type, onRequestOpenList, onToggleEquipFromSlot, onOpenEditFromSlot, isEquipped, onOpenWeaponsManageFromSlot
+  icon, position, equipment, type, onRequestOpenList, onToggleEquipFromSlot, onOpenEditFromSlot, isEquipped, onOpenWeaponsManageFromSlot, onOpenBagModal, bagText, inventory
 }: EquipmentSlotProps) => {
   const [showInfo, setShowInfo] = useState(false);
   return (
@@ -272,6 +341,9 @@ const EquipmentSlot = ({
           onRequestOpenList={onRequestOpenList}
           onOpenEditFromSlot={onOpenEditFromSlot}
           onOpenWeaponsManage={onOpenWeaponsManageFromSlot}
+          onOpenBagModal={onOpenBagModal}
+          bagText={bagText}
+          inventory={inventory}
         />
       )}
     </>
@@ -337,6 +409,14 @@ export function EquipmentTab({
   const [editLockType, setEditLockType] = useState(false);
   const prevEditMetaRef = useRef<ItemMeta | null>(null);
 
+  // NOUVEAU: Modal inventaire pour équiper depuis le sac
+  const [showInventoryModal, setShowInventoryModal] = useState(false);
+  const [inventoryModalType, setInventoryModalType] = useState<'armor' | 'shield'>('armor');
+
+  // NOUVEAU: Modal sac à dos (champ libre)
+  const [showBagModal, setShowBagModal] = useState(false);
+  const [bagText, setBagText] = useState(bag?.description || '');
+
   useEffect(() => {
     stableEquipmentRef.current = { armor, shield, bag };
   }, [armor, shield, bag]);
@@ -346,6 +426,13 @@ export function EquipmentTab({
     if (!shield && player.equipment?.shield) setShield(player.equipment.shield);
     if (!bag && player.equipment?.bag) setBag(player.equipment.bag);
   }, [player.equipment]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Synchroniser bagText avec les données du sac
+  useEffect(() => {
+    if (bag?.description) {
+      setBagText(bag.description);
+    }
+  }, [bag]);
 
   const jewelryItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'jewelry'), [inventory]);
   const potionItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'potion'), [inventory]);
@@ -700,10 +787,14 @@ export function EquipmentTab({
               position="top-[27%] left-1/2 -translate-x-1/2"
               equipment={armor || null}
               type="armor"
-              onRequestOpenList={() => { setAllowedKinds(['armors']); setShowList(true); }}
+              onRequestOpenList={() => { 
+                setInventoryModalType('armor'); 
+                setShowInventoryModal(true); 
+              }}
               onToggleEquipFromSlot={() => toggleFromSlot('armor')}
               onOpenEditFromSlot={() => openEditFromSlot('armor')}
               isEquipped={!!armor}
+              inventory={inventory}
             />
 
             <EquipmentSlot
@@ -711,10 +802,14 @@ export function EquipmentTab({
               position="top-[50%] left-[15%]"
               equipment={shield || null}
               type="shield"
-              onRequestOpenList={() => { setAllowedKinds(['shields']); setShowList(true); }}
+              onRequestOpenList={() => { 
+                setInventoryModalType('shield'); 
+                setShowInventoryModal(true); 
+              }}
               onToggleEquipFromSlot={() => toggleFromSlot('shield')}
               onOpenEditFromSlot={() => openEditFromSlot('shield')}
               isEquipped={!!shield}
+              inventory={inventory}
             />
 
             <EquipmentSlot
@@ -727,6 +822,7 @@ export function EquipmentTab({
               onOpenEditFromSlot={() => {}}
               onOpenWeaponsManageFromSlot={() => setShowWeaponsModal(true)}
               isEquipped={equippedWeapons.length > 0}
+              inventory={inventory}
             />
 
             <EquipmentSlot
@@ -738,6 +834,7 @@ export function EquipmentTab({
               onToggleEquipFromSlot={() => {}}
               onOpenEditFromSlot={() => {}}
               isEquipped={false}
+              inventory={inventory}
             />
 
             <EquipmentSlot
@@ -749,6 +846,7 @@ export function EquipmentTab({
               onToggleEquipFromSlot={() => {}}
               onOpenEditFromSlot={() => {}}
               isEquipped={false}
+              inventory={inventory}
             />
 
             <EquipmentSlot
@@ -759,7 +857,10 @@ export function EquipmentTab({
               onRequestOpenList={() => { setAllowedKinds(null); setShowList(true); }}
               onToggleEquipFromSlot={() => {}}
               onOpenEditFromSlot={() => {}}
+              onOpenBagModal={() => setShowBagModal(true)}
               isEquipped={false}
+              bagText={bagText}
+              inventory={inventory}
             />
           </div>
         </div>
@@ -949,9 +1050,25 @@ export function EquipmentTab({
             try {
               const meta: ItemMeta = { ...(payload.meta as any), equipped: false };
               const finalDesc = injectMetaIntoDescription(payload.description || '', meta);
-              const { error } = await supabase.from('inventory_items').insert([{ player_id: player.id, name: smartCapitalize(payload.name), description: finalDesc }]);
+              
+              // CORRECTION: Insertion avec récupération de l'objet créé
+              const { data, error } = await supabase
+                .from('inventory_items')
+                .insert([{ 
+                  player_id: player.id, 
+                  name: smartCapitalize(payload.name), 
+                  description: finalDesc 
+                }])
+                .select()
+                .single();
+
               if (error) throw error;
-              await refreshInventory(200);
+
+              // CORRECTION: Ajout optimiste au lieu de refresh complet
+              if (data) {
+                onInventoryUpdate([...inventory, data]);
+              }
+              
               toast.success('Équipement ajouté');
             } catch (e) {
               console.error(e);
@@ -970,9 +1087,25 @@ export function EquipmentTab({
           onAdd={async (payload) => {
             try {
               const finalDesc = injectMetaIntoDescription(payload.description || '', { ...payload.meta, equipped: false });
-              const { error } = await supabase.from('inventory_items').insert([{ player_id: player.id, name: smartCapitalize(payload.name), description: finalDesc }]);
+              
+              // CORRECTION: Insertion avec récupération de l'objet créé
+              const { data, error } = await supabase
+                .from('inventory_items')
+                .insert([{ 
+                  player_id: player.id, 
+                  name: smartCapitalize(payload.name), 
+                  description: finalDesc 
+                }])
+                .select()
+                .single();
+
               if (error) throw error;
-              await refreshInventory(200);
+
+              // CORRECTION: Ajout optimiste au lieu de refresh complet
+              if (data) {
+                onInventoryUpdate([...inventory, data]);
+              }
+              
               toast.success('Objet personnalisé ajouté');
             } catch (e) {
               console.error(e);
@@ -1026,43 +1159,36 @@ export function EquipmentTab({
         }}
       />
 
-      {/* Filtres: MODALE CENTRÉE */}
-      {filtersOpen && (
-        <div className="fixed inset-0 z-[11000]" onClick={(e) => { if (e.target === e.currentTarget) setFiltersOpen(false); }}>
+      {/* NOUVEAU: Modal équipement depuis le sac */}
+      {showInventoryModal && (
+        <InventoryEquipmentModal
+          onClose={() => setShowInventoryModal(false)}
+          onEquipItem={async (item) => {
+            setShowInventoryModal(false);
+            await performToggle(item, 'equip');
+          }}
+          inventory={inventory}
+          equipmentType={inventoryModalType}
+        />
+      )}
+
+      {/* NOUVEAU: Modal Sac à dos (champ libre) */}
+      {showBagModal && (
+        <div className="fixed inset-0 z-[11000]" onClick={(e) => { if (e.target === e.currentTarget) setShowBagModal(false); }}>
           <div className="fixed inset-0 bg-black/60" />
-          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(22rem,92vw)] bg-gray-900/95 border border-gray-700 rounded-lg p-3">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-gray-100 font-semibold">Filtres du sac</h4>
-              <button onClick={() => setFiltersOpen(false)} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg" aria-label="Fermer">
-                <X />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(32rem,95vw)] bg-gray-900/95 border border-gray-700 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Backpack size={20} className="text-purple-500" />
+                <h3 className="text-lg font-semibold text-gray-100">Contenu du sac à dos</h3>
+              </div>
+              <button onClick={() => setShowBagModal(false)} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg">
+                <X size={20} />
               </button>
             </div>
-            <div className="space-y-1">
-              {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
-                <label key={k} className="flex items-center justify-between text-sm text-gray-200 px-2 py-1 rounded hover:bg-gray-800/60 cursor-pointer">
-                  <span>
-                    {k === 'armor' ? 'Armure'
-                      : k === 'shield' ? 'Bouclier'
-                      : k === 'weapon' ? 'Arme'
-                      : k === 'potion' ? 'Potion/Poison'
-                      : k === 'jewelry' ? 'Bijoux'
-                      : k === 'tool' ? 'Outils' : 'Équipement'}
-                  </span>
-                  <input
-                    type="checkbox"
-                    className="accent-red-500"
-                    checked={bagKinds[k]}
-                    onChange={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="mt-3 text-right">
-              <button onClick={() => setFiltersOpen(false)} className="btn-primary px-3 py-2 rounded-lg">Fermer</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+            
+            <div className="mb-4">
+              <textarea
+                placeholder="Listez ici le contenu de votre sac à dos..."
+                value={bagText}
+                onChange={(e) => setBagText(e.target.value)}
