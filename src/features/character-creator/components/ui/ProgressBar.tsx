@@ -100,10 +100,16 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
         <div className="relative z-10 px-4 py-8 max-w-6xl mx-auto">
           {/* Titre principal */}
           <div className="text-center mb-6">
-            <h1 className="text-4xl font-bold text-blue-900 mb-2 drop-shadow-lg">
+            <h1 className="text-4xl font-bold text-black mb-2" 
+                style={{ 
+                  textShadow: '0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.6), 0 0 30px rgba(255, 255, 255, 0.4)' 
+                }}>
               Créez votre personnage
             </h1>
-            <p className="text-blue-800 drop-shadow">
+            <p className="text-gray-900 font-medium"
+               style={{ 
+                 textShadow: '0 0 8px rgba(255, 255, 255, 0.8), 0 0 16px rgba(255, 255, 255, 0.5)' 
+               }}>
               Choisissez vite mais choisissez bien
             </p>
           </div>
@@ -121,7 +127,7 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
           </div>
 
           {/* Libellés d'étapes */}
-          <div className="text-xs sm:text-sm text-blue-900 overflow-x-auto">
+          <div className="text-xs sm:text-sm overflow-x-auto">
             <ol className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 sm:gap-x-6 gap-y-2 whitespace-nowrap">
               {steps.map((step, index) => {
                 const isDone = index < currentStep;
@@ -130,21 +136,27 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
                   ? 'bg-red-600'
                   : isCurrent
                     ? 'bg-red-500 animate-pulse'
-                    : 'bg-blue-600';
+                    : 'bg-gray-700';
 
                 const textClass = isDone
-                  ? 'text-red-700'
+                  ? 'text-red-800'
                   : isCurrent
-                    ? 'text-blue-900'
-                    : 'text-blue-700';
+                    ? 'text-black'
+                    : 'text-gray-800';
 
                 return (
                   <li key={index} className="flex items-center gap-2 shrink-0">
                     <span
-                      className={`w-2.5 h-2.5 rounded-full ${dotClass} drop-shadow`}
+                      className={`w-2.5 h-2.5 rounded-full ${dotClass}`}
+                      style={{ 
+                        boxShadow: '0 0 6px rgba(255, 255, 255, 0.6)' 
+                      }}
                       aria-hidden="true"
                     />
-                    <span className={`transition-colors font-medium ${textClass} drop-shadow`}>
+                    <span className={`transition-colors font-medium ${textClass}`}
+                          style={{ 
+                            textShadow: '0 0 6px rgba(255, 255, 255, 0.8), 0 0 12px rgba(255, 255, 255, 0.5)' 
+                          }}>
                       {step}
                     </span>
                   </li>
