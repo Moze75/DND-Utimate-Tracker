@@ -70,23 +70,102 @@ function looksLikeHeader(cellA: string, cellB: string, keyword: RegExp) {
 
 /* Parsers catalogue */
 function parseArmors(md: string): CatalogItem[] {
-  const rows = parseMarkdownTable(md);
   const items: CatalogItem[] = [];
-  for (const row of rows) {
-    if (row.length < 2) continue;
-    const [nomRaw, ca] = row;
-    if (!nomRaw) continue;
-    if (looksLikeHeader(nomRaw, ca, /classe d'armure|ca/i)) continue;
-    const nom = stripPriceParentheses(nomRaw);
-    let base = 10, addDex = false, dexCap: number | null = null;
-    const dexMatch = ca.match(/(\d+)\s*\+\s*modificateur\s*de\s*dex/i);
-    const capMatch = ca.match(/\(max\s*(\d+)\)/i);
-    if (dexMatch) { base = +dexMatch[1]; addDex = true; dexCap = capMatch ? +capMatch[1] : null; }
-    else { const m = ca.match(/^\s*(\d+)\s*$/); if (m) { base = +m[1]; addDex = false; dexCap = null; } }
-    items.push({ id: `armor:${nom}`, kind: 'armors', name: nom, armor: { base, addDex, dexCap, label: ca } });
+  
+  // Diviser en sections basées sur les titres ##
+  const sections = md.split(/##\s+/).filter(s => s.trim());
+  
+  console.log(`Nombre de sections trouvées: ${sections.length}`);
+  
+  for (const section of sections) {
+    const lines = section.split('\n');
+    const sectionTitle = lines[0]?.toLowerCase() || '';
+    
+    console.log(`Section analysée: "${sectionTitle}"`);
+    
+    // Vérifier si c'est bien une section d'armures
+    if (!sectionTitle.includes('armure')) {
+      console.log(`Section ignorée (pas d'armures): ${sectionTitle}`);
+      continue;
+    }
+    
+    // Extraire les tables de cette section
+    const tableRows = parseMarkdownTable(section);
+    console.log(`Lignes de table trouvées dans la section: ${tableRows.length}`);
+    
+    for (const row of tableRows) {
+      if (row.length < 2) continue;
+      const [nomRaw, ca] = row;
+      if (!nomRaw?.trim()) continue;
+      
+      console.log(`Ligne analysée: [${nomRaw}] -> [${ca}]`);
+      
+      // Ignorer les en-têtes de manière plus robuste
+      const nomNorm = nomRaw.toLowerCase().trim();
+      const caNorm = (ca || '').toLowerCase().trim();
+      
+      if (
+        nomNorm === 'armures' || 
+        nomNorm === 'armure' ||
+        caNorm.includes('classe d\'armure') ||
+        caNorm.includes('ca') ||
+        nomNorm === 'nom' ||
+        nomRaw.includes('---') ||
+        nomRaw.includes('=') ||
+        caNorm === 'force' ||
+        caNorm === 'discrétion' ||
+        !nomRaw.trim()
+      ) {
+        console.log(`Ligne ignorée (en-tête): ${nomRaw}`);
+        continue;
+      }
+      
+      const nom = stripPriceParentheses(nomRaw);
+      let base = 10, addDex = false, dexCap: number | null = null;
+      
+      // Parser la CA de manière plus robuste
+      const dexMatch = ca.match(/(\d+)\s*\+\s*modificateur\s*de\s*dex/i);
+      const capMatch = ca.match(/\(max\s*(\d+)\)/i);
+      
+      if (dexMatch) { 
+        base = +dexMatch[1]; 
+        addDex = true; 
+        dexCap = capMatch ? +capMatch[1] : null; 
+        console.log(`Armure avec Dex: ${nom} -> ${base} + Dex (max: ${dexCap})`);
+      } else { 
+        const directMatch = ca.match(/^\s*(\d+)\s*$/); 
+        if (directMatch) { 
+          base = +directMatch[1]; 
+          addDex = false; 
+          dexCap = null; 
+          console.log(`Armure sans Dex: ${nom} -> ${base}`);
+        } else {
+          console.log(`CA non reconnue pour ${nom}: "${ca}"`);
+          // Essayer d'extraire au moins un nombre
+          const anyNumberMatch = ca.match(/(\d+)/);
+          if (anyNumberMatch) {
+            base = +anyNumberMatch[1];
+            addDex = false;
+            dexCap = null;
+            console.log(`CA extraite par défaut: ${nom} -> ${base}`);
+          }
+        }
+      }
+      
+      items.push({ 
+        id: `armor:${nom}`, 
+        kind: 'armors', 
+        name: nom, 
+        armor: { base, addDex, dexCap, label: ca } 
+      });
+    }
   }
+  
+  console.log(`Total armures trouvées: ${items.length}`);
+  console.log('Liste des armures:', items.map(i => i.name));
   return items;
 }
+
 function parseShields(md: string): CatalogItem[] {
   const rows = parseMarkdownTable(md);
   const items: CatalogItem[] = [];
@@ -304,8 +383,12 @@ export function EquipmentListModal({
           fetchText(URLS.adventuring_gear), fetchText(URLS.tools),
         ]);
 
+        console.log('Début du parsing des armures...');
+        const armorItems = parseArmors(armorsMd);
+        console.log('Fin du parsing des armures');
+
         const list: CatalogItem[] = [
-          ...parseArmors(armorsMd),
+          ...armorItems,
           ...parseShields(shieldsMd),
           ...parseWeapons(weaponsMd),
           ...parseTools(toolsMd),
@@ -321,9 +404,17 @@ export function EquipmentListModal({
           seen.add(id);
           return true;
         });
+        
+        console.log(`Total d'équipements chargés: ${cleaned.length}`);
+        console.log(`Armures: ${cleaned.filter(i => i.kind === 'armors').length}`);
+        console.log(`Boucliers: ${cleaned.filter(i => i.kind === 'shields').length}`);
+        console.log(`Armes: ${cleaned.filter(i => i.kind === 'weapons').length}`);
+        console.log(`Outils: ${cleaned.filter(i => i.kind === 'tools').length}`);
+        console.log(`Équipements: ${cleaned.filter(i => i.kind === 'adventuring_gear').length}`);
+        
         setAll(cleaned);
       } catch (e) {
-        console.error(e);
+        console.error('Erreur de chargement:', e);
         toast.error('Erreur de chargement de la liste');
       } finally {
         setLoading(false);
