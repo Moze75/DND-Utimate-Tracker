@@ -1004,6 +1004,22 @@ export function EquipmentTab({
           
             try {
               // 1. Récupérer l'item mis à jour depuis la DB
+              const { data, error } = await supabase
+                .from('inventory_items')
+                .select('*')
+                .eq('id', editedId)
+                .maybeSingle();
+
+              if (error) throw error;
+
+              if (data) {
+                // 2. Mise à jour optimiste IMMEDIATE de l'état local
+                const updatedInventory = inventory.map(item => 
+                  item.id === editedId ? data : item
+                );
+                onInventoryUpdate(updatedInventory);
+
+                // 3. Vérifier les changements de type pour gérer les équipements
       const newMeta = parseMeta(data.description);
       const prevType = prevEditMetaRef.current?.type;
       const newType = newMeta?.type;
@@ -1034,17 +1050,6 @@ export function EquipmentTab({
     prevEditMetaRef.current = null;
   }
 }}
-        />
-      )} 
-
-      {showWeaponsModal && (
-        <WeaponsManageModal
-          inventory={inventory}
-          onClose={() => setShowWeaponsModal(false)}
-          onEquip={(it) => performToggle(it, 'equip')}
-          onUnequip={(it) => performToggle(it, 'unequip')}
-        />
-      )}
 
       <ConfirmEquipModal
         open={confirmOpen}
