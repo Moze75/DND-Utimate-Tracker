@@ -995,8 +995,13 @@ export function EquipmentTab({
           onSaved={async () => {
             const editedId = editingItem?.id;
             
-            if (!editedId) return;
-
+            if (!editedId) {
+              setEditingItem(null);
+              setEditLockType(false);
+              prevEditMetaRef.current = null;
+              return;
+            }
+          
             try {
               // 1. Récupérer l'item mis à jour depuis la DB
               const { data, error } = await supabase
