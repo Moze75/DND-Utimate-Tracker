@@ -526,17 +526,6 @@ return (
       }}
     />
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-white mb-2">
-              Créez votre personnage
-            </h1>
-            <p className="text-gray-400">
-              Choisissez vite mais choisissez bien
-            </p>
-          </div>
-
           <ProgressBar
             currentStep={currentStep}
             totalSteps={steps.length - 1}
