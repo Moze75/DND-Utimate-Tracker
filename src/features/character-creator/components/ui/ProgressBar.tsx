@@ -88,7 +88,7 @@ return (
         style={{
           backgroundImage: "url('/background/ddbground.png')",
           backgroundSize: 'cover',
-          backgroundPosition: 'center 40%',
+          backgroundPosition: 'center 60%',
           backgroundRepeat: 'no-repeat'
         }}
         >
