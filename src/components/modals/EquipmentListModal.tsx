@@ -71,98 +71,106 @@ function looksLikeHeader(cellA: string, cellB: string, keyword: RegExp) {
 /* Parsers catalogue */
 function parseArmors(md: string): CatalogItem[] {
   const items: CatalogItem[] = [];
+  const lines = md.split('\n');
   
-  // Diviser en sections basées sur les titres ##
-  const sections = md.split(/##\s+/).filter(s => s.trim());
+  console.log('=== DÉBUT PARSING ARMURES ===');
+  console.log('Contenu brut du fichier Armures.md:');
+  console.log(md);
+  console.log('===============================');
   
-  console.log(`Nombre de sections trouvées: ${sections.length}`);
-  
-  for (const section of sections) {
-    const lines = section.split('\n');
-    const sectionTitle = lines[0]?.toLowerCase() || '';
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
     
-    console.log(`Section analysée: "${sectionTitle}"`);
-    
-    // Vérifier si c'est bien une section d'armures
-    if (!sectionTitle.includes('armure')) {
-      console.log(`Section ignorée (pas d'armures): ${sectionTitle}`);
-      continue;
-    }
-    
-    // Extraire les tables de cette section
-    const tableRows = parseMarkdownTable(section);
-    console.log(`Lignes de table trouvées dans la section: ${tableRows.length}`);
-    
-    for (const row of tableRows) {
-      if (row.length < 2) continue;
-      const [nomRaw, ca] = row;
-      if (!nomRaw?.trim()) continue;
+    // Chercher les lignes de table qui contiennent des armures
+    if (line.startsWith('|') && line.endsWith('|') && line.includes('|')) {
+      const cells = line.substring(1, line.length - 1).split('|').map(c => c.trim());
       
-      console.log(`Ligne analysée: [${nomRaw}] -> [${ca}]`);
-      
-      // Ignorer les en-têtes de manière plus robuste
-      const nomNorm = nomRaw.toLowerCase().trim();
-      const caNorm = (ca || '').toLowerCase().trim();
-      
-      if (
-        nomNorm === 'armures' || 
-        nomNorm === 'armure' ||
-        caNorm.includes('classe d\'armure') ||
-        caNorm.includes('ca') ||
-        nomNorm === 'nom' ||
-        nomRaw.includes('---') ||
-        nomRaw.includes('=') ||
-        caNorm === 'force' ||
-        caNorm === 'discrétion' ||
-        !nomRaw.trim()
-      ) {
-        console.log(`Ligne ignorée (en-tête): ${nomRaw}`);
-        continue;
-      }
-      
-      const nom = stripPriceParentheses(nomRaw);
-      let base = 10, addDex = false, dexCap: number | null = null;
-      
-      // Parser la CA de manière plus robuste
-      const dexMatch = ca.match(/(\d+)\s*\+\s*modificateur\s*de\s*dex/i);
-      const capMatch = ca.match(/\(max\s*(\d+)\)/i);
-      
-      if (dexMatch) { 
-        base = +dexMatch[1]; 
-        addDex = true; 
-        dexCap = capMatch ? +capMatch[1] : null; 
-        console.log(`Armure avec Dex: ${nom} -> ${base} + Dex (max: ${dexCap})`);
-      } else { 
-        const directMatch = ca.match(/^\s*(\d+)\s*$/); 
-        if (directMatch) { 
-          base = +directMatch[1]; 
-          addDex = false; 
-          dexCap = null; 
-          console.log(`Armure sans Dex: ${nom} -> ${base}`);
+      if (cells.length >= 2) {
+        const [nomRaw, ca] = cells;
+        
+        console.log(`Ligne ${i+1}: [${nomRaw}] -> [${ca}]`);
+        
+        // Ignorer les en-têtes et séparateurs de manière plus précise
+        const nomNorm = nomRaw.toLowerCase();
+        const caNorm = (ca || '').toLowerCase();
+        
+        if (
+          !nomRaw ||
+          !ca ||
+          nomNorm.includes('armure') && caNorm.includes('classe') ||
+          nomRaw.includes('-') && nomRaw.length > 5 ||
+          ca.includes('-') && ca.length > 5 ||
+          nomRaw === '—' ||
+          ca === '—' ||
+          caNorm.includes('force') ||
+          caNorm.includes('discrétion') ||
+          nomNorm === 'force' ||
+          nomNorm === 'discrétion'
+        ) {
+          console.log(`  -> Ignoré (en-tête ou séparateur)`);
+          continue;
+        }
+        
+        const nom = stripPriceParentheses(nomRaw);
+        
+        // Parser la CA avec tous les cas possibles
+        let base = 10, addDex = false, dexCap: number | null = null;
+        
+        console.log(`  -> Parsing CA: "${ca}"`);
+        
+        if (ca.toLowerCase().includes('modificateur de dex')) {
+          // Formule avec Dex: "11 + modificateur de Dex" ou "12 + modificateur de Dex (max 2)"
+          const baseMatch = ca.match(/(\d+)/);
+          const capMatch = ca.match(/max\s*(\d+)/i);
+          
+          if (baseMatch) {
+            base = parseInt(baseMatch[1]);
+            addDex = true;
+            dexCap = capMatch ? parseInt(capMatch[1]) : null;
+            console.log(`    -> Formule Dex: ${base} + Dex${dexCap ? ` (max ${dexCap})` : ''}`);
+          }
         } else {
-          console.log(`CA non reconnue pour ${nom}: "${ca}"`);
-          // Essayer d'extraire au moins un nombre
-          const anyNumberMatch = ca.match(/(\d+)/);
-          if (anyNumberMatch) {
-            base = +anyNumberMatch[1];
+          // Nombre simple: "14", "16", etc.
+          const numberMatch = ca.match(/^\s*(\d+)\s*$/);
+          if (numberMatch) {
+            base = parseInt(numberMatch[1]);
             addDex = false;
             dexCap = null;
-            console.log(`CA extraite par défaut: ${nom} -> ${base}`);
+            console.log(`    -> Nombre simple: ${base}`);
+          } else {
+            console.log(`    -> CA non reconnue, tentative d'extraction de nombre`);
+            // Fallback: essayer d'extraire n'importe quel nombre
+            const anyNumberMatch = ca.match(/(\d+)/);
+            if (anyNumberMatch) {
+              base = parseInt(anyNumberMatch[1]);
+              addDex = false;
+              dexCap = null;
+              console.log(`    -> Nombre extrait: ${base}`);
+            }
           }
         }
+        
+        const armorItem = { 
+          id: `armor:${nom}`, 
+          kind: 'armors' as CatalogKind, 
+          name: nom, 
+          armor: { base, addDex, dexCap, label: ca } 
+        };
+        
+        items.push(armorItem);
+        console.log(`  -> ✅ Ajouté: ${nom}`);
       }
-      
-      items.push({ 
-        id: `armor:${nom}`, 
-        kind: 'armors', 
-        name: nom, 
-        armor: { base, addDex, dexCap, label: ca } 
-      });
     }
   }
   
+  console.log(`\n=== RÉSUMÉ FINAL ===`);
   console.log(`Total armures trouvées: ${items.length}`);
-  console.log('Liste des armures:', items.map(i => i.name));
+  items.forEach(item => {
+    const armor = item.armor!;
+    console.log(`- ${item.name}: CA ${armor.base}${armor.addDex ? ' + Dex' : ''}${armor.dexCap ? ` (max ${armor.dexCap})` : ''}`);
+  });
+  console.log('====================');
+  
   return items;
 }
 
@@ -383,7 +391,7 @@ export function EquipmentListModal({
           fetchText(URLS.adventuring_gear), fetchText(URLS.tools),
         ]);
 
-        console.log('Début du parsing des armures...');
+        console.log('Début du chargement des équipements...');
         const armorItems = parseArmors(armorsMd);
         console.log('Fin du parsing des armures');
 
@@ -405,12 +413,14 @@ export function EquipmentListModal({
           return true;
         });
         
+        console.log(`\n=== STATISTIQUES FINALES ===`);
         console.log(`Total d'équipements chargés: ${cleaned.length}`);
         console.log(`Armures: ${cleaned.filter(i => i.kind === 'armors').length}`);
         console.log(`Boucliers: ${cleaned.filter(i => i.kind === 'shields').length}`);
         console.log(`Armes: ${cleaned.filter(i => i.kind === 'weapons').length}`);
         console.log(`Outils: ${cleaned.filter(i => i.kind === 'tools').length}`);
         console.log(`Équipements: ${cleaned.filter(i => i.kind === 'adventuring_gear').length}`);
+        console.log('============================');
         
         setAll(cleaned);
       } catch (e) {
