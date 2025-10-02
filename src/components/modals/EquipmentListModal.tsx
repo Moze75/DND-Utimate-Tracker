@@ -102,6 +102,8 @@ function parseArmors(md: string): CatalogItem[] {
           ca.includes('-') && ca.length > 5 ||
           nomRaw === '—' ||
           ca === '—' ||
+          nomRaw === '---' ||  // CORRECTION: Ignorer les lignes avec ---
+          ca === '---' ||      // CORRECTION: Ignorer les CA avec ---
           caNorm.includes('force') ||
           caNorm.includes('discrétion') ||
           nomNorm === 'force' ||
