@@ -149,8 +149,9 @@ interface InfoBubbleProps {
   onRequestOpenList?: () => void;
   onOpenEditFromSlot?: () => void;
   onOpenWeaponsManage?: () => void;
+  onOpenBagModal?: () => void;
 }
-const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onRequestOpenList, onOpenEditFromSlot, onOpenWeaponsManage }: InfoBubbleProps) => (
+const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onRequestOpenList, onOpenEditFromSlot, onOpenWeaponsManage, onOpenBagModal }: InfoBubbleProps) => (
   <div className="fixed inset-0 z-[9999]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
     <div className="fixed inset-0 bg-black/50" onClick={onClose} />
     <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-gray-900/95 text-sm text-gray-300 rounded-lg shadow-lg w-[min(32rem,95vw)] border border-gray-700/50">
@@ -232,6 +233,12 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
           </div>
         )
       )}
+
+      {type === 'bag' && (
+        <div className="mt-3">
+          <button onClick={() => onOpenBagModal?.()} className="btn-primary px-3 py-2 rounded-lg">Modifier le contenu</button>
+        </div>
+      )}
     </div>
   </div>
 );
@@ -246,9 +253,10 @@ interface EquipmentSlotProps {
   onOpenEditFromSlot: () => void;
   isEquipped: boolean;
   onOpenWeaponsManageFromSlot?: () => void;
+  onOpenBagModal?: () => void;
 }
 const EquipmentSlot = ({
-  icon, position, equipment, type, onRequestOpenList, onToggleEquipFromSlot, onOpenEditFromSlot, isEquipped, onOpenWeaponsManageFromSlot
+  icon, position, equipment, type, onRequestOpenList, onToggleEquipFromSlot, onOpenEditFromSlot, isEquipped, onOpenWeaponsManageFromSlot, onOpenBagModal
 }: EquipmentSlotProps) => {
   const [showInfo, setShowInfo] = useState(false);
   return (
@@ -273,6 +281,7 @@ const EquipmentSlot = ({
           onRequestOpenList={onRequestOpenList}
           onOpenEditFromSlot={onOpenEditFromSlot}
           onOpenWeaponsManage={onOpenWeaponsManageFromSlot}
+          onOpenBagModal={onOpenBagModal}
         />
       )}
     </>
@@ -330,8 +339,6 @@ export function EquipmentTab({
   const [showCustom, setShowCustom] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [showWeaponsModal, setShowWeaponsModal] = useState(false);
-  const [showInventoryModal, setShowInventoryModal] = useState(false);
-  const [inventoryModalType, setInventoryModalType] = useState<'armor' | 'shield'>('armor');
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmPayload, setConfirmPayload] = useState<{ mode: 'equip' | 'unequip'; itemId: string; itemName: string } | null>(null);
@@ -339,6 +346,14 @@ export function EquipmentTab({
   // NOUVEAU: gestion verrouillage type et mémo ancien meta pendant édition
   const [editLockType, setEditLockType] = useState(false);
   const prevEditMetaRef = useRef<ItemMeta | null>(null);
+
+  // NOUVEAU: Modal inventaire pour équiper depuis le sac
+  const [showInventoryModal, setShowInventoryModal] = useState(false);
+  const [inventoryModalType, setInventoryModalType] = useState<'armor' | 'shield'>('armor');
+
+  // NOUVEAU: Modal sac à dos (champ libre)
+  const [showBagModal, setShowBagModal] = useState(false);
+  const [bagText, setBagText] = useState(bag?.description || '');
 
   useEffect(() => {
     stableEquipmentRef.current = { armor, shield, bag };
@@ -349,6 +364,13 @@ export function EquipmentTab({
     if (!shield && player.equipment?.shield) setShield(player.equipment.shield);
     if (!bag && player.equipment?.bag) setBag(player.equipment.bag);
   }, [player.equipment]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Synchroniser bagText avec les données du sac
+  useEffect(() => {
+    if (bag?.description) {
+      setBagText(bag.description);
+    }
+  }, [bag]);
 
   const jewelryItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'jewelry'), [inventory]);
   const potionItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'potion'), [inventory]);
@@ -698,33 +720,33 @@ export function EquipmentTab({
               style={{ mixBlendMode: 'luminosity' }}
             />
 
-              <EquipmentSlot
-                icon={<ShieldIcon size={24} className="text-purple-500" />}
-                position="top-[27%] left-1/2 -translate-x-1/2"
-                equipment={armor || null}
-                type="armor"
-                onRequestOpenList={() => { 
-                  setInventoryModalType('armor'); 
-                  setShowInventoryModal(true); 
-                }}
-                onToggleEquipFromSlot={() => toggleFromSlot('armor')}
-                onOpenEditFromSlot={() => openEditFromSlot('armor')}
-                isEquipped={!!armor}
-              />
+            <EquipmentSlot
+              icon={<ShieldIcon size={24} className="text-purple-500" />}
+              position="top-[27%] left-1/2 -translate-x-1/2"
+              equipment={armor || null}
+              type="armor"
+              onRequestOpenList={() => { 
+                setInventoryModalType('armor'); 
+                setShowInventoryModal(true); 
+              }}
+              onToggleEquipFromSlot={() => toggleFromSlot('armor')}
+              onOpenEditFromSlot={() => openEditFromSlot('armor')}
+              isEquipped={!!armor}
+            />
 
-              <EquipmentSlot
-                icon={<ShieldIcon size={24} className="text-blue-500" />}
-                position="top-[50%] left-[15%]"
-                equipment={shield || null}
-                type="shield"
-                onRequestOpenList={() => { 
-                  setInventoryModalType('shield'); 
-                  setShowInventoryModal(true); 
-                }}
-                onToggleEquipFromSlot={() => toggleFromSlot('shield')}
-                onOpenEditFromSlot={() => openEditFromSlot('shield')}
-                isEquipped={!!shield}
-              />
+            <EquipmentSlot
+              icon={<ShieldIcon size={24} className="text-blue-500" />}
+              position="top-[50%] left-[15%]"
+              equipment={shield || null}
+              type="shield"
+              onRequestOpenList={() => { 
+                setInventoryModalType('shield'); 
+                setShowInventoryModal(true); 
+              }}
+              onToggleEquipFromSlot={() => toggleFromSlot('shield')}
+              onOpenEditFromSlot={() => openEditFromSlot('shield')}
+              isEquipped={!!shield}
+            />
 
             <EquipmentSlot
               icon={<Sword size={24} className="text-red-500" />}
@@ -768,6 +790,7 @@ export function EquipmentTab({
               onRequestOpenList={() => { setAllowedKinds(null); setShowList(true); }}
               onToggleEquipFromSlot={() => {}}
               onOpenEditFromSlot={() => {}}
+              onOpenBagModal={() => setShowBagModal(true)}
               isEquipped={false}
             />
           </div>
@@ -1035,43 +1058,6 @@ export function EquipmentTab({
         }}
       />
 
-      {/* Filtres: MODALE CENTRÉE */}
-      {filtersOpen && (
-        <div className="fixed inset-0 z-[11000]" onClick={(e) => { if (e.target === e.currentTarget) setFiltersOpen(false); }}>
-          <div className="fixed inset-0 bg-black/60" />
-          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(22rem,92vw)] bg-gray-900/95 border border-gray-700 rounded-lg p-3">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-gray-100 font-semibold">Filtres du sac</h4>
-              <button onClick={() => setFiltersOpen(false)} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg" aria-label="Fermer">
-                <X />
-              </button>
-            </div>
-            <div className="space-y-1">
-              {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
-                <label key={k} className="flex items-center justify-between text-sm text-gray-200 px-2 py-1 rounded hover:bg-gray-800/60 cursor-pointer">
-                  <span>
-                    {k === 'armor' ? 'Armure'
-                      : k === 'shield' ? 'Bouclier'
-                      : k === 'weapon' ? 'Arme'
-                      : k === 'potion' ? 'Potion/Poison'
-                      : k === 'jewelry' ? 'Bijoux'
-                      : k === 'tool' ? 'Outils' : 'Équipement'}
-                  </span>
-                  <input
-                    type="checkbox"
-                    className="accent-red-500"
-                    checked={bagKinds[k]}
-                    onChange={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="mt-3 text-right">
-              <button onClick={() => setFiltersOpen(false)} className="btn-primary px-3 py-2 rounded-lg">Fermer</button>
-            </div>
-          </div>
-        </div>
-      )}
       {/* NOUVEAU: Modal équipement depuis le sac */}
       {showInventoryModal && (
         <InventoryEquipmentModal
@@ -1084,6 +1070,97 @@ export function EquipmentTab({
           equipmentType={inventoryModalType}
         />
       )}
-    </div>
-  );
-}
+
+      {/* NOUVEAU: Modal Sac à dos (champ libre) */}
+      {showBagModal && (
+        <div className="fixed inset-0 z-[11000]" onClick={(e) => { if (e.target === e.currentTarget) setShowBagModal(false); }}>
+          <div className="fixed inset-0 bg-black/60" />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(32rem,95vw)] bg-gray-900/95 border border-gray-700 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Backpack size={20} className="text-purple-500" />
+                <h3 className="text-lg font-semibold text-gray-100">Contenu du sac à dos</h3>
+              </div>
+              <button onClick={() => setShowBagModal(false)} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <textarea
+                placeholder="Listez ici le contenu de votre sac à dos..."
+                value={bagText}
+                onChange={(e) => setBagText(e.target.value)}
+                className="input-dark w-full px-3 py-2 rounded-md"
+                rows={8}
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowBagModal(false)}
+                className="btn-secondary px-4 py-2 rounded-lg"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const bagEquipment = {
+                      name: 'Sac à dos',
+                      description: bagText,
+                      isTextArea: true
+                    };
+
+                    // Sauvegarder dans Supabase (même chemin que votre ancien code)
+                    const { error } = await supabase
+                      .from('players')
+                      .update({
+                        equipment: {
+                          ...player.equipment,
+                          bag: bagEquipment
+                        }
+                      })
+                      .eq('id', player.id);
+
+                    if (error) throw error;
+
+                    // Mettre à jour l'état local
+                    setBag(bagEquipment);
+                    onPlayerUpdate({
+                      ...player,
+                      equipment: {
+                        ...player.equipment,
+                        bag: bagEquipment
+                      }
+                    });
+
+                    toast.success('Contenu du sac sauvegardé');
+                    setShowBagModal(false);
+                  } catch (error) {
+                    console.error('Erreur lors de la sauvegarde du sac:', error);
+                    toast.error('Erreur lors de la sauvegarde');
+                  }
+                }}
+                className="btn-primary px-4 py-2 rounded-lg"
+              >
+                Sauvegarder
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filtres: MODALE CENTRÉE */}
+      {filtersOpen && (
+        <div className="fixed inset-0 z-[11000]" onClick={(e) => { if (e.target === e.currentTarget) setFiltersOpen(false); }}>
+          <div className="fixed inset-0 bg-black/60" />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(22rem,92vw)] bg-gray-900/95 border border-gray-700 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-gray-100 font-semibold">Filtres du sac</h4>
+              <button onClick={() => setFiltersOpen(false)} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg" aria-label="Fermer">
+                <X />
+              </button>
+            </div>
+            <div className="space-y-1">
+              {(['armor','shield','weapon
