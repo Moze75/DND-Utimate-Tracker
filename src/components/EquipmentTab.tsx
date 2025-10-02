@@ -1164,3 +1164,32 @@ export function EquipmentTab({
             </div>
             <div className="space-y-1">
               {(['armor','shield','weapon
+                             <div className="space-y-1">
+              {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
+                <label key={k} className="flex items-center justify-between text-sm text-gray-200 px-2 py-1 rounded hover:bg-gray-800/60 cursor-pointer">
+                  <span>
+                    {k === 'armor' ? 'Armure'
+                      : k === 'shield' ? 'Bouclier'
+                      : k === 'weapon' ? 'Arme'
+                      : k === 'potion' ? 'Potion/Poison'
+                      : k === 'jewelry' ? 'Bijoux'
+                      : k === 'tool' ? 'Outils' : 'Équipement'}
+                  </span>
+                  <input
+                    type="checkbox"
+                    className="accent-red-500"
+                    checked={bagKinds[k]}
+                    onChange={() => setBagKinds(prev => ({ ...prev, [k]: !prev[k] }))}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 text-right">
+              <button onClick={() => setFiltersOpen(false)} className="btn-primary px-3 py-2 rounded-lg">Fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
