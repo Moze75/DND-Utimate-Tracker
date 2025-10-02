@@ -83,7 +83,8 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
       {/* Bandeau pleine largeur avec image de fond - tout en haut */}
       <div className="w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] -mt-8">
         {/* Image de fond */}
-  <div className="w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] -mt-8 h-64"> {/* Ajouter h-64 ou h-80 */}
+        <div 
+          className="absolute inset-0"
 style={{
   backgroundImage: "url('/background/ddbground.png')",
   backgroundSize: '100% auto', // Largeur 100%, hauteur auto
@@ -112,7 +113,7 @@ style={{
               Choisissez vite mais choisissez bien
             </p>
           </div>
-        </div>
+        </div> 
       </div>
 
       {/* Barre de progression en dessous du bandeau */}
