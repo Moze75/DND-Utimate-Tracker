@@ -78,19 +78,19 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
     }
   };
 
-  return (
-    <div className="w-full mb-8">
-      {/* Bandeau pleine largeur avec image de fond - tout en haut */}
-      <div className="w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] -mt-8">
-        {/* Image de fond */}
-        <div 
-          className="absolute inset-0"
-style={{
-  backgroundImage: "url('/background/ddbground.png')",
-  backgroundSize: '100% auto', // Largeur 100%, hauteur auto
-  backgroundPosition: 'center top',
-  backgroundRepeat: 'no-repeat'
-}}
+return (
+  <div className="w-full mb-8">
+    {/* Bandeau pleine largeur avec image de fond - tout en haut */}
+    <div className="w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] -mt-8 h-64"> {/* ← ICI */}
+      {/* Image de fond */}
+      <div 
+        className="absolute inset-0"
+        style={{
+          backgroundImage: "url('/background/ddbground.png')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center 40%',
+          backgroundRepeat: 'no-repeat'
+        }}
         >
           {/* Overlay blanc transparent (20% d'opacité pour plus de transparence) */}
           <div className="absolute inset-0 bg-white/20"></div>
