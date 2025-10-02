@@ -87,8 +87,8 @@ export default function ProgressBar({ currentStep, totalSteps, steps }: Progress
           className="absolute inset-0"
 style={{
   backgroundImage: "url('/background/ddbground.png')",
-  backgroundSize: 'contain', // Au lieu de 'cover'
-  backgroundPosition: 'center center',
+  backgroundSize: '100% auto', // Largeur 100%, hauteur auto
+  backgroundPosition: 'center top',
   backgroundRepeat: 'no-repeat'
 }}
         >
