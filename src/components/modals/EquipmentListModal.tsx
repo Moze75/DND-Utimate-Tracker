@@ -114,6 +114,12 @@ function parseArmors(md: string): CatalogItem[] {
         }
         
         const nom = stripPriceParentheses(nomRaw);
+
+        // CORRECTION: Vérifier que le nom n'est pas vide après nettoyage
+        if (!nom || nom === '---' || nom.length < 2) {
+          console.log(`  -> Ignoré (nom vide ou invalide): "${nom}"`);
+          continue;
+        }
         
         // Parser la CA avec tous les cas possibles
         let base = 10, addDex = false, dexCap: number | null = null;
