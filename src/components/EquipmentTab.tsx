@@ -192,12 +192,18 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
     {equipment.name && <h5 className="font-medium text-gray-100 break-words">{smartCapitalize(equipment.name)}</h5>}
     
     {/* Contenu manuel du sac */}
+{type === 'bag' && (
+  <div className="space-y-2">
+    {equipment?.name && <h5 className="font-medium text-gray-100 break-words">{smartCapitalize(equipment.name)}</h5>}
+    
+    {/* Contenu manuel du sac */}
     {bagText && (
       <div className="text-sm text-gray-400 whitespace-pre-wrap border-b border-gray-700/50 pb-2">
         {bagText}
       </div>
     )}
-         {/* Liste automatique des équipements */}
+    
+    {/* Liste automatique des équipements */}
     {(() => {
       const equipmentItems = inventory.filter(item => {
         const meta = parseMeta(item.description);
@@ -226,62 +232,15 @@ const InfoBubble = ({ equipment, type, onClose, onToggleEquip, isEquipped, onReq
         <div className="text-sm text-gray-400">Sac vide</div>
       ) : null;
     })()}
-  </div>
-) : (
-  <div className="text-sm text-gray-400">Sac vide</div>
-)}
 
-{type === 'bag' && (
-  <div className="mt-3">
-    <button onClick={() => onOpenBagModal?.()} className="btn-primary px-3 py-2 rounded-lg">
-      Modifier le contenu
-    </button>
-  </div>
-)}
-
-          {type === 'shield' && typeof equipment.shield_bonus === 'number' && (
-            <div className="mt-1 text-sm text-gray-300 flex items-center justify-between">
-              <span className="text-gray-400">Bonus de bouclier</span>
-              <span className="font-medium text-gray-100">+{equipment.shield_bonus}</span>
-            </div>
-          )}
-
-          {type === 'weapon' && equipment.weapon_meta && (
-            <div className="mt-1 text-sm text-gray-300 space-y-1">
-              <div className="flex items-center justify-between"><span className="text-gray-400">Dés</span><span className="font-medium text-gray-100">{equipment.weapon_meta.damageDice}</span></div>
-              <div className="flex items-center justify-between"><span className="text-gray-400">Type</span><span className="font-medium text-gray-100">{equipment.weapon_meta.damageType}</span></div>
-              {equipment.weapon_meta.properties && <div className="flex items-center justify-between"><span className="text-gray-400">Propriété</span><span className="font-medium text-gray-100">{equipment.weapon_meta.properties}</span></div>}
-              {equipment.weapon_meta.range && <div className="flex items-center justify-between"><span className="text-gray-400">Portée</span><span className="font-medium text-gray-100">{equipment.weapon_meta.range}</span></div>}
-            </div>
-          )}
-        </div>
-      ) : (
-        (type === 'armor' || type === 'shield' || type === 'weapon') && (
-          <div className="text-sm text-gray-400">
-            {type === 'weapon' ? (
-              <div className="mt-3">
-                <button onClick={() => onOpenWeaponsManage?.()} className="btn-primary px-3 py-2 rounded-lg">Gérer mes armes</button>
-              </div>
-            ) : (
-              <>
-                Aucun {type === 'armor' ? 'armure' : 'bouclier'} équipé.
-                <div className="mt-3">
-                  <button onClick={() => onRequestOpenList?.()} className="btn-primary px-3 py-2 rounded-lg">Équiper depuis le sac</button>
-                </div>
-              </>
-            )}
-          </div>
-        )
-      )}
-
-      {type === 'bag' && (
-        <div className="mt-3">
-          <button onClick={() => onOpenBagModal?.()} className="btn-primary px-3 py-2 rounded-lg">Modifier le contenu</button>
-        </div>
-      )}
+    {/* Bouton modifier */}
+    <div className="mt-3">
+      <button onClick={() => onOpenBagModal?.()} className="btn-primary px-3 py-2 rounded-lg">
+        Modifier le contenu
+      </button>
     </div>
   </div>
-);
+)}
 
 interface EquipmentSlotProps {
   icon: React.ReactNode;
