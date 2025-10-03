@@ -14,6 +14,10 @@ import { InventoryItemEditModal } from './modals/InventoryItemEditModal';
 import { WeaponsManageModal } from './modals/WeaponsManageModal';
 import { InventoryEquipmentModal } from './modals/InventoryEquipmentModal';
 
+// ✅ Nouveaux imports maîtrise d'armes
+import { checkWeaponProficiency, getPlayerWeaponProficiencies, WeaponProficiencyCheck } from '../utils/weaponProficiencyChecker';
+import { WeaponProficiencyWarningModal } from './modals/WeaponProficiencyWarningModal';
+
 /* ====================== Types & helpers ====================== */
 
 interface Equipment {
@@ -207,7 +211,7 @@ const InfoBubble = ({
           {equipment.name && <h5 className="font-medium text-gray-100 break-words">{smartCapitalize(equipment.name)}</h5>}
           {equipment.description && <p className="text-sm text-gray-400 whitespace-pre-wrap">{equipment.description}</p>}
 
-          {type === 'armor' && equipment.armor_formula && (
+            {type === 'armor' && equipment.armor_formula && (
             <div className="mt-1 text-sm text-gray-300 flex items-center justify-between">
               <span className="text-gray-400">Formule</span>
               <span className="font-medium text-gray-100">{equipment.armor_formula.label || ''}</span>
@@ -416,6 +420,11 @@ export function EquipmentTab({
   // NOUVEAU: Modal sac à dos (champ libre)
   const [showBagModal, setShowBagModal] = useState(false);
   const [bagText, setBagText] = useState(bag?.description || '');
+
+  // ✅ NOUVEAU: États maîtrise d'armes
+  const [showProficiencyWarning, setShowProficiencyWarning] = useState(false);
+  const [proficiencyCheck, setProficiencyCheck] = useState<WeaponProficiencyCheck | null>(null);
+  const [pendingWeaponEquip, setPendingWeaponEquip] = useState<InventoryItem | null>(null);
 
   useEffect(() => {
     stableEquipmentRef.current = { armor, shield, bag };
@@ -669,26 +678,10 @@ useEffect(() => {
     if (updates.length) await Promise.allSettled(updates);
   };
 
-  // CORRECTION CRITIQUE : Fonction performToggle simplifiée
-  const performToggle = async (item: InventoryItem, mode: 'equip' | 'unequip') => {
-    // Protection anti double-clic
-    if (pendingEquipment.has(item.id)) {
-      console.log('Action déjà en cours pour:', item.id);
-      return;
-    }
-    
-    // Récupérer l'item le plus frais de l'état
-    const freshItem = inventory.find(i => i.id === item.id);
-    if (!freshItem) {
-      toast.error("Objet introuvable");
-      return;
-    }
-    
+  // ✅ NOUVEAU : Fonction séparée effectuant réellement l'équipement/déséquipement
+  const performEquipToggle = async (freshItem: InventoryItem, mode: 'equip' | 'unequip') => {
     const meta = parseMeta(freshItem.description);
-    if (!meta) {
-      toast.error("Métadonnées manquantes");
-      return;
-    }
+    if (!meta) return;
 
     console.log(`Début ${mode} pour:`, freshItem.name, 'meta.equipped:', meta.equipped);
 
@@ -733,69 +726,74 @@ useEffect(() => {
           await saveEquipment('shield', eq);
           toast.success('Bouclier équipé');
         }
-} else if (meta.type === 'weapon') {
-  // CORRECTION CRITIQUE : Logique avec persistance
-  const targetEquipped = mode === 'equip';
-  
-  if (meta.equipped === targetEquipped) {
-    console.log('Arme déjà dans l\'état souhaité');
-    return;
-  }
-  
-  const nextMeta = { ...meta, equipped: targetEquipped };
-  
-  // Mise à jour de l'item
-  await updateItemMetaComplete(freshItem, nextMeta);
+      } else if (meta.type === 'weapon') {
+        const targetEquipped = mode === 'equip';
+        
+        if (meta.equipped === targetEquipped) {
+          console.log('Arme déjà dans l\'état souhaité');
+          return;
+        }
+        
+        const nextMeta = { ...meta, equipped: targetEquipped };
+        
+        await updateItemMetaComplete(freshItem, nextMeta);
 
-  // NOUVEAU: Sauvegarder les armes équipées dans player.equipment.weapons
-  const currentWeapons = (player.equipment as any)?.weapons || [];
-  let updatedWeapons;
+        const currentWeapons = (player.equipment as any)?.weapons || [];
+        let updatedWeapons;
 
-  // Gestion des attaques
-  if (targetEquipped) {
-    const weaponData = {
-      inventory_item_id: freshItem.id,
-      name: freshItem.name,
-      description: visibleDescription(freshItem.description),
-      weapon_meta: meta.weapon || null
-    };
-    updatedWeapons = [...currentWeapons.filter((w: any) => w.inventory_item_id !== freshItem.id), weaponData];
-    await createOrUpdateWeaponAttack(freshItem.name, meta.weapon);
-    toast.success('Arme équipée');
-  } else {
-    // Retirer l'arme des armes équipées
-    updatedWeapons = currentWeapons.filter((w: any) => w.inventory_item_id !== freshItem.id);
-    await removeWeaponAttacksByName(freshItem.name);
-    toast.success('Arme déséquipée');
-  }
+        if (targetEquipped) {
+          const weaponData = {
+            inventory_item_id: freshItem.id,
+            name: freshItem.name,
+            description: visibleDescription(freshItem.description),
+            weapon_meta: meta.weapon || null
+          };
+          updatedWeapons = [...currentWeapons.filter((w: any) => w.inventory_item_id !== freshItem.id), weaponData];
+          await createOrUpdateWeaponAttack(freshItem.name, meta.weapon);
+          
+          // ✅ Message de succès adapté selon la maîtrise
+          const playerProficiencies = getPlayerWeaponProficiencies(player);
+          const proficiencyResult = checkWeaponProficiency(freshItem.name, playerProficiencies);
+          
+          if (proficiencyResult.isProficient) {
+            toast.success('Arme équipée');
+          } else {
+            toast.success('Arme équipée (non maîtrisée - désavantage aux attaques)', { 
+              duration: 4000,
+              icon: '⚠️'
+            });
+          }
+        } else {
+          updatedWeapons = currentWeapons.filter((w: any) => w.inventory_item_id !== freshItem.id);
+          await removeWeaponAttacksByName(freshItem.name);
+          toast.success('Arme déséquipée');
+        }
 
-  // NOUVEAU: Sauvegarder dans player.equipment.weapons
-  const updatedEquipment = {
-    ...player.equipment,
-    weapons: updatedWeapons
-  };
+        const updatedEquipment = {
+          ...player.equipment,
+            weapons: updatedWeapons
+        };
 
-  try {
-    const { error } = await supabase
-      .from('players')
-      .update({ equipment: updatedEquipment })
-      .eq('id', player.id);
-      
-    if (error) throw error;
-    
-    onPlayerUpdate({
-      ...player,
-      equipment: updatedEquipment
-    });
-    } catch (weaponSaveError) {
-      console.error('Erreur sauvegarde armes équipées:', weaponSaveError);
-    }
-    
-    console.log(`${mode} terminé pour:`, freshItem.name);
-    }
-    } catch (performToggleError) {  // ← CHANGÉ: e → performToggleError
-      console.error('Erreur performToggle:', performToggleError);  // ← CHANGÉ: e → performToggleError
-      // En cas d'erreur, refresh pour récupérer l'état correct
+        try {
+          const { error } = await supabase
+            .from('players')
+            .update({ equipment: updatedEquipment })
+            .eq('id', player.id);
+            
+          if (error) throw error;
+          
+          onPlayerUpdate({
+            ...player,
+            equipment: updatedEquipment
+          });
+        } catch (weaponSaveError) {
+          console.error('Erreur sauvegarde armes équipées:', weaponSaveError);
+        }
+        
+        console.log(`${mode} terminé pour:`, freshItem.name);
+      }
+    } catch (performToggleError) {
+      console.error('Erreur performToggle:', performToggleError);
       await refreshInventory(0);
       toast.error('Erreur lors de la bascule équipement');
     } finally {
@@ -805,6 +803,59 @@ useEffect(() => {
         return next;
       });
     }
+  };
+
+  // ✅ NOUVELLE version performToggle avec vérification de maîtrise
+  const performToggle = async (item: InventoryItem, mode: 'equip' | 'unequip') => {
+    // Protection anti double-clic
+    if (pendingEquipment.has(item.id)) {
+      console.log('Action déjà en cours pour:', item.id);
+      return;
+    }
+    
+    // Récupérer l'item le plus frais de l'état
+    const freshItem = inventory.find(i => i.id === item.id);
+    if (!freshItem) {
+      toast.error("Objet introuvable");
+      return;
+    }
+    
+    const meta = parseMeta(freshItem.description);
+    if (!meta) {
+      toast.error("Métadonnées manquantes");
+      return;
+    }
+
+    // ✅ Vérification des maîtrises d'armes lors de l'équipement
+    if (meta.type === 'weapon' && mode === 'equip') {
+      const playerProficiencies = getPlayerWeaponProficiencies(player);
+      const proficiencyResult = checkWeaponProficiency(freshItem.name, playerProficiencies);
+      
+      if (!proficiencyResult.isProficient) {
+        setPendingWeaponEquip(freshItem);
+        setProficiencyCheck(proficiencyResult);
+        setShowProficiencyWarning(true);
+        return; // On arrête ici. L'équipement réel se fera si l'utilisateur confirme.
+      }
+    }
+
+    await performEquipToggle(freshItem, mode);
+  };
+
+  // ✅ Gestionnaires modal maîtrise
+  const handleProficiencyWarningConfirm = async () => {
+    setShowProficiencyWarning(false);
+    if (pendingWeaponEquip) {
+      await performEquipToggle(pendingWeaponEquip, 'equip');
+      setPendingWeaponEquip(null);
+      setProficiencyCheck(null);
+    }
+  };
+
+  const handleProficiencyWarningCancel = () => {
+    setShowProficiencyWarning(false);
+    setPendingWeaponEquip(null);
+    setProficiencyCheck(null);
   };
 
   const requestToggleWithConfirm = (item: InventoryItem) => {
@@ -1310,9 +1361,6 @@ useEffect(() => {
                 placeholder="Listez ici le contenu de votre sac à dos..."
                 value={bagText}
                 onChange={(e) => setBagText(e.target.value)}
-                                placeholder="Listez ici le contenu de votre sac à dos..."
-                value={bagText}
-                onChange={(e) => setBagText(e.target.value)}
                 className="input-dark w-full px-3 py-2 rounded-md"
                 rows={8}
               />
@@ -1334,7 +1382,6 @@ useEffect(() => {
                       isTextArea: true
                     };
 
-                    // Sauvegarder dans Supabase (même chemin que votre ancien code)
                     const { error } = await supabase
                       .from('players')
                       .update({
@@ -1347,7 +1394,6 @@ useEffect(() => {
 
                     if (error) throw error;
 
-                    // Mettre à jour l'état local
                     setBag(bagEquipment);
                     onPlayerUpdate({
                       ...player,
@@ -1410,6 +1456,15 @@ useEffect(() => {
           </div>
         </div>
       )}
+
+      {/* ✅ NOUVEAU : Modal d'avertissement maîtrise d'armes */}
+      <WeaponProficiencyWarningModal
+        isOpen={showProficiencyWarning}
+        weaponName={pendingWeaponEquip?.name || ''}
+        proficiencyCheck={proficiencyCheck!}
+        onConfirm={handleProficiencyWarningConfirm}
+        onCancel={handleProficiencyWarningCancel}
+      />
     </div>
   );
 }
