@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { classes } from '../../data/classes';
 import Card, { CardContent, CardHeader } from '../ui/Card';
 import Button from '../ui/Button';
-import { Sword, Heart, Shield, Zap, BookOpen, ChevronDown, CheckSquare, Square } from 'lucide-react';
+import { Sword, Heart, Shield, Zap, BookOpen, ChevronDown, CheckSquare, Square, Package, Wrench } from 'lucide-react';
 import { DndClass } from '../../types/character';
 import { normalizeSkill } from '../../data/skills';
 import { getClassImageUrl } from '../../utils/classImages';
@@ -13,9 +13,13 @@ interface ClassSelectionProps {
   onNext: () => void;
   onPrevious: () => void;
 
-  // Rendez-les bien présents depuis le Wizard pour que les clics aient un effet
+  // Compétences sélectionnées
   selectedSkills?: string[];
   onSelectedSkillsChange?: (skills: string[]) => void;
+
+  // Nouvelle prop pour l'équipement sélectionné
+  selectedEquipmentOption?: string; // "A", "B", "C" ou ""
+  onSelectedEquipmentOptionChange?: (option: string) => void;
 }
 
 const ClassSelection: React.FC<ClassSelectionProps> = ({
@@ -25,6 +29,8 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
   onPrevious,
   selectedSkills = [],
   onSelectedSkillsChange = () => {},
+  selectedEquipmentOption = '',
+  onSelectedEquipmentOptionChange = () => {},
 }) => {
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -74,6 +80,25 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
     onSelectedSkillsChange(Array.from(set));
   };
 
+  const selectEquipmentOption = (option: string) => {
+    if (selectedClass) {
+      onSelectedEquipmentOptionChange(option);
+    }
+  };
+
+  // Gestion spéciale pour le Barde (toutes compétences disponibles)
+  const getAvailableSkillsForClass = (cls: any) => {
+    if (cls.name === 'Barde' && (!cls.availableSkills || cls.availableSkills.length === 0)) {
+      // Pour le Barde : "3 compétences au choix (cf. chapitre 1)" = toutes compétences
+      return [
+        'Acrobaties', 'Athlétisme', 'Arcanes', 'Histoire', 'Intuition', 'Investigation',
+        'Médecine', 'Nature', 'Perception', 'Représentation', 'Persuasion', 'Tromperie',
+        'Intimidation', 'Escamotage', 'Discrétion', 'Survie', 'Dressage', 'Religion'
+      ];
+    }
+    return cls.availableSkills || [];
+  };
+
   return (
     <div className="wizard-step space-y-6">
       <div className="text-center">
@@ -85,10 +110,11 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
         {classes.map((cls) => {
           const isSelected = selectedClass === cls.name;
           const isExpanded = expanded === cls.name;
-          const imageSrc = getClassImageUrl(cls.name); // OK: cls est dans le scope
+          const imageSrc = getClassImageUrl(cls.name);
 
           const limit = cls.skillsToChoose ?? 0;
           const chosenCount = isSelected ? (selectedSkills?.length || 0) : 0;
+          const availableSkillsForClass = getAvailableSkillsForClass(cls);
 
           return (
             <Card
@@ -140,58 +166,157 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
                       </div>
                     )}
 
+                    {/* Maîtrises d'armes */}
+                    <div className="mb-4">
+                      <h4 className="font-medium text-white mb-2 flex items-center">
+                        <Sword className="w-4 h-4 mr-1 text-red-400" />
+                        Maîtrises d'arme
+                      </h4>
+                      <div className="text-sm text-gray-300">
+                        {cls.weaponProficiencies.length > 0 ? (
+                          <ul className="space-y-1">
+                            {cls.weaponProficiencies.map((weapon, idx) => (
+                              <li key={idx}>• {weapon}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <span className="text-gray-500">Aucune</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Formation aux armures */}
+                    <div className="mb-4">
+                      <h4 className="font-medium text-white mb-2 flex items-center">
+                        <Shield className="w-4 h-4 mr-1 text-blue-400" />
+                        Formation aux armures
+                      </h4>
+                      <div className="text-sm text-gray-300">
+                        {cls.armorProficiencies.length > 0 ? (
+                          <ul className="space-y-1">
+                            {cls.armorProficiencies.map((armor, idx) => (
+                              <li key={idx}>• {armor}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <span className="text-gray-500">Aucune</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Maîtrises d'outils (si applicable) */}
+                    {cls.toolProficiencies && cls.toolProficiencies.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="font-medium text-white mb-2 flex items-center">
+                          <Wrench className="w-4 h-4 mr-1 text-yellow-400" />
+                          Maîtrises d'outils
+                        </h4>
+                        <div className="text-sm text-gray-300">
+                          <ul className="space-y-1">
+                            {cls.toolProficiencies.map((tool, idx) => (
+                              <li key={idx}>• {tool}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Choix des compétences */}
+                    {availableSkillsForClass.length > 0 && (
+                      <div className="mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium text-white">Compétences disponibles</h4>
+                          <span className="text-xs text-gray-400">
+                            {isSelected ? chosenCount : 0}/{limit} sélectionnées
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {availableSkillsForClass.map((raw, idx) => {
+                            const label = normalizeSkill(raw);
+                            const canToggle = isSelected;
+                            const isChecked = isSelected && selectedSkills?.includes(label);
+                            const disableCheck =
+                              !canToggle ||
+                              (!isChecked && (selectedSkills?.length || 0) >= limit);
+
+                            return (
+                              <button
+                                type="button"
+                                key={`${raw}-${idx}`}
+                                className={`flex items-center justify-start gap-2 px-3 py-2 rounded-md border text-left ${
+                                  isChecked
+                                    ? 'border-red-500/60 bg-red-900/20 text-gray-100'
+                                    : 'border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-800'
+                                } ${disableCheck ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!disableCheck) toggleSkill(raw, limit);
+                                }}
+                                aria-disabled={disableCheck}
+                              >
+                                {isChecked ? (
+                                  <CheckSquare className="w-4 h-4 text-red-400 shrink-0" />
+                                ) : (
+                                  <Square className="w-4 h-4 text-gray-400 shrink-0" />
+                                )}
+                                <span className="text-sm">{label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Choix d'équipement de départ */}
                     <div className="mb-4">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium text-white">Compétences disponibles</h4>
-                        <span className="text-xs text-gray-400">
-                          {isSelected ? chosenCount : 0}/{limit} sélectionnées
-                        </span>
+                        <h4 className="font-medium text-white flex items-center">
+                          <Package className="w-4 h-4 mr-1 text-yellow-400" />
+                          Équipement de départ
+                        </h4>
+                        {isSelected && selectedEquipmentOption && (
+                          <span className="text-xs text-gray-400">
+                            Option {selectedEquipmentOption} sélectionnée
+                          </span>
+                        )}
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {(cls.availableSkills ?? []).map((raw, idx) => {
-                          const label = normalizeSkill(raw);
-                          const canToggle = isSelected; // on ne coche que sur la classe sélectionnée
-                          const isChecked = isSelected && selectedSkills?.includes(label);
-                          const disableCheck =
-                            !canToggle ||
-                            (!isChecked && (selectedSkills?.length || 0) >= limit);
+                      <div className="space-y-3">
+                        {cls.equipmentOptions.map((option) => {
+                          const canSelect = isSelected;
+                          const isChecked = isSelected && selectedEquipmentOption === option.label;
 
                           return (
                             <button
                               type="button"
-                              key={`${raw}-${idx}`}
-                              className={`flex items-center justify-start gap-2 px-3 py-2 rounded-md border text-left ${
+                              key={option.label}
+                              className={`w-full flex items-start gap-3 px-3 py-3 rounded-md border text-left ${
                                 isChecked
-                                  ? 'border-red-500/60 bg-red-900/20 text-gray-100'
+                                  ? 'border-yellow-500/60 bg-yellow-900/20 text-gray-100'
                                   : 'border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-800'
-                              } ${disableCheck ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              } ${!canSelect ? 'opacity-60 cursor-not-allowed' : ''}`}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (!disableCheck) toggleSkill(raw, limit);
+                                if (canSelect) selectEquipmentOption(option.label);
                               }}
-                              aria-disabled={disableCheck}
+                              aria-disabled={!canSelect}
                             >
                               {isChecked ? (
-                                <CheckSquare className="w-4 h-4 text-red-400 shrink-0" />
+                                <CheckSquare className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
                               ) : (
-                                <Square className="w-4 h-4 text-gray-400 shrink-0" />
+                                <Square className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
                               )}
-                              <span className="text-sm">{label}</span>
+                              <div className="flex-1">
+                                <div className="font-medium text-sm mb-1">Option {option.label}</div>
+                                <ul className="text-xs space-y-1">
+                                  {option.items.map((item, idx) => (
+                                    <li key={idx}>• {item}</li>
+                                  ))}
+                                </ul>
+                              </div>
                             </button>
                           );
                         })}
                       </div>
-                    </div>
-
-                    {/* Équipement */}
-                    <div className="mb-4">
-                      <h4 className="font-medium text-white mb-2">Équipement de départ</h4>
-                      <ul className="text-gray-300 text-sm space-y-1">
-                        {(cls.equipment ?? []).map((item, index) => (
-                          <li key={index}>• {item}</li>
-                        ))}
-                      </ul>
                     </div>
 
                     {/* Capacités de classe */}
