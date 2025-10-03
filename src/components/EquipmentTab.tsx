@@ -434,6 +434,96 @@ export function EquipmentTab({
     }
   }, [bag]);
 
+  // Synchroniser les armes équipées depuis player.equipment.weapons au chargement
+useEffect(() => {
+  const syncWeaponsFromPlayer = async () => {
+    const savedWeapons = (player.equipment as any)?.weapons || [];
+    if (savedWeapons.length === 0) return;
+    
+    console.log('Synchronisation armes au chargement:', savedWeapons);
+    
+    const updates: Promise<any>[] = [];
+    const localUpdates: InventoryItem[] = [];
+    
+    // D'abord, déséquiper toutes les armes dans l'inventaire
+    for (const item of inventory) {
+      const meta = parseMeta(item.description);
+      if (meta?.type === 'weapon' && meta.equipped) {
+        const nextMeta = { ...meta, equipped: false };
+        const nextDesc = injectMetaIntoDescription(visibleDescription(item.description), nextMeta);
+        localUpdates.push({ ...item, description: nextDesc });
+        updates.push(supabase.from('inventory_items').update({ description: nextDesc }).eq('id', item.id));
+      }
+    }
+    
+    // Ensuite, équiper les armes sauvées dans player.equipment.weapons
+    for (const savedWeapon of savedWeapons) {
+      const item = inventory.find(i => i.id === savedWeapon.inventory_item_id);
+      if (item) {
+        const meta = parseMeta(item.description);
+        if (meta?.type === 'weapon') {
+          const nextMeta = { ...meta, equipped: true };
+          const nextDesc = injectMetaIntoDescription(visibleDescription(item.description), nextMeta);
+          
+          // Chercher si l'item est déjà dans localUpdates
+          const existingIndex = localUpdates.findIndex(u => u.id === item.id);
+          if (existingIndex >= 0) {
+            localUpdates[existingIndex] = { ...item, description: nextDesc };
+          } else {
+            localUpdates.push({ ...item, description: nextDesc });
+          }
+          
+          updates.push(supabase.from('inventory_items').update({ description: nextDesc }).eq('id', item.id));
+          
+          // Recréer l'attaque pour cette arme
+          await createOrUpdateWeaponAttack(item.name, meta.weapon);
+        }
+      }
+    }
+    
+    // Mise à jour optimiste locale
+    if (localUpdates.length > 0) {
+      const updatedInventory = inventory.map(item => {
+        const updated = localUpdates.find(u => u.id === item.id);
+        return updated || item;
+      });
+      onInventoryUpdate(updatedInventory);
+      console.log('Inventaire mis à jour avec armes équipées');
+    }
+    
+    // Exécuter les mises à jour DB en arrière-plan
+    if (updates.length > 0) {
+      await Promise.allSettled(updates);
+      console.log('Synchronisation DB armes terminée');
+    }
+  };
+  
+  // Déclencher la synchronisation seulement si :
+  // 1. L'inventaire est chargé (length > 0)
+  // 2. Il y a des armes sauvées dans player.equipment.weapons
+  // 3. Il y a une différence entre les armes sauvées et équipées actuellement
+  if (inventory.length > 0 && (player.equipment as any)?.weapons?.length > 0) {
+    const savedWeaponIds = new Set((player.equipment as any).weapons.map((w: any) => w.inventory_item_id));
+    const currentEquippedIds = new Set(
+      inventory
+        .filter(item => {
+          const meta = parseMeta(item.description);
+          return meta?.type === 'weapon' && meta.equipped;
+        })
+        .map(item => item.id)
+    );
+    
+    // Si les ensembles sont différents, synchroniser
+    const needsSync = 
+      savedWeaponIds.size !== currentEquippedIds.size ||
+      [...savedWeaponIds].some(id => !currentEquippedIds.has(id));
+    
+    if (needsSync) {
+      console.log('Synchronisation nécessaire:', { savedWeaponIds, currentEquippedIds });
+      syncWeaponsFromPlayer();
+    }
+  }
+}, [inventory, player.equipment]); // Se déclenche quand l'inventaire ou l'équipement change
   const jewelryItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'jewelry'), [inventory]);
   const potionItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'potion'), [inventory]);
 
