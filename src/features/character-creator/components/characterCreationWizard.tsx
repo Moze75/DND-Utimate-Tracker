@@ -79,7 +79,7 @@ function getClassImageUrlLocal(className: DndClass | string | undefined | null):
   }
 }
 
-// Normalise le don d’historique pour coller à la liste attendue par l’app
+// Normalise le don d'historique pour coller à la liste attendue par l'app
 // ex: "Initié à la magie (Clerc)" => "Initié à la magie"
 function normalizeBackgroundFeat(feat?: string | null): string | undefined {
   if (!feat) return undefined;
@@ -90,7 +90,7 @@ function normalizeBackgroundFeat(feat?: string | null): string | undefined {
   return trimmed;
 }
 
-// Parse l’or (“X po”) dans la liste d’items d’équipement
+// Parse l'or ("X po") dans la liste d'items d'équipement
 function parseGoldFromItems(items?: string[]): number | undefined {
   if (!Array.isArray(items)) return undefined;
   let total = 0;
@@ -136,7 +136,7 @@ async function tryUploadAvatarFromUrl(playerId: string, url: string): Promise<st
   }
 }
 
-// Notifie le parent (iframe/opener) qu’un personnage a été créé (fallback autonome)
+// Notifie le parent (iframe/opener) qu'un personnage a été créé (fallback autonome)
 type CreatedEvent = {
   type: 'creator:character_created';
   payload: { playerId: string; player?: any };
@@ -174,8 +174,11 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
   // Choix dépendants
   const [backgroundEquipmentOption, setBackgroundEquipmentOption] = useState<'A' | 'B' | ''>('');
   const [selectedClassSkills, setSelectedClassSkills] = useState<string[]>([]); // normalisées (ex: "Discrétion")
+  
+  // ✅ AJOUT : État pour l'équipement de classe (manquant dans la version originale)
+  const [selectedEquipmentOption, setSelectedEquipmentOption] = useState<string>('');
 
-  // Caractéristiques (base) et “effectives” (base + historique)
+  // Caractéristiques (base) et "effectives" (base + historique)
   const [abilities, setAbilities] = useState<Record<string, number>>({
     'Force': 8,
     'Dextérité': 8,
@@ -192,9 +195,10 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
     [selectedBackground]
   );
 
-  // Resets cohérents
+  // ✅ MODIFICATION : Resets cohérents avec l'équipement de classe
   useEffect(() => {
     setSelectedClassSkills([]);
+    setSelectedEquipmentOption(''); // Reset équipement de classe
   }, [selectedClass]);
 
   useEffect(() => {
@@ -232,7 +236,12 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
       const initiative = calculateModifier(finalAbilities['Dextérité'] || 10);
       const speedFeet = raceData?.speed || 30;
 
-      // Équipement d’historique selon Option A/B
+      // ✅ MODIFICATION : Équipement de classe selon l'option sélectionnée
+      const classEquipment = selectedEquipmentOption 
+        ? classData?.equipmentOptions?.find(opt => opt.label === selectedEquipmentOption)?.items || []
+        : classData?.equipment || []; // fallback sur l'ancien système
+
+      // Équipement d'historique selon Option A/B
       const bgEquip =
         backgroundEquipmentOption === 'A'
           ? selectedBackgroundObj?.equipmentOptions?.optionA ?? []
@@ -244,24 +253,27 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
       const backgroundSkills = selectedBackgroundObj?.skillProficiencies ?? [];
       const proficientSkills = Array.from(new Set([...(selectedClassSkills || []), ...backgroundSkills]));
 
-      // Équipement combiné (classe + historique sélectionné)
+      // ✅ MODIFICATION : Équipement combiné (classe sélectionnée + historique sélectionné)
       const equipment = [
-        ...(classData?.equipment || []),
+        ...classEquipment,
         ...bgEquip,
       ];
 
-      // Don d’historique (normalisé)
+      // Don d'historique (normalisé)
       const backgroundFeat = normalizeBackgroundFeat(selectedBackgroundObj?.feat);
 
-      // Or initial: parser “X po” dans l’option choisie
+      // ✅ MODIFICATION : Or initial: parser depuis l'équipement de classe ET d'historique
+      const goldFromClassEquipment = parseGoldFromItems(classEquipment);
       const goldFromA = parseGoldFromItems(selectedBackgroundObj?.equipmentOptions?.optionA);
       const goldFromB = parseGoldFromItems(selectedBackgroundObj?.equipmentOptions?.optionB);
-      const gold =
-        backgroundEquipmentOption === 'A'
-          ? goldFromA
-          : backgroundEquipmentOption === 'B'
-          ? goldFromB
-          : undefined;
+      
+      const backgroundGold = backgroundEquipmentOption === 'A'
+        ? goldFromA
+        : backgroundEquipmentOption === 'B'
+        ? goldFromB
+        : undefined;
+
+      const gold = (goldFromClassEquipment || 0) + (backgroundGold || 0);
 
       // Image de classe par défaut
       const avatarImageUrl = getClassImageUrlLocal(selectedClass) ?? undefined;
@@ -280,15 +292,27 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
 
           equipment,
           selectedBackgroundEquipmentOption: backgroundEquipmentOption || '',
+          // ✅ AJOUT : Équipement de classe sélectionné
+          selectedEquipmentOption: selectedEquipmentOption || '',
 
           hitPoints,
           armorClass,
           initiative,
-          speed: speedFeet, // le service d’intégration convertit en m
+          speed: speedFeet, // le service d'intégration convertit en m
 
-          // Ajouts pour l’export correct
+          // Ajouts pour l'export correct
           backgroundFeat,
-          gold,
+          gold: gold > 0 ? gold : undefined,
+
+          // ✅ AJOUT : Maîtrises d'armes et d'armures
+          weaponProficiencies: classData?.weaponProficiencies || [],
+          armorProficiencies: classData?.armorProficiencies || [],
+          toolProficiencies: classData?.toolProficiencies || [],
+          racialTraits: raceData?.traits || [],
+          classFeatures: classData?.features || [],
+          backgroundFeature: selectedBackgroundObj?.feature || '',
+          savingThrows: classData?.savingThrows || [],
+          languages: raceData?.languages || [],
 
           // Dés de vie
           hitDice: {
@@ -312,7 +336,7 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
         return;
       }
 
-      // FALLBACK AUTONOME (si aucun onFinish n’est fourni): insert direct en base + avatar
+      // FALLBACK AUTONOME (si aucun onFinish n'est fourni): insert direct en base + avatar
       const { data: auth, error: authErr } = await supabase.auth.getUser();
       if (authErr) throw authErr;
       const user = auth?.user;
@@ -327,7 +351,7 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
         featsData.origin = backgroundFeat;
       }
 
-      const initialGold = gold ?? 0;
+      const initialGold = gold > 0 ? gold : 0;
 
       const characterData: any = {
         user_id: user.id,
@@ -349,16 +373,21 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
           feats: featsData,
           coins: { gp: initialGold, sp: 0, cp: 0 },
           gold: initialGold, // compat éventuelle
-          // Meta pour ne rien perdre côté schéma
+          // ✅ MODIFICATION : Meta pour ne rien perdre côté schéma
           creator_meta: {
             class_skills: selectedClassSkills,
+            class_equipment_option: selectedEquipmentOption || null,
+            class_equipment_items: classEquipment,
             background_skillProficiencies: backgroundSkills,
             background_equipment_option: backgroundEquipmentOption || null,
             background_equipment_items: bgEquip,
+            weapon_proficiencies: classData?.weaponProficiencies || [],
+            armor_proficiencies: classData?.armorProficiencies || [],
+            tool_proficiencies: classData?.toolProficiencies || [],
           },
         },
         abilities: null,
-        // Si votre table a ces colonnes (comme dans l’app): écrivez l’or top-level
+        // Si votre table a ces colonnes (comme dans l'app): écrivez l'or top-level
         gold: initialGold,
         silver: 0,
         copper: 0,
@@ -397,7 +426,7 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
             finalPlayer = updatedPlayer as typeof inserted;
           }
         } catch (e) {
-          console.warn('Echec de la mise à jour de l’avatar (upload/DB):', e);
+          console.warn('Echec de la mise à jour de l'avatar (upload/DB):', e);
         }
       }
 
@@ -412,7 +441,7 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
         return;
       }
 
-      // Reset local si pas d’hôte
+      // Reset local si pas d'hôte
       setCurrentStep(0);
       setCharacterName('');
       setSelectedRace('');
@@ -420,6 +449,7 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
       setSelectedBackground('');
       setBackgroundEquipmentOption('');
       setSelectedClassSkills([]);
+      setSelectedEquipmentOption(''); // ✅ AJOUT : Reset équipement de classe
       setAbilities({
         'Force': 8,
         'Dextérité': 8,
@@ -463,6 +493,9 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
             onClassSelect={setSelectedClass}
             selectedSkills={selectedClassSkills}
             onSelectedSkillsChange={setSelectedClassSkills}
+            // ✅ AJOUT : Props pour l'équipement de classe
+            selectedEquipmentOption={selectedEquipmentOption}
+            onSelectedEquipmentOptionChange={setSelectedEquipmentOption}
             onNext={nextStep}
             onPrevious={previousStep}
           />
@@ -503,6 +536,8 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
             abilities={effectiveAbilities}
             selectedClassSkills={selectedClassSkills}
             selectedBackgroundEquipmentOption={backgroundEquipmentOption}
+            // ✅ AJOUT : Prop pour l'équipement de classe
+            selectedEquipmentOption={selectedEquipmentOption}
             onFinish={handleFinish}
             onPrevious={previousStep}
           />
@@ -516,29 +551,29 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
   /* ===========================================================
      Layout général
      =========================================================== */
-return (
-  <div className="min-h-screen bg-fantasy relative">
-    <Toaster
-      position="top-right"
-      toastOptions={{
-        className: 'bg-gray-800 text-white border border-gray-700',
-        duration: 4000,
-      }}
-    />
+  return (
+    <div className="min-h-screen bg-fantasy relative">
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          className: 'bg-gray-800 text-white border border-gray-700',
+          duration: 4000,
+        }}
+      />
 
-    <div className="container mx-auto px-4 pt-0 pb-8">
-      <div className="max-w-6xl mx-auto">
-        <ProgressBar
-          currentStep={currentStep}
-          totalSteps={steps.length - 1}
-          steps={steps}
-        />
+      <div className="container mx-auto px-4 pt-0 pb-8">
+        <div className="max-w-6xl mx-auto">
+          <ProgressBar
+            currentStep={currentStep}
+            totalSteps={steps.length - 1}
+            steps={steps}
+          />
 
-        <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 md:p-8">
-          {renderStep()}
+          <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 md:p-8">
+            {renderStep()}
+          </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
 }
