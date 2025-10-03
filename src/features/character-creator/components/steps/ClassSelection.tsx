@@ -80,12 +80,11 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
     onSelectedSkillsChange(Array.from(set));
   };
 
-  // ✅ CORRECTION : Simplification de la logique de sélection d'équipement
-  const selectEquipmentOption = (option: string, event: React.MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    
-    console.log('Selecting equipment option:', option, 'for class:', selectedClass);
+  // ✅ CORRECTION : Fonction de sélection d'équipement simplifiée
+  const handleEquipmentSelect = (option: string) => {
+    console.log('Equipment option clicked:', option);
+    console.log('Current selected option:', selectedEquipmentOption);
+    console.log('Selected class:', selectedClass);
     
     if (selectedClass) {
       // Si on clique sur la même option, on la désélectionne
@@ -278,7 +277,7 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
                       </div>
                     )}
 
-                    {/* ✅ CORRECTION : Choix d'équipement de départ */}
+                    {/* ✅ CORRECTION MAJEURE : Choix d'équipement de départ */}
                     <div className="mb-4">
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="font-medium text-white flex items-center">
@@ -292,30 +291,27 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
                         )}
                       </div>
                       
-                      {/* ✅ Message d'instruction si classe sélectionnée mais pas d'équipement */}
-                      {isSelected && !selectedEquipmentOption && (
-                        <div className="mb-3 p-2 bg-yellow-900/20 border border-yellow-500/30 rounded text-yellow-200 text-sm">
-                          ⚠ Veuillez choisir une option d'équipement pour continuer
-                        </div>
-                      )}
-                      
                       <div className="space-y-3">
                         {cls.equipmentOptions.map((option) => {
                           const isChecked = isSelected && selectedEquipmentOption === option.label;
 
                           return (
-                            <div
+                            <button
                               key={option.label}
-                              className={`w-full flex items-start gap-3 px-3 py-3 rounded-md border cursor-pointer transition-all ${
+                              type="button"
+                              disabled={!isSelected}
+                              className={`w-full flex items-start gap-3 px-3 py-3 rounded-md border text-left transition-all ${
                                 isChecked
                                   ? 'border-yellow-500/60 bg-yellow-900/20 text-gray-100'
                                   : isSelected
                                   ? 'border-gray-600 bg-gray-800/50 text-gray-300 hover:bg-gray-700/50 hover:border-gray-500'
-                                  : 'border-gray-700 bg-gray-800/30 text-gray-400 opacity-60'
+                                  : 'border-gray-700 bg-gray-800/30 text-gray-400 opacity-60 cursor-not-allowed'
                               }`}
                               onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
                                 if (isSelected) {
-                                  selectEquipmentOption(option.label, e);
+                                  handleEquipmentSelect(option.label);
                                 }
                               }}
                             >
@@ -332,7 +328,7 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
                                   ))}
                                 </ul>
                               </div>
-                            </div>
+                            </button>
                           );
                         })}
                       </div>
@@ -367,7 +363,7 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
         </Button>
         <Button
           onClick={onNext}
-          disabled={!selectedClass || (selectedClass && !selectedEquipmentOption)}
+          disabled={!selectedClass}
           size="lg"
           className="min-w-[200px]"
         >
