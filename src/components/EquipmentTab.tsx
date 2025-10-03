@@ -651,7 +651,7 @@ export function EquipmentTab({
           toast.success('Bouclier équipé');
         }
 } else if (meta.type === 'weapon') {
-  // CORRECTION CRITIQUE : Logique simplifiée pour les armes
+  // CORRECTION CRITIQUE : Logique avec persistance
   const targetEquipped = mode === 'equip';
   
   if (meta.equipped === targetEquipped) {
@@ -661,54 +661,54 @@ export function EquipmentTab({
   
   const nextMeta = { ...meta, equipped: targetEquipped };
   
- // Mise à jour de l'item
-await updateItemMetaComplete(freshItem, nextMeta);
+  // Mise à jour de l'item
+  await updateItemMetaComplete(freshItem, nextMeta);
 
-// NOUVEAU: Sauvegarder les armes équipées dans player.equipment.weapons
-const currentWeapons = (player.equipment as any)?.weapons || [];
-let updatedWeapons;
+  // NOUVEAU: Sauvegarder les armes équipées dans player.equipment.weapons
+  const currentWeapons = (player.equipment as any)?.weapons || [];
+  let updatedWeapons;
 
-// Gestion des attaques
-if (targetEquipped) {
-  const weaponData = {
-    inventory_item_id: freshItem.id,
-    name: freshItem.name,
-    description: visibleDescription(freshItem.description),
-    weapon_meta: meta.weapon || null
+  // Gestion des attaques
+  if (targetEquipped) {
+    const weaponData = {
+      inventory_item_id: freshItem.id,
+      name: freshItem.name,
+      description: visibleDescription(freshItem.description),
+      weapon_meta: meta.weapon || null
+    };
+    updatedWeapons = [...currentWeapons.filter((w: any) => w.inventory_item_id !== freshItem.id), weaponData];
+    await createOrUpdateWeaponAttack(freshItem.name, meta.weapon);
+    toast.success('Arme équipée');
+  } else {
+    // Retirer l'arme des armes équipées
+    updatedWeapons = currentWeapons.filter((w: any) => w.inventory_item_id !== freshItem.id);
+    await removeWeaponAttacksByName(freshItem.name);
+    toast.success('Arme déséquipée');
+  }
+
+  // NOUVEAU: Sauvegarder dans player.equipment.weapons
+  const updatedEquipment = {
+    ...player.equipment,
+    weapons: updatedWeapons
   };
-  updatedWeapons = [...currentWeapons.filter((w: any) => w.inventory_item_id !== freshItem.id), weaponData];
-  await createOrUpdateWeaponAttack(freshItem.name, meta.weapon);
-  toast.success('Arme équipée');
-} else {
-  // Retirer l'arme des armes équipées
-  updatedWeapons = currentWeapons.filter((w: any) => w.inventory_item_id !== freshItem.id);
-  await removeWeaponAttacksByName(freshItem.name);
-  toast.success('Arme déséquipée');
-}
 
-// NOUVEAU: Sauvegarder dans player.equipment.weapons
-const updatedEquipment = {
-  ...player.equipment,
-  weapons: updatedWeapons
-};
-
-try {
-  const { error } = await supabase
-    .from('players')
-    .update({ equipment: updatedEquipment })
-    .eq('id', player.id);
+  try {
+    const { error } = await supabase
+      .from('players')
+      .update({ equipment: updatedEquipment })
+      .eq('id', player.id);
+      
+    if (error) throw error;
     
-  if (error) throw error;
-  
-  onPlayerUpdate({
-    ...player,
-    equipment: updatedEquipment
-  });
-} catch (weaponSaveError) {  // ← Renommé pour éviter la confusion
-  console.error('Erreur sauvegarde armes équipées:', weaponSaveError);
-}
+    onPlayerUpdate({
+      ...player,
+      equipment: updatedEquipment
+    });
+  } catch (weaponSaveError) {
+    console.error('Erreur sauvegarde armes équipées:', weaponSaveError);
+  }
 
-console.log(`${mode} terminé pour:`, freshItem.name);
+  console.log(`${mode} terminé pour:`, freshItem.name);
 }
       console.error('Erreur performToggle:', e);
       // En cas d'erreur, refresh pour récupérer l'état correct
