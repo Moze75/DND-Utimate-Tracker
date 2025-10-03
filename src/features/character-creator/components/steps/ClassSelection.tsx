@@ -80,19 +80,16 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
     onSelectedSkillsChange(Array.from(set));
   };
 
-  // ✅ CORRECTION : Fonction de sélection d'équipement simplifiée
-  const handleEquipmentSelect = (option: string) => {
-    console.log('Equipment option clicked:', option);
-    console.log('Current selected option:', selectedEquipmentOption);
-    console.log('Selected class:', selectedClass);
+  // ✅ EXACTEMENT la même logique que pour les compétences
+  const toggleEquipment = (equipmentOption: string) => {
+    if (!selectedClass) return;
     
-    if (selectedClass) {
-      // Si on clique sur la même option, on la désélectionne
-      if (selectedEquipmentOption === option) {
-        onSelectedEquipmentOptionChange('');
-      } else {
-        onSelectedEquipmentOptionChange(option);
-      }
+    // Si déjà sélectionné, on désélectionne
+    if (selectedEquipmentOption === equipmentOption) {
+      onSelectedEquipmentOptionChange('');
+    } else {
+      // Sinon on sélectionne cette option (on remplace l'ancienne)
+      onSelectedEquipmentOptionChange(equipmentOption);
     }
   };
 
@@ -277,7 +274,7 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
                       </div>
                     )}
 
-                    {/* ✅ CORRECTION MAJEURE : Choix d'équipement de départ */}
+                    {/* ✅ CORRECTION : Choix d'équipement EXACTEMENT comme les compétences */}
                     <div className="mb-4">
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="font-medium text-white flex items-center">
@@ -290,30 +287,25 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
                           </span>
                         )}
                       </div>
-                      
-                      <div className="space-y-3">
-                        {cls.equipmentOptions.map((option) => {
+                      <div className="grid grid-cols-1 gap-2">
+                        {cls.equipmentOptions.map((option, idx) => {
+                          const canToggle = isSelected; // on ne coche que sur la classe sélectionnée
                           const isChecked = isSelected && selectedEquipmentOption === option.label;
 
                           return (
                             <button
-                              key={option.label}
                               type="button"
-                              disabled={!isSelected}
-                              className={`w-full flex items-start gap-3 px-3 py-3 rounded-md border text-left transition-all ${
+                              key={`${option.label}-${idx}`}
+                              className={`flex items-start justify-start gap-3 px-3 py-3 rounded-md border text-left ${
                                 isChecked
                                   ? 'border-yellow-500/60 bg-yellow-900/20 text-gray-100'
-                                  : isSelected
-                                  ? 'border-gray-600 bg-gray-800/50 text-gray-300 hover:bg-gray-700/50 hover:border-gray-500'
-                                  : 'border-gray-700 bg-gray-800/30 text-gray-400 opacity-60 cursor-not-allowed'
-                              }`}
+                                  : 'border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-800'
+                              } ${!canToggle ? 'opacity-60 cursor-not-allowed' : ''}`}
                               onClick={(e) => {
-                                e.preventDefault();
                                 e.stopPropagation();
-                                if (isSelected) {
-                                  handleEquipmentSelect(option.label);
-                                }
+                                if (canToggle) toggleEquipment(option.label);
                               }}
+                              aria-disabled={!canToggle}
                             >
                               {isChecked ? (
                                 <CheckSquare className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
@@ -323,8 +315,8 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
                               <div className="flex-1">
                                 <div className="font-medium text-sm mb-1">Option {option.label}</div>
                                 <ul className="text-xs space-y-1">
-                                  {option.items.map((item, idx) => (
-                                    <li key={idx}>• {item}</li>
+                                  {option.items.map((item, itemIdx) => (
+                                    <li key={itemIdx}>• {item}</li>
                                   ))}
                                 </ul>
                               </div>
