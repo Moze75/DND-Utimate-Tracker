@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, X, Sword } from 'lucide-react';
+import { AlertTriangle, X, Sword, Shield } from 'lucide-react';
 import { WeaponProficiencyCheck } from '../../utils/weaponProficiencyChecker';
 
 interface WeaponProficiencyWarningModalProps {
@@ -62,9 +62,10 @@ export function WeaponProficiencyWarningModal({
             <p className="mb-2">
               <strong>Votre personnage ne maîtrise pas cette arme.</strong>
             </p>
-            <p className="mb-2">
-              Équiper une arme non maîtrisée applique un <span className="text-red-400 font-medium">désavantage</span> aux jets d'attaque.
-            </p>
+            <div className="flex items-start gap-2 mb-2">
+              <Shield className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
+              <span>Le <span className="text-blue-400 font-medium">bonus de maîtrise ne s'appliquera pas</span> aux jets d'attaque avec cette arme.</span>
+            </div>
             <p className="text-gray-400">
               Vous pouvez acquérir cette maîtrise via un don, une capacité de classe, ou l'accord du MJ.
             </p>
@@ -83,7 +84,7 @@ export function WeaponProficiencyWarningModal({
             onClick={onConfirm}
             className="px-6 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors font-medium"
           >
-            Équiper quand même
+            Équiper sans bonus
           </button>
         </div>
       </div>
