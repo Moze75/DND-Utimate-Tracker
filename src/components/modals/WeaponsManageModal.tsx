@@ -160,10 +160,10 @@ export function WeaponsManageModal({
                       {w.properties && <div>Propriété: {w.properties}</div>}
                       {w.range && <div>Portée: {w.range}</div>}
                       {/* ✅ AJOUT : Affichage du statut de maîtrise */}
-                      <div className={proficiencyStatus.isProficient ? 'text-green-400' : 'text-yellow-400'}>
-                        {proficiencyStatus.isProficient ? '✓ Maîtrisé' : '⚠ Non maîtrisé'}
-                        {proficiencyStatus.category && ` (${proficiencyStatus.category})`}
-                      </div>
+                    <div className={proficiencyStatus.shouldApplyProficiencyBonus ? 'text-green-400' : 'text-yellow-400'}>
+                      {proficiencyStatus.shouldApplyProficiencyBonus ? '✓ Maîtrisé (bonus +2)' : '○ Non maîtrisé (pas de bonus)'}
+                      {proficiencyStatus.category && ` (${proficiencyStatus.category})`}
+                    </div>
                     </div>
                   )}
                 </div>
