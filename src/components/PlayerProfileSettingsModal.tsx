@@ -205,41 +205,14 @@ const WEAPON_PROFICIENCIES = [
   'Armes courantes',
   'Armes de guerre',
   'Armes de guerre dotées de la propriété Légère',
-  'Armes de guerre présentant la propriété Finesse ou Légère',
-  'Dagues',
-  'Fléchettes', 
-  'Frondes',
-  'Bâtons',
-  'Arbalètes légères',
-  'Épées courtes',
-  'Épées longues',
-  'Rapières',
-  'Cimeterres',
-  'Arcs courts',
-  'Arcs longs',
-  'Haches de guerre',
-  'Masses d\'armes',
-  'Marteaux de guerre',
-  'Lances',
-  'Hallebardes',
-  'Arbalètes lourdes'
+  'Armes de guerre présentant la propriété Finesse ou Légère'
 ];
 
 const ARMOR_PROFICIENCIES = [
   'Armures légères',
-  'Armures intermédiaires', 
+  'Armures intermédiaires',
   'Armures lourdes',
-  'Boucliers',
-  'Armure de cuir',
-  'Armure de cuir clouté',
-  'Chemise de mailles',
-  'Armure d\'écailles',
-  'Cuirasse',
-  'Demi-plate',
-  'Armure d\'anneaux',
-  'Cotte de mailles',
-  'Clibanion',
-  'Harnois'
+  'Boucliers'
 ];
 
 export interface PlayerProfileSettingsModalProps {
@@ -1064,11 +1037,11 @@ export function PlayerProfileSettingsModal({
               <div className="flex items-center gap-2 mb-3">
                 <Sword className="w-5 h-5 text-red-400" />
                 <p className="text-sm text-gray-400">
-                  Sélectionnez les armes que votre personnage maîtrise (en plus de celles de sa classe).
+                  Sélectionnez les catégories d'armes que votre personnage maîtrise (en plus de celles de sa classe).
                 </p>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-3">
                 {WEAPON_PROFICIENCIES.map((proficiency) => {
                   const isChecked = weaponProficiencies.includes(proficiency);
                   
@@ -1077,18 +1050,18 @@ export function PlayerProfileSettingsModal({
                       key={proficiency}
                       type="button"
                       onClick={() => toggleWeaponProficiency(proficiency)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-all ${
+                      className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-left transition-all w-full ${
                         isChecked
                           ? 'border-red-500/60 bg-red-900/20 text-gray-100'
                           : 'border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-800'
                       }`}
                     >
                       {isChecked ? (
-                        <CheckSquare className="w-4 h-4 text-red-400 shrink-0" />
+                        <CheckSquare className="w-5 h-5 text-red-400 shrink-0" />
                       ) : (
-                        <Square className="w-4 h-4 text-gray-400 shrink-0" />
+                        <Square className="w-5 h-5 text-gray-400 shrink-0" />
                       )}
-                      <span className="text-sm">{proficiency}</span>
+                      <span className="text-sm font-medium">{proficiency}</span>
                     </button>
                   );
                 })}
@@ -1097,16 +1070,16 @@ export function PlayerProfileSettingsModal({
           </CollapsibleCard>
 
           {/* Formation aux armures et boucliers */}
-          <CollapsibleCard title="Formation aux armures et boucliers" defaultCollapsed>
+          <CollapsibleCard title="Formation aux armures" defaultCollapsed>
             <div className="space-y-4">
               <div className="flex items-center gap-2 mb-3">
                 <Shield className="w-5 h-5 text-blue-400" />
                 <p className="text-sm text-gray-400">
-                  Sélectionnez les armures et boucliers que votre personnage sait porter (en plus de ceux de sa classe).
+                  Sélectionnez les catégories d'armures que votre personnage maîtrise (en plus de celles de sa classe).
                 </p>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-3">
                 {ARMOR_PROFICIENCIES.map((proficiency) => {
                   const isChecked = armorProficiencies.includes(proficiency);
                   
@@ -1115,18 +1088,18 @@ export function PlayerProfileSettingsModal({
                       key={proficiency}
                       type="button"
                       onClick={() => toggleArmorProficiency(proficiency)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-all ${
+                      className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-left transition-all w-full ${
                         isChecked
                           ? 'border-blue-500/60 bg-blue-900/20 text-gray-100'
                           : 'border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-800'
                       }`}
                     >
                       {isChecked ? (
-                        <CheckSquare className="w-4 h-4 text-blue-400 shrink-0" />
+                        <CheckSquare className="w-5 h-5 text-blue-400 shrink-0" />
                       ) : (
-                        <Square className="w-4 h-4 text-gray-400 shrink-0" />
+                        <Square className="w-5 h-5 text-gray-400 shrink-0" />
                       )}
-                      <span className="text-sm">{proficiency}</span>
+                      <span className="text-sm font-medium">{proficiency}</span>
                     </button>
                   );
                 })}
