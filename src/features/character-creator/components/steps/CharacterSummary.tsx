@@ -7,7 +7,7 @@ import { races } from '../../data/races';
 import { classes } from '../../data/classes';
 import { backgrounds } from '../../data/backgrounds';
 import { DndClass } from '../../types/character';
-import { User, Heart, Shield, Zap, Users, BookOpen, Package, Scroll, Star, AlertCircle, X } from 'lucide-react';
+import { User, Heart, Shield, Zap, Users, BookOpen, Package, Scroll, Star, AlertCircle, X, Sword, Wrench } from 'lucide-react';
 
 interface CharacterSummaryProps {
   characterName: string;
@@ -19,10 +19,13 @@ interface CharacterSummaryProps {
   onFinish: () => void;
   onPrevious: () => void;
 
-  // Optionnel: compétences choisies dans ClassSelection (si vous avez branché cette étape)
+  // Compétences choisies dans ClassSelection
   selectedClassSkills?: string[];
 
-  // Optionnel: si vous avez ajouté la sélection A/B d'équipement d'historique
+  // Équipement choisi dans ClassSelection
+  selectedEquipmentOption?: string;
+
+  // Équipement d'historique (si vous avez ajouté cette fonctionnalité)
   selectedBackgroundEquipmentOption?: 'A' | 'B' | '';
 }
 
@@ -104,6 +107,7 @@ export default function CharacterSummary({
   onFinish, 
   onPrevious,
   selectedClassSkills = [],
+  selectedEquipmentOption = '',
   selectedBackgroundEquipmentOption = '',
 }: CharacterSummaryProps) {
   const [nameError, setNameError] = useState('');
@@ -153,6 +157,13 @@ export default function CharacterSummary({
   }, [selectedClassSkills, backgroundSkills]);
 
   const proficiencyBonus = 2; // niveau 1
+
+  // Équipement de classe sélectionné
+  const selectedClassEquipment = useMemo(() => {
+    if (!classData || !selectedEquipmentOption) return [];
+    const option = classData.equipmentOptions.find(opt => opt.label === selectedEquipmentOption);
+    return option ? option.items : [];
+  }, [classData, selectedEquipmentOption]);
 
   // Équipement historique (si vous avez défini equipmentOptions dans backgrounds)
   const bgEquip =
@@ -246,7 +257,6 @@ export default function CharacterSummary({
               <span className="text-gray-400">Niveau:</span>
               <span className="text-white font-medium">1</span>
             </div>
-            {/* Don d'historique supprimé ici */}
           </CardContent>
         </Card>
 
@@ -334,6 +344,70 @@ export default function CharacterSummary({
         </CardContent>
       </Card>
 
+      {/* Nouvelles sections : Maîtrises d'armes et d'armures */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Maîtrises d'armes */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center">
+              <Sword className="w-5 h-5 text-red-400 mr-2" />
+              <h3 className="text-lg font-semibold text-white">Maîtrises d'armes</h3>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {classData?.weaponProficiencies && classData.weaponProficiencies.length > 0 ? (
+              <ul className="text-gray-300 text-sm space-y-1">
+                {classData.weaponProficiencies.map((weapon, index) => (
+                  <li key={index}>• {weapon}</li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-sm text-gray-500">Aucune maîtrise d'arme</div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Formation aux armures */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center">
+              <Shield className="w-5 h-5 text-blue-400 mr-2" />
+              <h3 className="text-lg font-semibold text-white">Formation aux armures</h3>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {classData?.armorProficiencies && classData.armorProficiencies.length > 0 ? (
+              <ul className="text-gray-300 text-sm space-y-1">
+                {classData.armorProficiencies.map((armor, index) => (
+                  <li key={index}>• {armor}</li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-sm text-gray-500">Aucune formation aux armures</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Maîtrises d'outils (si applicable) */}
+      {classData?.toolProficiencies && classData.toolProficiencies.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center">
+              <Wrench className="w-5 h-5 text-yellow-400 mr-2" />
+              <h3 className="text-lg font-semibold text-white">Maîtrises d'outils</h3>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ul className="text-gray-300 text-sm space-y-1">
+              {classData.toolProficiencies.map((tool, index) => (
+                <li key={index}>• {tool}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Section Don d'historique */}
       {backgroundData?.feat && (
         <Card>
@@ -401,7 +475,7 @@ export default function CharacterSummary({
         </Card>
       </div>
 
-      {/* Équipement de départ (classe + historique, si applicable) */}
+      {/* Équipement de départ (classe + historique) */}
       <Card>
         <CardHeader>
           <div className="flex items-center">
@@ -412,11 +486,15 @@ export default function CharacterSummary({
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <h4 className="font-medium text-white mb-2">De classe</h4>
+              <h4 className="font-medium text-white mb-2">
+                De classe {selectedEquipmentOption ? `(Option ${selectedEquipmentOption})` : ''}
+              </h4>
               <ul className="text-gray-300 text-sm space-y-1">
-                {classData?.equipment?.map((item, i) => (
-                  <li key={`class-eq-${i}`}>• {item}</li>
-                )) || <li className="text-gray-500">—</li>}
+                {selectedClassEquipment.length > 0
+                  ? selectedClassEquipment.map((item, i) => (
+                      <li key={`class-eq-${i}`}>• {item}</li>
+                    ))
+                  : <li className="text-gray-500">Aucune option sélectionnée</li>}
               </ul>
             </div>
             <div>
