@@ -663,15 +663,28 @@ export function EquipmentTab({
         
         // Mise à jour de l'item
         await updateItemMetaComplete(freshItem, nextMeta);
+
+         // NOUVEAU: Sauvegarder les armes équipées dans player.equipment.weapons
+  const currentWeapons = (player.equipment as any)?.weapons || [];
+  let updatedWeapons;
         
         // Gestion des attaques
         if (targetEquipped) {
-          await createOrUpdateWeaponAttack(freshItem.name, meta.weapon);
-          toast.success('Arme équipée');
-        } else {
-          await removeWeaponAttacksByName(freshItem.name);
-          toast.success('Arme déséquipée');
-        }
+       const weaponData = {
+      inventory_item_id: freshItem.id,
+      name: freshItem.name,
+      description: visibleDescription(freshItem.description),
+      weapon_meta: meta.weapon || null
+    };
+    updatedWeapons = [...currentWeapons.filter((w: any) => w.inventory_item_id !== freshItem.id), weaponData];
+    await createOrUpdateWeaponAttack(freshItem.name, meta.weapon);
+    toast.success('Arme équipée');
+  } else {
+    // Retirer l'arme des armes équipées
+    updatedWeapons = currentWeapons.filter((w: any) => w.inventory_item_id !== freshItem.id);
+    await removeWeaponAttacksByName(freshItem.name);
+    toast.success('Arme déséquipée');
+  }
         
         console.log(`${mode} terminé pour:`, freshItem.name);
       }
