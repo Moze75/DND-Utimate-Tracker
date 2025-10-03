@@ -67,6 +67,7 @@ interface ItemMeta {
   weapon?: WeaponMeta;
   armor?: ArmorMeta;
   shield?: ShieldMeta;
+  forced?: boolean; // --- ADDED (optionnel pour marquer un équipement forcé)
 }
 
 const META_PREFIX = '#meta:';
@@ -107,13 +108,25 @@ function injectMetaIntoDescription(desc: string | null | undefined, meta: ItemMe
 
 /* ====================== Confirmation ====================== */
 function ConfirmEquipModal({
-  open, mode, itemName, onConfirm, onCancel
-}: { open: boolean; mode: 'equip' | 'unequip'; itemName: string; onConfirm: () => void; onCancel: () => void; }) {
+  open, mode, itemName, onConfirm, onCancel, showWarning
+}: {
+  open: boolean;
+  mode: 'equip' | 'unequip';
+  itemName: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  showWarning?: boolean; // --- ADDED
+}) {
   if (!open) return null;
   const title = mode === 'equip' ? 'Équiper cet objet ?' : 'Déséquiper cet objet ?';
-  const label = mode === 'equip' ? 'Équiper' : 'Déséquiper';
+  const label = mode === 'equip'
+    ? `Équiper${showWarning ? ' ⚠' : ''}`
+    : 'Déséquiper';
   return (
-    <div className="fixed inset-0 z-[10000]" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+    <div
+      className="fixed inset-0 z-[10000]"
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+    >
       <div className="fixed inset-0 bg-black/60" />
       <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-gray-900/95 border border-gray-700 rounded-lg p-4 w-[min(28rem,95vw)]">
         <div className="flex items-center justify-between mb-2">
@@ -122,7 +135,12 @@ function ConfirmEquipModal({
             <X />
           </button>
         </div>
-        <p className="text-gray-300 mb-4 break-words">{smartCapitalize(itemName)}</p>
+        <p className="text-gray-300 mb-3 break-words">{smartCapitalize(itemName)}</p>
+        {showWarning && mode === 'equip' && (
+          <div className="mb-4 text-xs text-amber-300 bg-amber-900/20 border border-amber-700/40 rounded px-3 py-2">
+            Cette arme n’est pas maîtrisée : le bonus de maîtrise ne sera pas appliqué.
+          </div>
+        )}
         <div className="flex justify-end gap-2">
           <button onClick={onCancel} className="btn-secondary px-4 py-2 rounded-lg">Annuler</button>
           <button onClick={onConfirm} className="btn-primary px-4 py-2 rounded-lg">{label}</button>
@@ -183,15 +201,15 @@ const InfoBubble = ({
             </button>
           )}
           {type === 'weapon' && (
-  <button
-    onClick={(e) => { 
-      e.stopPropagation(); 
-      onOpenWeaponsManage?.(); // ouvre le modal "Mes armes"
-    }}
-    className="px-3 py-1 rounded text-xs border border-gray-600 text-gray-200 hover:bg-gray-700/50"
-  >
-    Gérer / Équiper
-  </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenWeaponsManage?.();
+              }}
+              className="px-3 py-1 rounded text-xs border border-gray-600 text-gray-200 hover:bg-gray-700/50"
+            >
+              Gérer / Équiper
+            </button>
           )}
           {(type === 'armor' || type === 'shield') && (
             <button
@@ -335,7 +353,7 @@ const EquipmentSlot = ({
           onToggleEquip={onToggleEquipFromSlot}
           isEquipped={isEquipped}
           onRequestOpenList={onRequestOpenList}
-          onOpenEditFromSlot={onOpenEditFromSlot}
+            onOpenEditFromSlot={onOpenEditFromSlot}
           onOpenWeaponsManage={onOpenWeaponsManageFromSlot}
           onOpenBagModal={onOpenBagModal}
           bagText={bagText}
@@ -362,7 +380,7 @@ const CurrencyInput = ({ currency, value, onAdd, onSpend }: {
   onSpend: (n: number) => void;
 }) => {
   const [amount, setAmount] = useState<string>('');
-  const getColor = (c: Currency) => c === 'gold' ? 'text-yellow-500' : c === 'silver' ? 'text-gray-300' : 'text-orange-400';
+  const getColor = (c: Currency) => c === 'gold' ? 'text-yellow-500' : c === 'silver' ? 'text-gray-300' : c === 'copper' ? 'text-orange-400' : '';
   const getName = (c: Currency) => c === 'gold' ? 'Or' : c === 'silver' ? 'Argent' : c === 'copper' ? 'Cuivre' : c;
   const act = (add: boolean) => { const n = parseInt(amount) || 0; if (n > 0) { (add ? onAdd : onSpend)(n); setAmount(''); } };
   return (
@@ -396,7 +414,12 @@ export function EquipmentTab({
   const [showWeaponsModal, setShowWeaponsModal] = useState(false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmPayload, setConfirmPayload] = useState<{ mode: 'equip' | 'unequip'; itemId: string; itemName: string } | null>(null);
+  const [confirmPayload, setConfirmPayload] = useState<{
+    mode: 'equip' | 'unequip';
+    itemId: string;
+    itemName: string;
+    showWarning?: boolean; // --- ADDED
+  } | null>(null);
 
   const [editLockType, setEditLockType] = useState(false);
   const prevEditMetaRef = useRef<ItemMeta | null>(null);
@@ -407,10 +430,16 @@ export function EquipmentTab({
   const [showBagModal, setShowBagModal] = useState(false);
   const [bagText, setBagText] = useState(bag?.description || '');
 
-  // Avertissement maîtrise (informative seulement maintenant)
+  // Avertissement maîtrise (maintenu si tu veux réutiliser ailleurs)
   const [showProficiencyWarning, setShowProficiencyWarning] = useState(false);
   const [proficiencyCheck, setProficiencyCheck] = useState<WeaponProficiencyCheck | null>(null);
-  const [pendingWeaponEquip, setPendingWeaponEquip] = useState<InventoryItem | null>(null); // conservé si besoin d’afficher le nom
+  const [pendingWeaponEquip, setPendingWeaponEquip] = useState<InventoryItem | null>(null);
+
+  // --- ADDED: mémorise les maîtrises du joueur
+  const playerWeaponProficiencies = useMemo(
+    () => getPlayerWeaponProficiencies(player),
+    [player]
+  );
 
   useEffect(() => {
     stableEquipmentRef.current = { armor, shield, bag };
@@ -458,7 +487,7 @@ export function EquipmentTab({
         const meta = parseMeta(item.description);
         if (meta?.type === 'weapon' && meta.equipped) {
           const nextMeta = { ...meta, equipped: false };
-          const nextDesc = injectMetaIntoDescription(visibleDescription(item.description), nextMeta);
+            const nextDesc = injectMetaIntoDescription(visibleDescription(item.description), nextMeta);
           localUpdates.push({ ...item, description: nextDesc });
           updates.push(supabase.from('inventory_items').update({ description: nextDesc }).eq('id', item.id));
         }
@@ -469,7 +498,7 @@ export function EquipmentTab({
         const item = inventory.find(i => i.id === savedWeapon.inventory_item_id);
         if (item) {
           const meta = parseMeta(item.description);
-            if (meta?.type === 'weapon') {
+          if (meta?.type === 'weapon') {
             const nextMeta = { ...meta, equipped: true };
             const nextDesc = injectMetaIntoDescription(visibleDescription(item.description), nextMeta);
 
@@ -580,14 +609,12 @@ export function EquipmentTab({
     try { window.dispatchEvent(new CustomEvent('attacks:changed', { detail: { playerId: player.id } })); } catch {}
   };
 
-  // ----------- MODIFIÉ : expertise basée sur shouldApplyProficiencyBonus -----------
   const createOrUpdateWeaponAttack = async (name: string, w?: WeaponMeta | null, weaponName?: string) => {
     try {
       const attacks = await attackService.getPlayerAttacks(player.id);
       const existing = attacks.find(a => norm(a.name) === norm(name));
 
-      const playerProficiencies = getPlayerWeaponProficiencies(player);
-      const proficiencyResult = checkWeaponProficiency(weaponName || name, playerProficiencies);
+      const proficiencyResult = checkWeaponProficiency(weaponName || name, playerWeaponProficiencies);
 
       const payload = {
         player_id: player.id,
@@ -707,14 +734,15 @@ export function EquipmentTab({
             weapon_meta: null,
           };
           await updateItemMetaComplete(freshItem, { ...meta, equipped: true });
-            await saveEquipment('shield', eq);
+          await saveEquipment('shield', eq);
           toast.success('Bouclier équipé');
         }
       } else if (meta.type === 'weapon') {
         const targetEquipped = mode === 'equip';
         if (meta.equipped === targetEquipped) return;
 
-        const nextMeta = { ...meta, equipped: targetEquipped };
+        const proficiencyResult = checkWeaponProficiency(freshItem.name, playerWeaponProficiencies);
+        const nextMeta = { ...meta, equipped: targetEquipped, forced: !proficiencyResult.isProficient && targetEquipped }; // forced indicatif
         await updateItemMetaComplete(freshItem, nextMeta);
 
         const currentWeapons = (player.equipment as any)?.weapons || [];
@@ -730,8 +758,6 @@ export function EquipmentTab({
           updatedWeapons = [...currentWeapons.filter((w: any) => w.inventory_item_id !== freshItem.id), weaponData];
 
           await createOrUpdateWeaponAttack(freshItem.name, meta.weapon, freshItem.name);
-          const playerProficiencies = getPlayerWeaponProficiencies(player);
-          const proficiencyResult = checkWeaponProficiency(freshItem.name, playerProficiencies);
 
           if (proficiencyResult.shouldApplyProficiencyBonus) {
             toast.success('Arme équipée avec bonus de maîtrise');
@@ -779,7 +805,8 @@ export function EquipmentTab({
     }
   };
 
-  // ----------- performToggle avec avertissement non bloquant -----------
+  // ----------- performToggle (AVERTISSEMENT NON BLOQUANT) -----------
+  // --- CHANGED: on ne déclenche plus le WeaponProficiencyWarningModal ici pour éviter double overlay
   const performToggle = async (item: InventoryItem, mode: 'equip' | 'unequip') => {
     if (pendingEquipment.has(item.id)) return;
 
@@ -794,23 +821,10 @@ export function EquipmentTab({
       return;
     }
 
-    if (meta.type === 'weapon' && mode === 'equip') {
-      const playerProficiencies = getPlayerWeaponProficiencies(player);
-      const proficiencyResult = checkWeaponProficiency(freshItem.name, playerProficiencies);
-
-      // AFFICHER l'avertissement mais NE PAS bloquer
-      if (!proficiencyResult.isProficient) {
-        setPendingWeaponEquip(freshItem);
-        setProficiencyCheck(proficiencyResult);
-        setShowProficiencyWarning(true);
-      }
-    }
-
     await performEquipToggle(freshItem, mode);
   };
 
   const handleProficiencyWarningConfirm = () => {
-    // Maintenant purement informatif
     setShowProficiencyWarning(false);
     setPendingWeaponEquip(null);
     setProficiencyCheck(null);
@@ -828,7 +842,7 @@ export function EquipmentTab({
       toast.error("Objet introuvable");
       return;
     }
-       const meta = parseMeta(freshItem.description);
+    const meta = parseMeta(freshItem.description);
     if (!meta) return toast.error("Objet sans métadonnées. Ouvrez Paramètres et précisez sa nature.");
 
     const isArmor = meta.type === 'armor';
@@ -840,10 +854,20 @@ export function EquipmentTab({
       (isShield && shield?.inventory_item_id === freshItem.id) ||
       (isWeapon && meta.equipped === true);
 
+    // --- ADDED: calc maîtrise pour affichage dans le modal
+    let showWarning = false;
+    if (isWeapon && !equipped) {
+      try {
+        const result = checkWeaponProficiency(freshItem.name, playerWeaponProficiencies);
+        showWarning = !result.isProficient;
+      } catch {}
+    }
+
     setConfirmPayload({
       mode: equipped ? 'unequip' : 'equip',
       itemId: freshItem.id,
-      itemName: freshItem.name
+      itemName: freshItem.name,
+      showWarning
     });
     setConfirmOpen(true);
   };
@@ -1059,6 +1083,28 @@ export function EquipmentTab({
                 (isShield && shield?.inventory_item_id === item.id) ||
                 (isWeapon && meta?.equipped === true);
 
+              // --- ADDED: calcul maîtrise arme
+              let weaponProficiency: WeaponProficiencyCheck | null = null;
+              if (isWeapon) {
+                try {
+                  weaponProficiency = checkWeaponProficiency(item.name, playerWeaponProficiencies);
+                } catch {}
+              }
+              const notProficient = isWeapon && weaponProficiency && !weaponProficiency.isProficient;
+
+              // --- ADDED: label dynamique avec ⚠
+              const buttonLabel = pendingEquipment.has(item.id)
+                ? 'En cours...'
+                : isEquipped
+                  ? (notProficient ? 'Équipé ⚠' : 'Équipé')
+                  : (notProficient ? 'Équiper ⚠' : 'Non équipé');
+
+              const buttonTitle = pendingEquipment.has(item.id)
+                ? 'Traitement en cours...'
+                : isEquipped
+                  ? (notProficient ? 'Arme équipée sans maîtrise (cliquer pour déséquiper)' : 'Cliquer pour déséquiper')
+                  : (notProficient ? 'Arme non maîtrisée (bonus de maîtrise absent) – cliquer pour équiper' : 'Cliquer pour équiper');
+
               return (
                 <div key={item.id} className="bg-gray-800/40 border border-gray-700/40 rounded-md">
                   <div className="flex items-start justify-between p-2">
@@ -1086,6 +1132,11 @@ export function EquipmentTab({
                               <div>Dégâts: {meta.weapon.damageDice} {meta.weapon.damageType}</div>
                               {meta.weapon.properties && <div>Propriété: {meta.weapon.properties}</div>}
                               {meta.weapon.range && <div>Portée: {meta.weapon.range}</div>}
+                              {notProficient && (
+                                <div className="text-[10px] text-amber-300 mt-1">
+                                  Non maîtrisée : bonus de maîtrise non appliqué.
+                                </div>
+                              )}
                             </>
                           )}
                         </div>
@@ -1104,23 +1155,16 @@ export function EquipmentTab({
                             pendingEquipment.has(item.id)
                               ? 'border-gray-500 text-gray-500 bg-gray-800/50 cursor-not-allowed'
                               : isEquipped
-                                ? 'border-green-500/40 text-green-300 bg-green-900/20'
-                                : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'
+                                ? (notProficient
+                                  ? 'border-amber-500/40 text-amber-300 bg-amber-900/20'
+                                  : 'border-green-500/40 text-green-300 bg-green-900/20')
+                                : (notProficient
+                                  ? 'border-amber-500/40 text-amber-300 hover:bg-amber-900/20'
+                                  : 'border-gray-600 text-gray-300 hover:bg-gray-700/40')
                           }`}
-                          title={
-                            pendingEquipment.has(item.id)
-                              ? 'Traitement en cours...'
-                              : isEquipped
-                                ? 'Cliquer pour déséquiper'
-                                : 'Cliquer pour équiper'
-                          }
+                          title={buttonTitle}
                         >
-                          {pendingEquipment.has(item.id)
-                            ? 'En cours...'
-                            : isEquipped
-                              ? 'Équipé'
-                              : 'Non équipé'
-                          }
+                          {buttonLabel}
                         </button>
                       )}
                       <button
@@ -1250,6 +1294,7 @@ export function EquipmentTab({
         open={confirmOpen}
         mode={confirmPayload?.mode || 'equip'}
         itemName={confirmPayload?.itemName || ''}
+        showWarning={confirmPayload?.showWarning}
         onCancel={() => { setConfirmOpen(false); setConfirmPayload(null); }}
         onConfirm={async () => {
           if (!confirmPayload) return;
@@ -1383,7 +1428,7 @@ export function EquipmentTab({
         </div>
       )}
 
-      {/* Modal d'avertissement maîtrise (informative) */}
+      {/* Garde le modal d’avertissement si tu veux l’activer ailleurs */}
       <WeaponProficiencyWarningModal
         isOpen={showProficiencyWarning}
         weaponName={pendingWeaponEquip?.name || ''}
@@ -1393,4 +1438,4 @@ export function EquipmentTab({
       />
     </div>
   );
-} 
+}
