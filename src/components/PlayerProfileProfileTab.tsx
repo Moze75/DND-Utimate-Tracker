@@ -455,19 +455,26 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
           <NotFound label="Don" value={undefined} />
         ) : (
           <div className="space-y-6">
-            {donsList.map((item, i) => (
-              <div key={`${item.kind}-${item.name}-${i}`} className="border border-white/10 rounded-lg p-3 bg-gray-800/40">
-                <div className="text-sm uppercase tracking-wide text-gray-400">
-                  {item.kind === 'origine' ? 'Don d'origine' : item.kind === 'general' ? 'Don général' : 'Style de combat'}
+            {donsList.map((item, i) => {
+              const kindLabel = 
+                item.kind === 'origine' ? "Don d'origine" : 
+                item.kind === 'general' ? "Don général" : 
+                "Style de combat";
+              
+              return (
+                <div key={`${item.kind}-${item.name}-${i}`} className="border border-white/10 rounded-lg p-3 bg-gray-800/40">
+                  <div className="text-sm uppercase tracking-wide text-gray-400">
+                    {kindLabel}
+                  </div>
+                  <div className="text-base font-semibold mt-1 mb-2">{renderInline(item.name)}</div>
+                  {item.hit ? (
+                    <MarkdownLite content={item.hit.content} />
+                  ) : (
+                    <div className="text-sm text-gray-400">Non trouvé dans la source distante.</div>
+                  )}
                 </div>
-                <div className="text-base font-semibold mt-1 mb-2">{renderInline(item.name)}</div>
-                {item.hit ? (
-                  <MarkdownLite content={item.hit.content} />
-                ) : (
-                  <div className="text-sm text-gray-400">Non trouvé dans la source distante.</div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </SectionContainer>
