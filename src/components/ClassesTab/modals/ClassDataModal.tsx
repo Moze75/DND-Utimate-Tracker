@@ -1,5 +1,14 @@
+import { 
+  norm, 
+  uniq, 
+  stripDiacritics, 
+  stripParentheses, 
+  sentenceCase, 
+  CLASS_ALIASES, 
+  SUBCLASS_ALIASES, 
+  AbilitySection 
+} from './ClassUtilsModal';
 import { loadAbilitySections } from '../../../services/classesContent';
-import { AbilitySection, CLASS_ALIASES, SUBCLASS_ALIASES, norm, uniq, stripDiacritics, stripParentheses, sentenceCase } from './ClassUtilsModal';
 
 const DEBUG = typeof window !== 'undefined' && (window as any).UT_DEBUG === true;
 
@@ -7,7 +16,11 @@ const DEBUG = typeof window !== 'undefined' && (window as any).UT_DEBUG === true
    Chargement "smart" avec alias
    =========================================================== */
 
-export async function loadSectionsSmart(params: { className: string; subclassName: string | null; level: number }): Promise<AbilitySection[]> {
+export async function loadSectionsSmart(params: { 
+  className: string; 
+  subclassName: string | null; 
+  level: number 
+}): Promise<AbilitySection[]> {
   const { className, subclassName, level } = params;
   const clsNorm = norm(className);
   const subNorm = subclassName ? norm(subclassName) : '';
