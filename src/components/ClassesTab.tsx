@@ -347,7 +347,7 @@ function ClassesTab({
             <AbilityCard
               key={`${s.origin}-${s.level ?? 'x'}-${i}`}
               section={s}
-              defaultOpen={!firstMountRef.current && s.level === finalLevel}
+              defaultOpen={false}
               ctx={{
                 characterId,
                 className: displayClass,
