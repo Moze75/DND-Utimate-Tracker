@@ -1,7 +1,7 @@
 export type DndClass = 
   | 'Barbare' | 'Barde' | 'Clerc' | 'Druide' | 'Ensorceleur' 
   | 'Guerrier' | 'Magicien' | 'Moine' | 'Paladin' | 'Rôdeur' 
-  | 'Roublard' | 'Sorcier';
+  | 'Roublard' | 'Occultiste';
 
 export interface PlayerStats {
   armor_class: number;
@@ -46,6 +46,12 @@ export interface DndRace {
   traits: string[];
 }
 
+// Type pour les choix d'équipement
+export interface EquipmentOption {
+  label: string; // "A", "B", "C"
+  items: string[];
+}
+
 export interface DndClassData {
   name: DndClass;
   description: string;
@@ -54,7 +60,11 @@ export interface DndClassData {
   savingThrows: string[];
   skillsToChoose: number;
   availableSkills: string[];
-  equipment: string[];
+  weaponProficiencies: string[]; // Maîtrises d'armes
+  armorProficiencies: string[];  // Formation aux armures
+  toolProficiencies?: string[];  // Maîtrises d'outils (optionnel)
+  equipmentOptions: EquipmentOption[]; // Choix A/B/C d'équipement
+  equipment: string[]; // Équipement fixe (si applicable)
   features: string[];
 }
 
