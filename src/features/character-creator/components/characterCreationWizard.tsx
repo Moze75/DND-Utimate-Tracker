@@ -40,7 +40,7 @@ const CharacterCreatorWizard: React.FC<CharacterCreatorWizardProps> = ({
     'Charisme': 8
   });
 
-  // ✅ AJOUT : Sélections de classe (manquantes dans l'ancienne version)
+  // Sélections de classe
   const [selectedClassSkills, setSelectedClassSkills] = useState<string[]>([]);
   const [selectedEquipmentOption, setSelectedEquipmentOption] = useState<string>('');
 
@@ -212,7 +212,8 @@ const CharacterCreatorWizard: React.FC<CharacterCreatorWizardProps> = ({
       case 1: // Class
         const classData = classes.find(c => c.name === selectedClass);
         const hasRequiredSkills = !classData || selectedClassSkills.length >= (classData.skillsToChoose || 0);
-        return selectedClass !== '' && hasRequiredSkills;
+        const hasEquipment = !classData || selectedEquipmentOption !== '';
+        return selectedClass !== '' && hasRequiredSkills && hasEquipment;
       case 2: // Background
         return selectedBackground !== '';
       case 3: // Abilities
@@ -222,7 +223,7 @@ const CharacterCreatorWizard: React.FC<CharacterCreatorWizardProps> = ({
       default:
         return true;
     }
-  }, [currentStep, selectedRace, selectedClass, selectedBackground, baseAbilities, characterName, selectedClassSkills]);
+  }, [currentStep, selectedRace, selectedClass, selectedBackground, baseAbilities, characterName, selectedClassSkills, selectedEquipmentOption]);
 
   // Auto-navigation si toutes les données requises sont remplies
   useEffect(() => {
@@ -247,7 +248,7 @@ const CharacterCreatorWizard: React.FC<CharacterCreatorWizardProps> = ({
           />
         );
       
-      case 1: // Class - ✅ CORRECTION : Ajout des props manquantes
+      case 1: // Class
         return (
           <CurrentStepComponent
             {...commonProps}
