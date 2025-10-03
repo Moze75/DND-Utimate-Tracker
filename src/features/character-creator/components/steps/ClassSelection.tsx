@@ -80,9 +80,20 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
     onSelectedSkillsChange(Array.from(set));
   };
 
-  const selectEquipmentOption = (option: string) => {
+  // ✅ CORRECTION : Simplification de la logique de sélection d'équipement
+  const selectEquipmentOption = (option: string, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    console.log('Selecting equipment option:', option, 'for class:', selectedClass);
+    
     if (selectedClass) {
-      onSelectedEquipmentOptionChange(option);
+      // Si on clique sur la même option, on la désélectionne
+      if (selectedEquipmentOption === option) {
+        onSelectedEquipmentOptionChange('');
+      } else {
+        onSelectedEquipmentOptionChange(option);
+      }
     }
   };
 
@@ -267,7 +278,7 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
                       </div>
                     )}
 
-                    {/* Choix d'équipement de départ */}
+                    {/* ✅ CORRECTION : Choix d'équipement de départ */}
                     <div className="mb-4">
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="font-medium text-white flex items-center">
@@ -280,25 +291,33 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
                           </span>
                         )}
                       </div>
+                      
+                      {/* ✅ Message d'instruction si classe sélectionnée mais pas d'équipement */}
+                      {isSelected && !selectedEquipmentOption && (
+                        <div className="mb-3 p-2 bg-yellow-900/20 border border-yellow-500/30 rounded text-yellow-200 text-sm">
+                          ⚠ Veuillez choisir une option d'équipement pour continuer
+                        </div>
+                      )}
+                      
                       <div className="space-y-3">
                         {cls.equipmentOptions.map((option) => {
-                          const canSelect = isSelected;
                           const isChecked = isSelected && selectedEquipmentOption === option.label;
 
                           return (
-                            <button
-                              type="button"
+                            <div
                               key={option.label}
-                              className={`w-full flex items-start gap-3 px-3 py-3 rounded-md border text-left ${
+                              className={`w-full flex items-start gap-3 px-3 py-3 rounded-md border cursor-pointer transition-all ${
                                 isChecked
                                   ? 'border-yellow-500/60 bg-yellow-900/20 text-gray-100'
-                                  : 'border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-800'
-                              } ${!canSelect ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                  : isSelected
+                                  ? 'border-gray-600 bg-gray-800/50 text-gray-300 hover:bg-gray-700/50 hover:border-gray-500'
+                                  : 'border-gray-700 bg-gray-800/30 text-gray-400 opacity-60'
+                              }`}
                               onClick={(e) => {
-                                e.stopPropagation();
-                                if (canSelect) selectEquipmentOption(option.label);
+                                if (isSelected) {
+                                  selectEquipmentOption(option.label, e);
+                                }
                               }}
-                              aria-disabled={!canSelect}
                             >
                               {isChecked ? (
                                 <CheckSquare className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
@@ -313,7 +332,7 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
                                   ))}
                                 </ul>
                               </div>
-                            </button>
+                            </div>
                           );
                         })}
                       </div>
@@ -348,7 +367,7 @@ const ClassSelection: React.FC<ClassSelectionProps> = ({
         </Button>
         <Button
           onClick={onNext}
-          disabled={!selectedClass}
+          disabled={!selectedClass || (selectedClass && !selectedEquipmentOption)}
           size="lg"
           className="min-w-[200px]"
         >
