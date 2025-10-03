@@ -183,13 +183,15 @@ const InfoBubble = ({
             </button>
           )}
           {type === 'weapon' && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onOpenWeaponsManage?.(); }}
-              className="p-2 text-gray-400 hover:bg-gray-700/50 rounded-lg"
-              title="Gérer mes armes"
-            >
-              <Sword size={18} />
-            </button>
+  <button
+    onClick={(e) => { 
+      e.stopPropagation(); 
+      onOpenWeaponsManage?.(); // ouvre le modal "Mes armes"
+    }}
+    className="px-3 py-1 rounded text-xs border border-gray-600 text-gray-200 hover:bg-gray-700/50"
+  >
+    Gérer / Équiper
+  </button>
           )}
           {(type === 'armor' || type === 'shield') && (
             <button
