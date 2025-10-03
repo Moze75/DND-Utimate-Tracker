@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { X, Save, TrendingUp, Triangle, Plus, ChevronDown } from 'lucide-react';
+import { X, Save, TrendingUp, Triangle, Plus, ChevronDown, Sword, Shield, CheckSquare, Square } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { Avatar } from './Avatar';
@@ -22,13 +22,11 @@ const getProficiencyBonusForLevel = (level: number): number => {
 const getDexModFromPlayer = (player: Player): number => {
   const abilities: any = (player as any).abilities;
 
-  // 1) Cas tableau standard
   const dexFromArray =
     Array.isArray(abilities)
       ? abilities.find?.((a: any) => a?.name === 'Dextérité')
       : undefined;
 
-  // 2) Cas “map”/objet ou valeur brute (compat anciennes données)
   let dexFromMap: any = undefined;
   if (!dexFromArray && abilities && typeof abilities === 'object') {
     const direct =
@@ -51,8 +49,6 @@ const getDexModFromPlayer = (player: Player): number => {
   return 0;
 };
 
-
-// Canonicalisation minimale pour compat RPC
 function mapClassForRpc(pClass: DndClass | null | undefined): string | null | undefined {
   if (pClass === 'Occultiste') return 'Occultiste';
   return pClass;
@@ -60,7 +56,6 @@ function mapClassForRpc(pClass: DndClass | null | undefined): string | null | un
 
 /* ============================ Données de sélection ============================ */
 
- 
 const DND_RACES: string[] = [
   '',
   'Aasimar',
@@ -115,7 +110,6 @@ const DND_CLASSES: DndClass[] = [
   'Occultiste',
 ];
 
-/* Dons d'origine */
 const ORIGIN_FEATS: string[] = [
   'Bagarreur de tavernes',
   'Chanceux',
@@ -130,7 +124,6 @@ const ORIGIN_FEATS: string[] = [
   'Vigilant',
 ];
 
-/* Dons généraux */
 const GENERAL_FEATS: string[] = [
   'Adepte élémentaire',
   'Affinité féerique',
@@ -176,7 +169,6 @@ const GENERAL_FEATS: string[] = [
   'Tueur de mages',
 ];
 
-/* Styles de combat */
 const FIGHTING_STYLES: string[] = [
   'Archerie',
   'Armes à deux mains',
@@ -190,7 +182,6 @@ const FIGHTING_STYLES: string[] = [
   'Protection',
 ];
 
-/* Langues (réintégrées depuis PP old) */
 const DND_LANGUAGES: string[] = [
   'Commun',
   'Elfique',
@@ -210,12 +201,52 @@ const DND_LANGUAGES: string[] = [
   'Autre',
 ];
 
+const WEAPON_PROFICIENCIES = [
+  'Armes courantes',
+  'Armes de guerre',
+  'Armes de guerre dotées de la propriété Légère',
+  'Armes de guerre présentant la propriété Finesse ou Légère',
+  'Dagues',
+  'Fléchettes', 
+  'Frondes',
+  'Bâtons',
+  'Arbalètes légères',
+  'Épées courtes',
+  'Épées longues',
+  'Rapières',
+  'Cimeterres',
+  'Arcs courts',
+  'Arcs longs',
+  'Haches de guerre',
+  'Masses d\'armes',
+  'Marteaux de guerre',
+  'Lances',
+  'Hallebardes',
+  'Arbalètes lourdes'
+];
+
+const ARMOR_PROFICIENCIES = [
+  'Armures légères',
+  'Armures intermédiaires', 
+  'Armures lourdes',
+  'Boucliers',
+  'Armure de cuir',
+  'Armure de cuir clouté',
+  'Chemise de mailles',
+  'Armure d\'écailles',
+  'Cuirasse',
+  'Demi-plate',
+  'Armure d\'anneaux',
+  'Cotte de mailles',
+  'Clibanion',
+  'Harnois'
+];
+
 export interface PlayerProfileSettingsModalProps {
   open: boolean;
   onClose: () => void;
   player: Player;
   onUpdate: (player: Player) => void;
-  // D’où vient l’animation: 'left' (défaut) ou 'right'
   slideFrom?: 'left' | 'right';
 }
 
@@ -257,11 +288,8 @@ export function PlayerProfileSettingsModal({
   slideFrom = 'left',
 }: PlayerProfileSettingsModalProps) {
   const [showLevelUp, setShowLevelUp] = useState(false);
-
-  // Dirty tracking
   const [isDirty, setDirty] = useState(false);
 
-  // Etats d'identité / profil (spécifiques à l'édition)
   const [adventurerName, setAdventurerName] = useState(player.adventurer_name || '');
   const [avatarUrl, setAvatarUrl] = useState(player.avatar_url || '');
   const [selectedClass, setSelectedClass] = useState<DndClass | undefined>(player.class || undefined);
@@ -282,16 +310,18 @@ export function PlayerProfileSettingsModal({
   const [currentHp, setCurrentHp] = useState(player.current_hp);
   const [tempHp, setTempHp] = useState(player.temporary_hp);
 
-  // champs d'édition permissifs
   const [acField, setAcField] = useState<string>('');
   const [initField, setInitField] = useState<string>('');
   const [speedField, setSpeedField] = useState<string>('');
   const [profField, setProfField] = useState<string>('');
 
-  // Dons (sélections via listes empilées)
   const [originFeats, setOriginFeats] = useState<string[]>([]);
   const [generalFeats, setGeneralFeats] = useState<string[]>([]);
   const [fightingStyles, setFightingStyles] = useState<string[]>([]);
+
+  // Nouveaux états pour les maîtrises
+  const [weaponProficiencies, setWeaponProficiencies] = useState<string[]>([]);
+  const [armorProficiencies, setArmorProficiencies] = useState<string[]>([]);
 
   const ALLOWED_RACES = useMemo(() => new Set(DND_RACES.filter(Boolean)), []);
   const ALLOWED_BACKGROUNDS = useMemo(() => new Set(DND_BACKGROUNDS.filter(Boolean)), []);
@@ -299,7 +329,6 @@ export function PlayerProfileSettingsModal({
   const ALLOWED_GENERAL_FEATS = useMemo(() => new Set(GENERAL_FEATS), []);
   const ALLOWED_FIGHTING_STYLES = useMemo(() => new Set(FIGHTING_STYLES), []);
 
-  // Options restantes (pour désactiver "+ Ajouter" quand plus de choix)
   const remainingOriginOptions = useMemo(
     () => ORIGIN_FEATS.filter((f) => !originFeats.filter(Boolean).includes(f)),
     [originFeats]
@@ -313,19 +342,15 @@ export function PlayerProfileSettingsModal({
     [fightingStyles]
   );
 
-  // Discret: parse "10,5" -> 10.5
   const parseDecimal = (s: string): number => {
     const n = parseFloat((s || '').replace(',', '.'));
     return Number.isFinite(n) ? n : NaN;
   };
 
-  // Sync local state quand la modale s'ouvre ou quand le player change
   useEffect(() => {
     if (!open) return;
 
-    // Reset dirty à l'ouverture
     setDirty(false);
-
     setLevel(player.level);
     setMaxHp(player.max_hp);
     setCurrentHp(player.current_hp);
@@ -336,7 +361,6 @@ export function PlayerProfileSettingsModal({
     setSelectedClass(player.class || undefined);
     setSelectedSubclass(player.subclass || '');
 
-    // Race & historique: forcer à vide si non conformes
     const nextRace = player.race && ALLOWED_RACES.has(player.race) ? player.race : '';
     setSelectedRace(nextRace);
 
@@ -353,7 +377,6 @@ export function PlayerProfileSettingsModal({
     setCharacterHistory(player.character_history || '');
     setAvatarUrl(player.avatar_url || '');
 
-    // Stats par défaut
     const dexMod = getDexModFromPlayer(player);
     const profAuto = getProficiencyBonusForLevel(player.level);
 
@@ -364,14 +387,11 @@ export function PlayerProfileSettingsModal({
 
     setAcField(acInitial > 0 ? String(acInitial) : String(10 + dexMod));
     setInitField(initInitial !== undefined && initInitial !== null ? String(initInitial) : String(dexMod));
-    // Affiche avec virgule si besoin
     setSpeedField(speedInitial > 0 ? String(speedInitial).replace('.', ',') : String(9));
     setProfField(profInitial > 0 ? String(profInitial) : String(profAuto));
 
-    // Dons: lecture depuis stats.feats
     const feats: any = (player.stats as any)?.feats || {};
 
-    // Origins: support rétrocompat (origin: string) et nouveau (origins: string[])
     let origins: string[] = [];
     if (Array.isArray(feats.origins)) {
       origins = feats.origins.filter((f: string) => ALLOWED_ORIGIN_FEATS.has(f));
@@ -380,13 +400,22 @@ export function PlayerProfileSettingsModal({
     }
     setOriginFeats(origins.length > 0 ? origins : ['']);
 
-    // Generals
     const gens = Array.isArray(feats.generals) ? feats.generals.filter((f: string) => ALLOWED_GENERAL_FEATS.has(f)) : [];
     setGeneralFeats(gens.length > 0 ? gens : ['']);
 
-    // Styles
     const styles = Array.isArray(feats.styles) ? feats.styles.filter((s: string) => ALLOWED_FIGHTING_STYLES.has(s)) : [];
     setFightingStyles(styles.length > 0 ? styles : ['']);
+
+    // Charger les maîtrises
+    if (player.stats && typeof player.stats === 'object') {
+      const stats = player.stats as any;
+      const creatorMeta = stats.creator_meta || {};
+      const weaponProfs = creatorMeta.weapon_proficiencies || stats.weapon_proficiencies || [];
+      const armorProfs = creatorMeta.armor_proficiencies || stats.armor_proficiencies || [];
+      
+      setWeaponProficiencies(Array.isArray(weaponProfs) ? weaponProfs : []);
+      setArmorProficiencies(Array.isArray(armorProfs) ? armorProfs : []);
+    }
   }, [
     open,
     player,
@@ -397,7 +426,6 @@ export function PlayerProfileSettingsModal({
     ALLOWED_FIGHTING_STYLES,
   ]);
 
-  // Charger les sous-classes disponibles quand la classe change
   useEffect(() => {
     if (!open) return;
     const loadSubclasses = async () => {
@@ -420,7 +448,6 @@ export function PlayerProfileSettingsModal({
     loadSubclasses();
   }, [open, selectedClass]);
 
-  // Quand le niveau change, synchroniser le total des dés de vie et borner les utilisés
   useEffect(() => {
     setHitDice((prev) => {
       const used = Math.max(0, Math.min(prev?.used ?? 0, level));
@@ -428,15 +455,12 @@ export function PlayerProfileSettingsModal({
     });
   }, [level]);
 
-  /* ============================ Données/Options utilitaires ============================ */
   const buildOptions = (all: string[], selected: string[], idx: number) => {
     const current = selected[idx] || '';
     const used = new Set(selected.filter(Boolean));
-    // Autorise la valeur actuelle même si déjà "utilisée"
     return all.filter((opt) => !used.has(opt) || opt === current);
   };
 
-  /* ============================ Handlers Dons (sélecteurs empilés) ============================ */
   const addOriginSelect = () => {
     if (remainingOriginOptions.length === 0) return;
     setOriginFeats((prev) => [...prev, '']);
@@ -479,7 +503,27 @@ export function PlayerProfileSettingsModal({
     setDirty(true);
   };
 
-  /* ============================ Sauvegarde ============================ */
+  const toggleWeaponProficiency = (proficiency: string) => {
+    setWeaponProficiencies(prev => {
+      if (prev.includes(proficiency)) {
+        return prev.filter(p => p !== proficiency);
+      } else {
+        return [...prev, proficiency];
+      }
+    });
+    setDirty(true);
+  };
+
+  const toggleArmorProficiency = (proficiency: string) => {
+    setArmorProficiencies(prev => {
+      if (prev.includes(proficiency)) {
+        return prev.filter(p => p !== proficiency);
+      } else {
+        return [...prev, proficiency];
+      }
+    });
+    setDirty(true);
+  };
 
   const handleSave = async () => {
     try {
@@ -491,7 +535,6 @@ export function PlayerProfileSettingsModal({
       const speedVal = parseDecimal(speedField);
       const profVal = parseInt(profField, 10);
 
-      // Normalise les dons (filtre vides + valeurs autorisées)
       const normOrigins = originFeats
         .filter((v) => v && ALLOWED_ORIGIN_FEATS.has(v))
         .filter((v, i, arr) => arr.indexOf(v) === i);
@@ -505,21 +548,27 @@ export function PlayerProfileSettingsModal({
         .filter((v, i, arr) => arr.indexOf(v) === i);
 
       const featsData: any = {
-        // Rétrocompat: garde "origin" (premier) et ajoute "origins"
         origin: normOrigins.length > 0 ? normOrigins[0] : null,
         origins: normOrigins,
         generals: normGenerals,
         styles: normStyles,
       };
 
+      const currentStats = (player.stats as any) || {};
       const finalizedStats: any = {
-        ...player.stats,
+        ...currentStats,
         armor_class: Number.isFinite(acVal) && acVal > 0 ? acVal : 10 + dexMod,
         initiative: Number.isFinite(initVal) ? initVal : dexMod,
-        // Accepte décimales pour vitesse
         speed: Number.isFinite(speedVal) && speedVal > 0 ? speedVal : 9,
         proficiency_bonus: Number.isFinite(profVal) && profVal > 0 ? profVal : profAuto,
         feats: featsData,
+        creator_meta: {
+          ...currentStats.creator_meta,
+          weapon_proficiencies: weaponProficiencies,
+          armor_proficiencies: armorProficiencies,
+        },
+        weapon_proficiencies: weaponProficiencies,
+        armor_proficiencies: armorProficiencies,
       };
 
       const updateData = {
@@ -561,12 +610,10 @@ export function PlayerProfileSettingsModal({
     }
   };
 
-  /* ============================ Animation + Scroll lock ============================ */
   const [enter, setEnter] = useState(false);
   useEffect(() => {
     if (!open) return;
     const id = window.setTimeout(() => setEnter(true), 20);
-    // Lock scroll sous la modale
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
@@ -576,10 +623,8 @@ export function PlayerProfileSettingsModal({
     };
   }, [open]);
 
-  // Calcul de la direction d’entrée/sortie
   const initialTranslate = slideFrom === 'right' ? 'translate-x-full' : '-translate-x-full';
 
-  /* ============================ Swipe-to-close (gestuelle) ============================ */
   const startXRef = useRef<number | null>(null);
   const startYRef = useRef<number | null>(null);
   const gestureRef = useRef<'undetermined' | 'horizontal' | 'vertical'>('undetermined');
@@ -605,7 +650,6 @@ export function PlayerProfileSettingsModal({
     const adx = Math.abs(dx);
     const ady = Math.abs(dy);
 
-    // Décide l'axe
     if (gestureRef.current === 'undetermined') {
       if (adx >= 14 || ady >= 14) {
         gestureRef.current = adx > ady * 1.15 ? 'horizontal' : 'vertical';
@@ -615,9 +659,6 @@ export function PlayerProfileSettingsModal({
     }
     if (gestureRef.current !== 'horizontal') return;
 
-    // Fermer selon le sens:
-    // - Si le panneau vient de la droite, on ferme sur swipe droite -> gauche (dx < -64)
-    // - S'il vient de la gauche, on ferme sur swipe gauche -> droite (dx > 64)
     const threshold = 64;
     if (slideFrom === 'right' && dx < -threshold) {
       e.preventDefault();
@@ -636,11 +677,8 @@ export function PlayerProfileSettingsModal({
 
   if (!open) return null;
 
-  /* ============================ Rendu (modale) ============================ */
   return (
-    // Enveloppe fixe plein écran, fond OPAQUE pour couvrir totalement l'interface
     <div className="fixed inset-0 z-50 bg-gray-900">
-      {/* Panneau qui glisse depuis la gauche ou la droite */}
       <div
         className={`
     absolute inset-0 overflow-y-auto
@@ -651,46 +689,11 @@ export function PlayerProfileSettingsModal({
         aria-modal="true"
         aria-label="Paramètres du personnage"
         style={{ touchAction: 'pan-y' }}
-        onTouchStart={(e) => {
-          if (e.touches.length !== 1) return;
-          const t = e.touches[0];
-          startXRef.current = t.clientX;
-          startYRef.current = t.clientY;
-          gestureRef.current = 'undetermined';
-        }}
-        onTouchMove={(e) => {
-          if (startXRef.current == null || startYRef.current == null) return;
-          const t = e.touches[0];
-          const dx = t.clientX - startXRef.current;
-          const dy = t.clientY - startYRef.current;
-          const adx = Math.abs(dx);
-          const ady = Math.abs(dy);
-
-          // Décide l'axe
-          if (gestureRef.current === 'undetermined') {
-            if (adx >= 14 || ady >= 14) {
-              gestureRef.current = adx > ady * 1.15 ? 'horizontal' : 'vertical';
-            } else {
-              return;
-            }
-          }
-          if (gestureRef.current !== 'horizontal') return;
-
-          // Fermer sur swipe DROITE -> GAUCHE (dx < -64)
-          const threshold = 64;
-          if (dx < -threshold) {
-            e.preventDefault();
-            smoothClose();
-          }
-        }}
-        onTouchEnd={() => {
-          startXRef.current = null;
-          startYRef.current = null;
-          gestureRef.current = 'undetermined';
-        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         <div className="max-w-4xl mx-auto p-4 py-8 space-y-6">
-          {/* Titre + bouton fermer */}
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-2xl font-bold text-gray-100">Paramètres du personnage</h2>
             <button
@@ -701,12 +704,11 @@ export function PlayerProfileSettingsModal({
             </button>
           </div>
 
-          {/* Discret: active le parseur */}
           <div className="hidden">
             <MarkdownLite content="" />
           </div>
 
-          {/* Identité (non repliée) */}
+          {/* Identité */}
           <div className="stat-card">
             <div className="stat-header">
               <h3 className="text-lg font-semibold text-gray-100">Identité</h3>
@@ -745,7 +747,7 @@ export function PlayerProfileSettingsModal({
             </div>
           </div>
 
-          {/* Niveau (non repliée) */}
+          {/* Niveau */}
           <div className="stat-card">
             <div className="stat-header">
               <h3 className="text-lg font-semibold text-gray-100">Niveau</h3>
@@ -781,10 +783,9 @@ export function PlayerProfileSettingsModal({
             </div>
           </div>
 
-          {/* PV max et Dés de vie (replié par défaut) */}
+          {/* PV max et Dés de vie */}
           <CollapsibleCard title="PV max et Dés de vie" defaultCollapsed>
             <div className="space-y-3">
-              {/* Ligne 1: PV max */}
               <div className="flex items-center gap-3">
                 <label className="block text-sm font-medium text-gray-300 min-w-[70px]">PV max</label>
                 <input
@@ -803,14 +804,12 @@ export function PlayerProfileSettingsModal({
                 />
               </div>
 
-              {/* Ligne 2: Dés de vie (sur 1 seule ligne) */}
               <div className="flex items-center gap-3">
                 <label className="block text-sm font-medium text-gray-300 min-w-[70px]">Dés de vie</label>
                 <button
                   type="button"
                   className="px-3 py-2 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
                   onClick={() => {
-                    // Consommer un dé de vie => used + 1
                     setHitDice((prev) => {
                       const used = Math.max(0, Math.min((prev?.used ?? 0) + 1, level));
                       return { total: level, used };
@@ -831,7 +830,6 @@ export function PlayerProfileSettingsModal({
                   type="button"
                   className="px-3 py-2 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
                   onClick={() => {
-                    // Rendre un dé de vie => used - 1
                     setHitDice((prev) => {
                       const used = Math.max(0, Math.min((prev?.used ?? 0) - 1, level));
                       return { total: level, used };
@@ -847,7 +845,7 @@ export function PlayerProfileSettingsModal({
             </div>
           </CollapsibleCard>
 
-          {/* Classe et Espèce (replié par défaut) */}
+          {/* Classe et Espèce */}
           <CollapsibleCard title="Classe et Espèce" defaultCollapsed>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
@@ -908,10 +906,9 @@ export function PlayerProfileSettingsModal({
             </div>
           </CollapsibleCard>
 
-          {/* Dons (replié par défaut) */}
+          {/* Dons */}
           <CollapsibleCard title="Dons" defaultCollapsed>
             <div className="space-y-8">
-              {/* Dons d'origine */}
               <div>
                 <label className="block text-sm font-medium text-gray-300">Dons d'origine</label>
                 <div className="mt-2 space-y-2">
@@ -921,7 +918,7 @@ export function PlayerProfileSettingsModal({
                       onChange={(e) => changeOriginAt(0, e.target.value)}
                       className="input-dark w-full px-3 py-2 rounded-md"
                     >
-                      <option value="">Sélectionnez un don d’origine</option>
+                      <option value="">Sélectionnez un don d'origine</option>
                       {ORIGIN_FEATS.map((f) => (
                         <option key={f} value={f}>
                           {f}
@@ -938,7 +935,7 @@ export function PlayerProfileSettingsModal({
                           onChange={(e) => changeOriginAt(idx, e.target.value)}
                           className="input-dark w-full px-3 py-2 rounded-md"
                         >
-                          <option value="">{idx === 0 ? 'Sélectionnez un don d’origine' : 'Choisir un don'}</option>
+                          <option value="">{idx === 0 ? 'Sélectionnez un don d\'origine' : 'Choisir un don'}</option>
                           {options.map((f) => (
                             <option key={f} value={f}>
                               {f}
@@ -954,14 +951,13 @@ export function PlayerProfileSettingsModal({
                   onClick={addOriginSelect}
                   className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700/60 text-gray-200 border border-white/10"
                   disabled={remainingOriginOptions.length === 0}
-                  title={remainingOriginOptions.length === 0 ? 'Aucun autre don disponible' : 'Ajouter un don d’origine'}
+                  title={remainingOriginOptions.length === 0 ? 'Aucun autre don disponible' : 'Ajouter un don d\'origine'}
                 >
                   <Plus size={16} />
                   Ajouter
                 </button>
               </div>
 
-              {/* Dons généraux */}
               <div>
                 <label className="block text-sm font-medium text-gray-300">Dons généraux</label>
                 <div className="mt-2 space-y-2">
@@ -1011,7 +1007,6 @@ export function PlayerProfileSettingsModal({
                 </button>
               </div>
 
-              {/* Styles de combat */}
               <div>
                 <label className="block text-sm font-medium text-gray-300">Styles de combat</label>
                 <div className="mt-2 space-y-2">
@@ -1063,7 +1058,116 @@ export function PlayerProfileSettingsModal({
             </div>
           </CollapsibleCard>
 
-          {/* Statistiques (replié par défaut) */}
+          {/* Maîtrises d'armes */}
+          <CollapsibleCard title="Maîtrises d'armes" defaultCollapsed>
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Sword className="w-5 h-5 text-red-400" />
+                <p className="text-sm text-gray-400">
+                  Sélectionnez les armes que votre personnage maîtrise (en plus de celles de sa classe).
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {WEAPON_PROFICIENCIES.map((proficiency) => {
+                  const isChecked = weaponProficiencies.includes(proficiency);
+                  
+                  return (
+                    <button
+                      key={proficiency}
+                      type="button"
+                      onClick={() => toggleWeaponProficiency(proficiency)}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-all ${
+                        isChecked
+                          ? 'border-red-500/60 bg-red-900/20 text-gray-100'
+                          : 'border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-800'
+                      }`}
+                    >
+                      {isChecked ? (
+                        <CheckSquare className="w-4 h-4 text-red-400 shrink-0" />
+                      ) : (
+                        <Square className="w-4 h-4 text-gray-400 shrink-0" />
+                      )}
+                      <span className="text-sm">{proficiency}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </CollapsibleCard>
+
+          {/* Formation aux armures et boucliers */}
+          <CollapsibleCard title="Formation aux armures et boucliers" defaultCollapsed>
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Shield className="w-5 h-5 text-blue-400" />
+                <p className="text-sm text-gray-400">
+                  Sélectionnez les armures et boucliers que votre personnage sait porter (en plus de ceux de sa classe).
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {ARMOR_PROFICIENCIES.map((proficiency) => {
+                  const isChecked = armorProficiencies.includes(proficiency);
+                  
+                  return (
+                    <button
+                      key={proficiency}
+                      type="button"
+                      onClick={() => toggleArmorProficiency(proficiency)}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-all ${
+                        isChecked
+                          ? 'border-blue-500/60 bg-blue-900/20 text-gray-100'
+                          : 'border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-800'
+                      }`}
+                    >
+                      {isChecked ? (
+                        <CheckSquare className="w-4 h-4 text-blue-400 shrink-0" />
+                      ) : (
+                        <Square className="w-4 h-4 text-gray-400 shrink-0" />
+                      )}
+                      <span className="text-sm">{proficiency}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </CollapsibleCard>
+
+          {/* Résumé des maîtrises */}
+          {(weaponProficiencies.length > 0 || armorProficiencies.length > 0) && (
+            <div className="p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+              <h4 className="text-sm font-medium text-white mb-3">Résumé des maîtrises</h4>
+              <div className="space-y-2">
+                {weaponProficiencies.length > 0 && (
+                  <div>
+                    <span className="text-xs text-red-400 font-medium">Armes :</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {weaponProficiencies.map((prof) => (
+                        <span key={prof} className="px-2 py-1 text-xs bg-red-500/20 text-red-200 rounded border border-red-500/30">
+                          {prof}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {armorProficiencies.length > 0 && (
+                  <div>
+                    <span className="text-xs text-blue-400 font-medium">Armures :</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {armorProficiencies.map((prof) => (
+                        <span key={prof} className="px-2 py-1 text-xs bg-blue-500/20 text-blue-200 rounded border border-blue-500/30">
+                          {prof}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Statistiques */}
           <CollapsibleCard title="Statistiques" defaultCollapsed>
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1149,7 +1253,7 @@ export function PlayerProfileSettingsModal({
                     className="input-dark w-full px-3 py-2 rounded-md"
                     placeholder="Ex: 9, 10,5, 12"
                     inputMode="decimal"
-                    pattern="^[0-9]+([\\.,][0-9]+)?$"
+                    pattern="^[0-9]+([\.,][0-9]+)?$"
                     aria-describedby="speed-help"
                   />
                   <p id="speed-help" className="text-xs text-gray-500 mt-1">Décimales autorisées: utilisez une virgule (ex: 10,5)</p>
@@ -1181,7 +1285,7 @@ export function PlayerProfileSettingsModal({
             </div>
           </CollapsibleCard>
 
-          {/* Historique (replié par défaut) */}
+          {/* Historique */}
           <CollapsibleCard title="Historique" defaultCollapsed>
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1248,7 +1352,7 @@ export function PlayerProfileSettingsModal({
             </div>
           </CollapsibleCard>
 
-          {/* Langues (replié par défaut) */}
+          {/* Langues */}
           <CollapsibleCard title="Langues" defaultCollapsed>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {DND_LANGUAGES.map((language) => {
@@ -1288,7 +1392,7 @@ export function PlayerProfileSettingsModal({
             </div>
           </CollapsibleCard>
 
-          {/* Bandeau d’actions ANCRÉ sous Langues */}
+          {/* Bandeau d'actions */}
           <div className="mt-4">
             <div className="flex gap-3 justify-end border-t border-gray-700/50 pt-4">
               {isDirty && (
