@@ -700,28 +700,28 @@ export function EquipmentTab({
       
     if (error) throw error;
     
-onPlayerUpdate({
-  ...player,
-  equipment: updatedEquipment
-});
-} catch (weaponSaveError) {
-  console.error('Erreur sauvegarde armes équipées:', weaponSaveError);
-}
-
-console.log(`${mode} terminé pour:`, freshItem.name);
-}
-} catch (performToggleError) {  // ← CHANGÉ: e → performToggleError
-  console.error('Erreur performToggle:', performToggleError);  // ← CHANGÉ: e → performToggleError
-  // En cas d'erreur, refresh pour récupérer l'état correct
-  await refreshInventory(0);
-  toast.error('Erreur lors de la bascule équipement');
-} finally {
-  setPendingEquipment(prev => {
-    const next = new Set(prev);
-    next.delete(freshItem.id);
-    return next;
-  });
-}
+    onPlayerUpdate({
+      ...player,
+      equipment: updatedEquipment
+    });
+    } catch (weaponSaveError) {
+      console.error('Erreur sauvegarde armes équipées:', weaponSaveError);
+    }
+    
+    console.log(`${mode} terminé pour:`, freshItem.name);
+    }
+    } catch (performToggleError) {  // ← CHANGÉ: e → performToggleError
+      console.error('Erreur performToggle:', performToggleError);  // ← CHANGÉ: e → performToggleError
+      // En cas d'erreur, refresh pour récupérer l'état correct
+      await refreshInventory(0);
+      toast.error('Erreur lors de la bascule équipement');
+    } finally {
+      setPendingEquipment(prev => {
+        const next = new Set(prev);
+        next.delete(freshItem.id);
+        return next;
+      });
+    }
   };
 
   const requestToggleWithConfirm = (item: InventoryItem) => {
