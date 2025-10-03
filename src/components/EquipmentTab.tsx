@@ -814,7 +814,7 @@ export function EquipmentTab({
         setPendingWeaponEquip(freshItem);
         setProficiencyCheck(proficiencyResult);
         setShowProficiencyWarning(true);
-        return;
+        await performEquipToggle(freshItem, 'equip');
       }
     }
 
