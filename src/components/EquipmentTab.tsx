@@ -1304,14 +1304,15 @@ useEffect(() => {
         />
       )}
 
-      {showWeaponsModal && (
-        <WeaponsManageModal
-          inventory={inventory}
-          onClose={() => setShowWeaponsModal(false)}
-          onEquip={(it) => performToggle(it, 'equip')}
-          onUnequip={(it) => performToggle(it, 'unequip')}
-        />
-      )}
+{showWeaponsModal && (
+  <WeaponsManageModal
+    inventory={inventory}
+    player={player} // ✅ AJOUT : Passer le player
+    onClose={() => setShowWeaponsModal(false)}
+    onEquip={(it) => performToggle(it, 'equip')}
+    onUnequip={(it) => performToggle(it, 'unequip')}
+  />
+)}
 
       <ConfirmEquipModal
         open={confirmOpen}
