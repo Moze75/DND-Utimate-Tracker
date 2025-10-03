@@ -2,7 +2,7 @@ import React from 'react';
 import Button from '../ui/Button';
 import Card, { CardContent, CardHeader } from '../ui/Card';
 import { CharacterExportPayload } from '../../types/CharacterExport';
-import { User, Heart, Shield, Zap, Users, Package, Image as ImageIcon } from 'lucide-react';
+import { User, Heart, Shield, Zap, Users, Package, Image as ImageIcon, Sword, Wrench, Star, ScrollText, Coins } from 'lucide-react';
 import { calculateModifier } from '../../utils/dndCalculations';
 
 interface ExportModalProps {
@@ -17,9 +17,14 @@ export function ExportModal({ open, payload, onClose, onConfirm }: ExportModalPr
 
   const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
+  // Convertit les pieds en mètres pour l'affichage
+  const feetToMeters = (ft: number) => {
+    return Math.round(ft * 0.3048 * 2) / 2;
+  };
+
   return (
     <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-5xl max-h-[90vh] overflow-hidden bg-gray-900 border border-gray-800 rounded-xl shadow-xl">
+      <div className="w-full max-w-6xl max-h-[90vh] overflow-hidden bg-gray-900 border border-gray-800 rounded-xl shadow-xl">
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
           <h3 className="text-lg font-semibold text-white">Exporter le personnage</h3>
           <button
@@ -82,6 +87,12 @@ export function ExportModal({ open, payload, onClose, onConfirm }: ExportModalPr
                 <span className="text-gray-400">Niveau</span>
                 <span className="text-white font-medium">{payload.level}</span>
               </div>
+              {payload.gold && payload.gold > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Or initial</span>
+                  <span className="text-white font-medium">{payload.gold} po</span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -108,7 +119,7 @@ export function ExportModal({ open, payload, onClose, onConfirm }: ExportModalPr
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-400">Vitesse</span>
-                <span className="text-white font-medium">{payload.speed} ft</span>
+                <span className="text-white font-medium">{feetToMeters(payload.speed)} m</span>
               </div>
             </CardContent>
           </Card>
@@ -137,11 +148,99 @@ export function ExportModal({ open, payload, onClose, onConfirm }: ExportModalPr
             </CardContent>
           </Card>
 
+          {/* ✅ NOUVEAU : Maîtrises d'armes et d'armures */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Maîtrises d'armes */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center">
+                  <Sword className="w-5 h-5 text-red-400 mr-2" />
+                  <h4 className="text-white font-semibold">Maîtrises d'armes</h4>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {payload.weaponProficiencies && payload.weaponProficiencies.length > 0 ? (
+                  <ul className="text-sm text-gray-300 space-y-1">
+                    {payload.weaponProficiencies.map((weapon, i) => (
+                      <li key={i}>• {weapon}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-sm text-gray-500">Aucune maîtrise d'arme</div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Formation aux armures */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center">
+                  <Shield className="w-5 h-5 text-blue-400 mr-2" />
+                  <h4 className="text-white font-semibold">Formation aux armures</h4>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {payload.armorProficiencies && payload.armorProficiencies.length > 0 ? (
+                  <ul className="text-sm text-gray-300 space-y-1">
+                    {payload.armorProficiencies.map((armor, i) => (
+                      <li key={i}>• {armor}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-sm text-gray-500">Aucune formation aux armures</div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ✅ NOUVEAU : Maîtrises d'outils (si applicable) */}
+          {payload.toolProficiencies && payload.toolProficiencies.length > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center">
+                  <Wrench className="w-5 h-5 text-yellow-400 mr-2" />
+                  <h4 className="text-white font-semibold">Maîtrises d'outils</h4>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <ul className="text-sm text-gray-300 space-y-1">
+                  {payload.toolProficiencies.map((tool, i) => (
+                    <li key={i}>• {tool}</li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ✅ NOUVEAU : Jets de sauvegarde */}
+          {payload.savingThrows && payload.savingThrows.length > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center">
+                  <Shield className="w-5 h-5 text-green-400 mr-2" />
+                  <h4 className="text-white font-semibold">Jets de sauvegarde maîtrisés</h4>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {payload.savingThrows.map((save, i) => (
+                    <span
+                      key={i}
+                      className="px-2 py-1 text-xs bg-green-500/20 text-green-200 rounded border border-green-500/30"
+                    >
+                      {save}
+                    </span>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Compétences */}
           <Card>
             <CardHeader>
               <div className="flex items-center">
-                <Users className="w-5 h-5 text-purple-400 mr-2" />
+                <Star className="w-5 h-5 text-purple-400 mr-2" />
                 <h4 className="text-white font-semibold">Compétences maîtrisées</h4>
               </div>
             </CardHeader>
@@ -163,6 +262,106 @@ export function ExportModal({ open, payload, onClose, onConfirm }: ExportModalPr
             </CardContent>
           </Card>
 
+          {/* ✅ NOUVEAU : Traits raciaux et capacités de classe */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Traits raciaux */}
+            {payload.racialTraits && payload.racialTraits.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center">
+                    <Users className="w-5 h-5 text-purple-400 mr-2" />
+                    <h4 className="text-white font-semibold">Traits raciaux</h4>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ul className="text-sm text-gray-300 space-y-1">
+                    {payload.racialTraits.map((trait, i) => (
+                      <li key={i}>• {trait}</li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Capacités de classe */}
+            {payload.classFeatures && payload.classFeatures.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center">
+                    <Zap className="w-5 h-5 text-green-400 mr-2" />
+                    <h4 className="text-white font-semibold">Capacités de classe</h4>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ul className="text-sm text-gray-300 space-y-1">
+                    {payload.classFeatures.map((feature, i) => (
+                      <li key={i}>• {feature}</li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* ✅ NOUVEAU : Don et capacité d'historique */}
+          {(payload.backgroundFeat || payload.backgroundFeature) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Don d'historique */}
+              {payload.backgroundFeat && (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center">
+                      <ScrollText className="w-5 h-5 text-amber-400 mr-2" />
+                      <h4 className="text-white font-semibold">Don d'historique</h4>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-sm text-gray-300">{payload.backgroundFeat}</div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Capacité d'historique */}
+              {payload.backgroundFeature && (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center">
+                      <Users className="w-5 h-5 text-cyan-400 mr-2" />
+                      <h4 className="text-white font-semibold">Capacité d'historique</h4>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-sm text-gray-300">{payload.backgroundFeature}</div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* ✅ NOUVEAU : Langues */}
+          {payload.languages && payload.languages.length > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center">
+                  <ScrollText className="w-5 h-5 text-blue-400 mr-2" />
+                  <h4 className="text-white font-semibold">Langues</h4>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {payload.languages.map((lang, i) => (
+                    <span
+                      key={i}
+                      className="px-2 py-1 text-xs bg-blue-500/20 text-blue-200 rounded border border-blue-500/30"
+                    >
+                      {lang}
+                    </span>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Équipement */}
           <Card>
             <CardHeader>
@@ -172,22 +371,49 @@ export function ExportModal({ open, payload, onClose, onConfirm }: ExportModalPr
               </div>
             </CardHeader>
             <CardContent>
-              {payload.equipment.length > 0 ? (
-                <ul className="text-sm text-gray-300 space-y-1">
-                  {payload.equipment.map((item, i) => (
-                    <li key={i}>• {item}</li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="text-sm text-gray-500">Aucun équipement</div>
-              )}
-              {payload.selectedBackgroundEquipmentOption && (
-                <div className="text-xs text-gray-400 mt-2">
-                  Option d’historique: {payload.selectedBackgroundEquipmentOption}
+              <div className="space-y-3">
+                {/* ✅ NOUVEAU : Affichage des options sélectionnées */}
+                <div className="text-xs text-gray-400 space-y-1">
+                  {payload.selectedEquipmentOption && (
+                    <div>Équipement de classe : Option {payload.selectedEquipmentOption}</div>
+                  )}
+                  {payload.selectedBackgroundEquipmentOption && (
+                    <div>Équipement d'historique : Option {payload.selectedBackgroundEquipmentOption}</div>
+                  )}
                 </div>
-              )}
+
+                {payload.equipment.length > 0 ? (
+                  <ul className="text-sm text-gray-300 space-y-1">
+                    {payload.equipment.map((item, i) => (
+                      <li key={i}>• {item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-sm text-gray-500">Aucun équipement</div>
+                )}
+              </div>
             </CardContent>
           </Card>
+
+          {/* ✅ NOUVEAU : Dés de vie */}
+          {payload.hitDice && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center">
+                  <Heart className="w-5 h-5 text-red-400 mr-2" />
+                  <h4 className="text-white font-semibold">Dés de vie</h4>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-sm text-gray-300">
+                  {payload.hitDice.total} {payload.hitDice.die} 
+                  {payload.hitDice.used > 0 && (
+                    <span className="text-gray-400"> ({payload.hitDice.used} utilisé{payload.hitDice.used > 1 ? 's' : ''})</span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-3 p-4 border-t border-gray-800">
@@ -195,7 +421,7 @@ export function ExportModal({ open, payload, onClose, onConfirm }: ExportModalPr
             Annuler
           </Button>
           <Button onClick={onConfirm} className="min-w-[200px]">
-            Confirmer l’export
+            Confirmer l'export
           </Button>
         </div>
       </div>
