@@ -493,7 +493,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
                 {proficiencies.weapons.map((weapon, i) => (
                   <span
                     key={i}
-                    className="block px-2 py-1 text-xs bg-red-500/20 text-red-200 rounded"
+                    className="block px-2 py-1 text-xs bg-gray-700/40 text-gray-200 rounded"
                   >
                     {weapon}
                   </span>
@@ -515,7 +515,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
                 {proficiencies.armors.map((armor, i) => (
                   <span
                     key={i}
-                    className="block px-2 py-1 text-xs bg-blue-500/20 text-blue-200 rounded"
+                    className="block px-2 py-1 text-xs bg-gray-700/40 text-gray-200 rounded"
                   >
                     {armor}
                   </span>
@@ -537,7 +537,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
                 {proficiencies.tools.map((tool, i) => (
                   <span
                     key={i}
-                    className="block px-2 py-1 text-xs bg-yellow-500/20 text-yellow-200 rounded"
+                    className="block px-2 py-1 text-xs bg-gray-700/40 text-gray-200 rounded"
                   >
                     {tool}
                   </span>
