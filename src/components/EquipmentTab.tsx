@@ -513,7 +513,7 @@ useEffect(() => {
     if (inventory.length > 0 && (player.equipment as any)?.weapons?.length > 0) {
       syncWeaponsFromPlayer();
     }
- );
+
   
   return () => clearTimeout(timeoutId);
 }, []); // Dépendances vides = se déclenche uniquement au montage du composant
