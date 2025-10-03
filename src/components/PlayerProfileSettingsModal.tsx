@@ -1107,39 +1107,6 @@ export function PlayerProfileSettingsModal({
             </div>
           </CollapsibleCard>
 
-          {/* Résumé des maîtrises */}
-          {(weaponProficiencies.length > 0 || armorProficiencies.length > 0) && (
-            <div className="p-4 bg-gray-800/50 rounded-lg border border-gray-700">
-              <h4 className="text-sm font-medium text-white mb-3">Résumé des maîtrises</h4>
-              <div className="space-y-2">
-                {weaponProficiencies.length > 0 && (
-                  <div>
-                    <span className="text-xs text-red-400 font-medium">Armes :</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {weaponProficiencies.map((prof) => (
-                        <span key={prof} className="px-2 py-1 text-xs bg-red-500/20 text-red-200 rounded border border-red-500/30">
-                          {prof}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {armorProficiencies.length > 0 && (
-                  <div>
-                    <span className="text-xs text-blue-400 font-medium">Armures :</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {armorProficiencies.map((prof) => (
-                        <span key={prof} className="px-2 py-1 text-xs bg-blue-500/20 text-blue-200 rounded border border-blue-500/30">
-                          {prof}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* Statistiques */}
           <CollapsibleCard title="Statistiques" defaultCollapsed>
             <div className="space-y-4">
