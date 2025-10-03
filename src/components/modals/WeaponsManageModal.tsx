@@ -278,17 +278,17 @@ export function WeaponsManageModal({
             </div>
 
             {/* ✅ AJOUT : Légende des indicateurs */}
-            <div className="text-xs text-gray-400 bg-gray-800/30 p-2 rounded border border-gray-700/50">
-              <div className="flex items-center gap-4">
-                <span className="flex items-center gap-1">
-                  <span className="text-green-400">✓</span> Maîtrisé
-                </span>
-                <span className="flex items-center gap-1">
-                  <AlertTriangle size={12} className="text-yellow-500" />
-                  Non maîtrisé (désavantage)
-                </span>
+              <div className="text-xs text-gray-400 bg-gray-800/30 p-2 rounded border border-gray-700/50">
+                <div className="flex items-center gap-4">
+                  <span className="flex items-center gap-1">
+                    <span className="text-green-400">✓</span> Maîtrisé (bonus de maîtrise)
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <AlertTriangle size={12} className="text-yellow-500" />
+                    Non maîtrisé (pas de bonus)
+                  </span>
+                </div>
               </div>
-            </div>
 
             <Section title="Armes équipées" list={filterByQuery(equipped)} showEquipped={true} />
             <Section title="Autres armes dans le sac" list={filterByQuery(others)} showEquipped={false} />
