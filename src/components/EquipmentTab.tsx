@@ -650,27 +650,27 @@ export function EquipmentTab({
           await saveEquipment('shield', eq);
           toast.success('Bouclier équipé');
         }
-      } else if (meta.type === 'weapon') {
-        // CORRECTION CRITIQUE : Logique simplifiée pour les armes
-        const targetEquipped = mode === 'equip';
-        
-        if (meta.equipped === targetEquipped) {
-          console.log('Arme déjà dans l\'état souhaité');
-          return;
-        }
-        
-        const nextMeta = { ...meta, equipped: targetEquipped };
-        
-        // Mise à jour de l'item
-        await updateItemMetaComplete(freshItem, nextMeta);
+} else if (meta.type === 'weapon') {
+  // CORRECTION CRITIQUE : Logique simplifiée pour les armes
+  const targetEquipped = mode === 'equip';
+  
+  if (meta.equipped === targetEquipped) {
+    console.log('Arme déjà dans l\'état souhaité');
+    return;
+  }
+  
+  const nextMeta = { ...meta, equipped: targetEquipped };
+  
+  // Mise à jour de l'item
+  await updateItemMetaComplete(freshItem, nextMeta);
 
-         // NOUVEAU: Sauvegarder les armes équipées dans player.equipment.weapons
+  // NOUVEAU: Sauvegarder les armes équipées dans player.equipment.weapons
   const currentWeapons = (player.equipment as any)?.weapons || [];
   let updatedWeapons;
-        
-        // Gestion des attaques
-        if (targetEquipped) {
-       const weaponData = {
+  
+  // Gestion des attaques
+  if (targetEquipped) {
+    const weaponData = {
       inventory_item_id: freshItem.id,
       name: freshItem.name,
       description: visibleDescription(freshItem.description),
@@ -685,9 +685,31 @@ export function EquipmentTab({
     await removeWeaponAttacksByName(freshItem.name);
     toast.success('Arme déséquipée');
   }
-        
-        console.log(`${mode} terminé pour:`, freshItem.name);
-      }
+
+  // NOUVEAU: Sauvegarder dans player.equipment.weapons
+  const updatedEquipment = {
+    ...player.equipment,
+    weapons: updatedWeapons
+  };
+  
+  try {
+    const { error } = await supabase
+      .from('players')
+      .update({ equipment: updatedEquipment })
+      .eq('id', player.id);
+      
+    if (error) throw error;
+    
+    onPlayerUpdate({
+      ...player,
+      equipment: updatedEquipment
+    });
+  } catch (e) {
+    console.error('Erreur sauvegarde armes équipées:', e);
+  }
+  
+  console.log(`${mode} terminé pour:`, freshItem.name);
+}
     } catch (e) {
       console.error('Erreur performToggle:', e);
       // En cas d'erreur, refresh pour récupérer l'état correct
