@@ -710,7 +710,6 @@ export function EquipmentTab({
   
   console.log(`${mode} terminé pour:`, freshItem.name);
 } 
-
       console.error('Erreur performToggle:', e);
       // En cas d'erreur, refresh pour récupérer l'état correct
       await refreshInventory(0);
