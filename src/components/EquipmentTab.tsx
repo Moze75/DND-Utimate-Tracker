@@ -709,7 +709,7 @@ export function EquipmentTab({
   }
   
   console.log(`${mode} terminé pour:`, freshItem.name);
-}
+
     } catch (e) {
       console.error('Erreur performToggle:', e);
       // En cas d'erreur, refresh pour récupérer l'état correct
