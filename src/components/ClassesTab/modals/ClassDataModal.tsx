@@ -8,6 +8,7 @@ import {
   SUBCLASS_ALIASES, 
   AbilitySection 
 } from './ClassUtilsModal';
+// ✅ CORRECT - remonter 3 niveaux depuis modals/ vers src/
 import { loadAbilitySections } from '../../../services/classesContent';
 
 const DEBUG = typeof window !== 'undefined' && (window as any).UT_DEBUG === true;
