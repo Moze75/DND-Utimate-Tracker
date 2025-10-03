@@ -1,6 +1,9 @@
 import React from 'react';
-import { X, Check, Sword } from 'lucide-react';
+import { X, Check, Sword, AlertTriangle } from 'lucide-react';
 import { InventoryItem } from '../../types/dnd';
+// ✅ AJOUT : Imports pour la vérification des maîtrises
+import { checkWeaponProficiency, getPlayerWeaponProficiencies, WeaponProficiencyCheck } from '../../utils/weaponProficiencyChecker';
+import { WeaponProficiencyWarningModal } from './WeaponProficiencyWarningModal';
 
 const META_PREFIX = '#meta:';
 
@@ -40,14 +43,23 @@ export function WeaponsManageModal({
   onClose,
   onEquip,
   onUnequip,
+  // ✅ AJOUT : Prop player pour vérifier les maîtrises
+  player,
 }: {
   inventory: InventoryItem[];
   onClose: () => void;
   onEquip: (item: InventoryItem) => Promise<void> | void;
   onUnequip: (item: InventoryItem) => Promise<void> | void;
+  // ✅ AJOUT : Type pour le player
+  player: any;
 }) {
   const [q, setQ] = React.useState('');
   const [pendingId, setPendingId] = React.useState<string | null>(null);
+  
+  // ✅ AJOUT : États pour la modal d'avertissement
+  const [showProficiencyWarning, setShowProficiencyWarning] = React.useState(false);
+  const [proficiencyCheck, setProficiencyCheck] = React.useState<WeaponProficiencyCheck | null>(null);
+  const [pendingWeaponEquip, setPendingWeaponEquip] = React.useState<InventoryItem | null>(null);
   
   const weapons = React.useMemo(() => {
     return inventory
@@ -69,6 +81,45 @@ export function WeaponsManageModal({
     });
   };
 
+  // ✅ AJOUT : Fonction pour équiper avec vérification des maîtrises
+  const handleEquipWithProficiencyCheck = async (item: InventoryItem) => {
+    const playerProficiencies = getPlayerWeaponProficiencies(player);
+    const proficiencyResult = checkWeaponProficiency(item.name, playerProficiencies);
+    
+    if (!proficiencyResult.isProficient) {
+      // Arme non maîtrisée : afficher l'avertissement
+      setPendingWeaponEquip(item);
+      setProficiencyCheck(proficiencyResult);
+      setShowProficiencyWarning(true);
+    } else {
+      // Arme maîtrisée : équiper directement
+      await onEquip(item);
+    }
+  };
+
+  // ✅ AJOUT : Gestionnaires pour la modal d'avertissement
+  const handleProficiencyWarningConfirm = async () => {
+    setShowProficiencyWarning(false);
+    if (pendingWeaponEquip) {
+      await onEquip(pendingWeaponEquip);
+      setPendingWeaponEquip(null);
+      setProficiencyCheck(null);
+    }
+  };
+
+  const handleProficiencyWarningCancel = () => {
+    setShowProficiencyWarning(false);
+    setPendingWeaponEquip(null);
+    setProficiencyCheck(null);
+  };
+
+  // ✅ AJOUT : Fonction pour vérifier les maîtrises et afficher un indicateur
+  const getProficiencyStatus = (weaponName: string) => {
+    const playerProficiencies = getPlayerWeaponProficiencies(player);
+    const proficiencyResult = checkWeaponProficiency(weaponName, playerProficiencies);
+    return proficiencyResult;
+  };
+
   const Section = ({ title, list, showEquipped }: { 
     title: string; 
     list: { it: InventoryItem; meta: ItemMeta | null }[];
@@ -84,6 +135,9 @@ export function WeaponsManageModal({
           const isPending = pendingId === it.id;
           const isEquipped = meta?.equipped === true;
           
+          // ✅ AJOUT : Vérification des maîtrises pour l'affichage
+          const proficiencyStatus = getProficiencyStatus(it.name);
+          
           return (
             <div key={it.id} className="rounded-md border border-gray-700/50 bg-gray-800/40 p-2">
               <div className="flex items-start justify-between gap-2">
@@ -91,17 +145,29 @@ export function WeaponsManageModal({
                   <div className="flex items-center gap-2">
                     <Sword size={16} className="text-red-400 shrink-0" />
                     <div className="font-medium text-gray-100 truncate">{smartCapitalize(it.name)}</div>
+                    {/* ✅ AJOUT : Indicateur de maîtrise */}
+                    {!proficiencyStatus.isProficient && (
+                      <AlertTriangle 
+                        size={14} 
+                        className="text-yellow-500 shrink-0" 
+                        title={`Non maîtrisé : ${proficiencyStatus.reason}`}
+                      />
+                    )}
                   </div>
                   {w && (
                     <div className="mt-1 text-xs text-gray-400 space-y-0.5">
                       <div>Dés: {w.damageDice} {w.damageType}</div>
                       {w.properties && <div>Propriété: {w.properties}</div>}
                       {w.range && <div>Portée: {w.range}</div>}
+                      {/* ✅ AJOUT : Affichage du statut de maîtrise */}
+                      <div className={proficiencyStatus.isProficient ? 'text-green-400' : 'text-yellow-400'}>
+                        {proficiencyStatus.isProficient ? '✓ Maîtrisé' : '⚠ Non maîtrisé'}
+                        {proficiencyStatus.category && ` (${proficiencyStatus.category})`}
+                      </div>
                     </div>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* CORRECTION : Affichage selon le contexte de la section */}
                   {showEquipped ? (
                     // Section "Armes équipées" : Badge vert + bouton déséquiper
                     <>
@@ -144,7 +210,8 @@ export function WeaponsManageModal({
                           if (isPending) return;
                           setPendingId(it.id);
                           try { 
-                            await onEquip(it); 
+                            // ✅ MODIFICATION : Utiliser la fonction avec vérification
+                            await handleEquipWithProficiencyCheck(it);
                           } catch (error) {
                             console.error('Erreur équipement:', error);
                           } finally { 
@@ -155,13 +222,22 @@ export function WeaponsManageModal({
                         className={`px-2 py-1 rounded text-xs border ${
                           isPending 
                             ? 'border-gray-500 text-gray-500 bg-gray-800/50 cursor-not-allowed'
-                            : 'border-green-500/40 text-green-300 bg-green-900/20 hover:border-green-400/60'
+                            : proficiencyStatus.isProficient
+                              ? 'border-green-500/40 text-green-300 bg-green-900/20 hover:border-green-400/60'
+                              : 'border-yellow-500/40 text-yellow-300 bg-yellow-900/20 hover:border-yellow-400/60'
                         }`}
-                        title={isPending ? "Traitement en cours..." : "Équiper"}
+                        title={
+                          isPending 
+                            ? "Traitement en cours..." 
+                            : proficiencyStatus.isProficient 
+                              ? "Équiper" 
+                              : "Équiper (non maîtrisé - désavantage aux attaques)"
+                        }
                       >
                         {isPending ? 'En cours...' : (
                           <>
-                            <Check size={12} /> Équiper
+                            <Check size={12} />
+                            {proficiencyStatus.isProficient ? 'Équiper' : 'Équiper ⚠'}
                           </>
                         )}
                       </button>
@@ -177,33 +253,57 @@ export function WeaponsManageModal({
   );
 
   return (
-    <div
-      className="fixed inset-0 z-[10050]"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="fixed inset-0 bg-black/70" />
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(720px,95vw)] max-h-[90vh] overflow-y-auto bg-gray-900/95 rounded-lg border border-gray-700 shadow-xl">
-        <div className="flex items-center justify-between p-3 border-b border-gray-800 sticky top-0 bg-gray-900/95">
-          <h3 className="text-gray-100 font-semibold">Mes armes</h3>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg" aria-label="Fermer">
-            <X />
-          </button>
-        </div>
-
-        <div className="p-3 space-y-4">
-          <div className="flex items-center gap-2">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Rechercher une arme (nom, description, propriété)…"
-              className="input-dark px-3 py-2 rounded-md w-full"
-            />
+    <>
+      <div
+        className="fixed inset-0 z-[10050]"
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      >
+        <div className="fixed inset-0 bg-black/70" />
+        <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(720px,95vw)] max-h-[90vh] overflow-y-auto bg-gray-900/95 rounded-lg border border-gray-700 shadow-xl">
+          <div className="flex items-center justify-between p-3 border-b border-gray-800 sticky top-0 bg-gray-900/95">
+            <h3 className="text-gray-100 font-semibold">Mes armes</h3>
+            <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg" aria-label="Fermer">
+              <X />
+            </button>
           </div>
 
-          <Section title="Armes équipées" list={filterByQuery(equipped)} showEquipped={true} />
-          <Section title="Autres armes dans le sac" list={filterByQuery(others)} showEquipped={false} />
+          <div className="p-3 space-y-4">
+            <div className="flex items-center gap-2">
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Rechercher une arme (nom, description, propriété)…"
+                className="input-dark px-3 py-2 rounded-md w-full"
+              />
+            </div>
+
+            {/* ✅ AJOUT : Légende des indicateurs */}
+            <div className="text-xs text-gray-400 bg-gray-800/30 p-2 rounded border border-gray-700/50">
+              <div className="flex items-center gap-4">
+                <span className="flex items-center gap-1">
+                  <span className="text-green-400">✓</span> Maîtrisé
+                </span>
+                <span className="flex items-center gap-1">
+                  <AlertTriangle size={12} className="text-yellow-500" />
+                  Non maîtrisé (désavantage)
+                </span>
+              </div>
+            </div>
+
+            <Section title="Armes équipées" list={filterByQuery(equipped)} showEquipped={true} />
+            <Section title="Autres armes dans le sac" list={filterByQuery(others)} showEquipped={false} />
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* ✅ AJOUT : Modal d'avertissement pour les maîtrises */}
+      <WeaponProficiencyWarningModal
+        isOpen={showProficiencyWarning}
+        weaponName={pendingWeaponEquip?.name || ''}
+        proficiencyCheck={proficiencyCheck!}
+        onConfirm={handleProficiencyWarningConfirm}
+        onCancel={handleProficiencyWarningCancel}
+      />
+    </>
   );
 }
