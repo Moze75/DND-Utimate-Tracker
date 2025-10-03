@@ -512,10 +512,10 @@ useEffect(() => {
   const timeoutId = setTimeout(() => {
     if (inventory.length > 0 && (player.equipment as any)?.weapons?.length > 0) {
       syncWeaponsFromPlayer();
-    }
-
+    } 
+  }, 100);
   
-
+  return () => clearTimeout(timeoutId);
 }, []); // Dépendances vides = se déclenche uniquement au montage du composant
   const jewelryItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'jewelry'), [inventory]);
   const potionItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'potion'), [inventory]);
