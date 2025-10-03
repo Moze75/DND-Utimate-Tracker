@@ -60,7 +60,6 @@ interface ArmorMeta {
 interface ShieldMeta {
   bonus: number;
 }
-
 interface ItemMeta {
   type: MetaType;
   quantity?: number;
@@ -326,7 +325,6 @@ const EquipmentSlot = ({
           {type === 'bag' ? icon : React.cloneElement(icon as React.ReactElement, { size: 24 })}
         </div>
       </button>
-
       {showInfo && (
         <InfoBubble
           equipment={equipment}
@@ -363,7 +361,7 @@ const CurrencyInput = ({ currency, value, onAdd, onSpend }: {
 }) => {
   const [amount, setAmount] = useState<string>('');
   const getColor = (c: Currency) => c === 'gold' ? 'text-yellow-500' : c === 'silver' ? 'text-gray-300' : 'text-orange-400';
-  const getName = (c: Currency) => c === 'gold' ? 'Or' : c === 'silver' ? 'Argent' : 'Cuivre';
+  const getName = (c: Currency) => c === 'gold' ? 'Or' : c === 'silver' ? 'Argent' : c === 'copper' ? 'Cuivre' : c;
   const act = (add: boolean) => { const n = parseInt(amount) || 0; if (n > 0) { (add ? onAdd : onSpend)(n); setAmount(''); } };
   return (
     <div className="flex items-center gap-2 h-11 relative">
@@ -407,9 +405,10 @@ export function EquipmentTab({
   const [showBagModal, setShowBagModal] = useState(false);
   const [bagText, setBagText] = useState(bag?.description || '');
 
+  // Avertissement maîtrise (informative seulement maintenant)
   const [showProficiencyWarning, setShowProficiencyWarning] = useState(false);
   const [proficiencyCheck, setProficiencyCheck] = useState<WeaponProficiencyCheck | null>(null);
-  const [pendingWeaponEquip, setPendingWeaponEquip] = useState<InventoryItem | null>(null);
+  const [pendingWeaponEquip, setPendingWeaponEquip] = useState<InventoryItem | null>(null); // conservé si besoin d’afficher le nom
 
   useEffect(() => {
     stableEquipmentRef.current = { armor, shield, bag };
@@ -419,7 +418,7 @@ export function EquipmentTab({
     if (!armor && player.equipment?.armor) setArmor(player.equipment.armor);
     if (!shield && player.equipment?.shield) setShield(player.equipment.shield);
     if (!bag && player.equipment?.bag) setBag(player.equipment.bag);
-  }, [player.equipment]);
+  }, [player.equipment]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (bag?.description) {
@@ -427,11 +426,12 @@ export function EquipmentTab({
     }
   }, [bag]);
 
+  // Sync initial armes
   useEffect(() => {
     const syncWeaponsFromPlayer = async () => {
       const savedWeapons = (player.equipment as any)?.weapons || [];
       if (savedWeapons.length === 0) return;
-      
+
       const savedWeaponIds = new Set(savedWeapons.map((w: any) => w.inventory_item_id));
       const currentEquippedIds = new Set(
         inventory
@@ -441,47 +441,49 @@ export function EquipmentTab({
           })
           .map(item => item.id)
       );
-      
+
       const needsSync =
         savedWeaponIds.size !== currentEquippedIds.size ||
         [...savedWeaponIds].some(id => !currentEquippedIds.has(id));
-      
+
       if (!needsSync) return;
-      
+
       const updates: Promise<any>[] = [];
       const localUpdates: InventoryItem[] = [];
-      
+
+      // déséquiper
       for (const item of inventory) {
         const meta = parseMeta(item.description);
         if (meta?.type === 'weapon' && meta.equipped) {
           const nextMeta = { ...meta, equipped: false };
-            const nextDesc = injectMetaIntoDescription(visibleDescription(item.description), nextMeta);
+          const nextDesc = injectMetaIntoDescription(visibleDescription(item.description), nextMeta);
           localUpdates.push({ ...item, description: nextDesc });
           updates.push(supabase.from('inventory_items').update({ description: nextDesc }).eq('id', item.id));
         }
       }
-      
+
+      // rééquiper
       for (const savedWeapon of savedWeapons) {
         const item = inventory.find(i => i.id === savedWeapon.inventory_item_id);
         if (item) {
           const meta = parseMeta(item.description);
-          if (meta?.type === 'weapon') {
+            if (meta?.type === 'weapon') {
             const nextMeta = { ...meta, equipped: true };
             const nextDesc = injectMetaIntoDescription(visibleDescription(item.description), nextMeta);
-            
+
             const existingIndex = localUpdates.findIndex(u => u.id === item.id);
             if (existingIndex >= 0) {
               localUpdates[existingIndex] = { ...item, description: nextDesc };
             } else {
               localUpdates.push({ ...item, description: nextDesc });
             }
-            
+
             updates.push(supabase.from('inventory_items').update({ description: nextDesc }).eq('id', item.id));
             await createOrUpdateWeaponAttack(item.name, meta.weapon, item.name);
           }
         }
       }
-      
+
       if (localUpdates.length > 0) {
         const updatedInventory = inventory.map(item => {
           const updated = localUpdates.find(u => u.id === item.id);
@@ -489,18 +491,18 @@ export function EquipmentTab({
         });
         onInventoryUpdate(updatedInventory);
       }
-      
+
       if (updates.length > 0) {
         await Promise.allSettled(updates);
       }
     };
-    
+
     const timeoutId = setTimeout(() => {
       if (inventory.length > 0 && (player.equipment as any)?.weapons?.length > 0) {
         syncWeaponsFromPlayer();
-      } 
+      }
     }, 100);
-    
+
     return () => clearTimeout(timeoutId);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -576,7 +578,7 @@ export function EquipmentTab({
     try { window.dispatchEvent(new CustomEvent('attacks:changed', { detail: { playerId: player.id } })); } catch {}
   };
 
-  // ✅ MODIFIÉ : prise en compte de la maîtrise pour expertise
+  // ----------- MODIFIÉ : expertise basée sur shouldApplyProficiencyBonus -----------
   const createOrUpdateWeaponAttack = async (name: string, w?: WeaponMeta | null, weaponName?: string) => {
     try {
       const attacks = await attackService.getPlayerAttacks(player.id);
@@ -584,7 +586,6 @@ export function EquipmentTab({
 
       const playerProficiencies = getPlayerWeaponProficiencies(player);
       const proficiencyResult = checkWeaponProficiency(weaponName || name, playerProficiencies);
-      const shouldApplyProficiency = proficiencyResult.shouldApplyProficiencyBonus;
 
       const payload = {
         player_id: player.id,
@@ -595,7 +596,7 @@ export function EquipmentTab({
         properties: w?.properties || '',
         manual_attack_bonus: null,
         manual_damage_bonus: null,
-        expertise: shouldApplyProficiency,
+        expertise: proficiencyResult.shouldApplyProficiencyBonus,
         attack_type: 'physical' as const,
         spell_level: null as any,
         ammo_count: (existing as any)?.ammo_count ?? 0
@@ -606,7 +607,6 @@ export function EquipmentTab({
       } else {
         await attackService.addAttack(payload);
       }
-
       notifyAttacksChanged();
     } catch (err) {
       console.error('Création/mise à jour attaque échouée', err);
@@ -663,12 +663,10 @@ export function EquipmentTab({
     if (updates.length) await Promise.allSettled(updates);
   };
 
+  // ----------- Équipement effectif -----------
   const performEquipToggle = async (freshItem: InventoryItem, mode: 'equip' | 'unequip') => {
     const meta = parseMeta(freshItem.description);
     if (!meta) return;
-
-    console.log(`Début ${mode} pour:`, freshItem.name, 'meta.equipped:', meta.equipped);
-
     try {
       setPendingEquipment(prev => new Set([...prev, freshItem.id]));
 
@@ -688,7 +686,7 @@ export function EquipmentTab({
             weapon_meta: null,
           };
           await updateItemMetaComplete(freshItem, { ...meta, equipped: true });
-            await saveEquipment('armor', eq);
+          await saveEquipment('armor', eq);
           toast.success('Armure équipée');
         }
       } else if (meta.type === 'shield') {
@@ -707,16 +705,12 @@ export function EquipmentTab({
             weapon_meta: null,
           };
           await updateItemMetaComplete(freshItem, { ...meta, equipped: true });
-          await saveEquipment('shield', eq);
+            await saveEquipment('shield', eq);
           toast.success('Bouclier équipé');
         }
       } else if (meta.type === 'weapon') {
         const targetEquipped = mode === 'equip';
-
-        if (meta.equipped === targetEquipped) {
-          console.log('Arme déjà dans l\'état souhaité');
-          return;
-        }
+        if (meta.equipped === targetEquipped) return;
 
         const nextMeta = { ...meta, equipped: targetEquipped };
         await updateItemMetaComplete(freshItem, nextMeta);
@@ -734,7 +728,6 @@ export function EquipmentTab({
           updatedWeapons = [...currentWeapons.filter((w: any) => w.inventory_item_id !== freshItem.id), weaponData];
 
           await createOrUpdateWeaponAttack(freshItem.name, meta.weapon, freshItem.name);
-
           const playerProficiencies = getPlayerWeaponProficiencies(player);
           const proficiencyResult = checkWeaponProficiency(freshItem.name, playerProficiencies);
 
@@ -762,9 +755,7 @@ export function EquipmentTab({
             .from('players')
             .update({ equipment: updatedEquipment })
             .eq('id', player.id);
-
           if (error) throw error;
-
           onPlayerUpdate({
             ...player,
             equipment: updatedEquipment
@@ -772,11 +763,9 @@ export function EquipmentTab({
         } catch (weaponSaveError) {
           console.error('Erreur sauvegarde armes équipées:', weaponSaveError);
         }
-
-        console.log(`${mode} terminé pour:`, freshItem.name);
       }
-    } catch (performToggleError) {
-      console.error('Erreur performToggle:', performToggleError);
+    } catch (e) {
+      console.error('Erreur performEquipToggle:', e);
       await refreshInventory(0);
       toast.error('Erreur lors de la bascule équipement');
     } finally {
@@ -788,18 +777,15 @@ export function EquipmentTab({
     }
   };
 
+  // ----------- performToggle avec avertissement non bloquant -----------
   const performToggle = async (item: InventoryItem, mode: 'equip' | 'unequip') => {
-    if (pendingEquipment.has(item.id)) {
-      console.log('Action déjà en cours pour:', item.id);
-      return;
-    }
+    if (pendingEquipment.has(item.id)) return;
 
     const freshItem = inventory.find(i => i.id === item.id);
     if (!freshItem) {
       toast.error("Objet introuvable");
       return;
     }
-
     const meta = parseMeta(freshItem.description);
     if (!meta) {
       toast.error("Métadonnées manquantes");
@@ -810,26 +796,23 @@ export function EquipmentTab({
       const playerProficiencies = getPlayerWeaponProficiencies(player);
       const proficiencyResult = checkWeaponProficiency(freshItem.name, playerProficiencies);
 
+      // AFFICHER l'avertissement mais NE PAS bloquer
       if (!proficiencyResult.isProficient) {
         setPendingWeaponEquip(freshItem);
         setProficiencyCheck(proficiencyResult);
         setShowProficiencyWarning(true);
-        await performEquipToggle(freshItem, 'equip');
       }
     }
 
     await performEquipToggle(freshItem, mode);
   };
 
-  const handleProficiencyWarningConfirm = async () => {
+  const handleProficiencyWarningConfirm = () => {
+    // Maintenant purement informatif
     setShowProficiencyWarning(false);
-    if (pendingWeaponEquip) {
-      await performEquipToggle(pendingWeaponEquip, 'equip');
-      setPendingWeaponEquip(null);
-      setProficiencyCheck(null);
-    }
+    setPendingWeaponEquip(null);
+    setProficiencyCheck(null);
   };
-
   const handleProficiencyWarningCancel = () => {
     setShowProficiencyWarning(false);
     setPendingWeaponEquip(null);
@@ -838,14 +821,12 @@ export function EquipmentTab({
 
   const requestToggleWithConfirm = (item: InventoryItem) => {
     if (pendingEquipment.has(item.id)) return;
-
     const freshItem = inventory.find(i => i.id === item.id);
     if (!freshItem) {
       toast.error("Objet introuvable");
       return;
     }
-
-    const meta = parseMeta(freshItem.description);
+       const meta = parseMeta(freshItem.description);
     if (!meta) return toast.error("Objet sans métadonnées. Ouvrez Paramètres et précisez sa nature.");
 
     const isArmor = meta.type === 'armor';
@@ -884,6 +865,7 @@ export function EquipmentTab({
     setConfirmOpen(true);
   };
 
+  // Sac / filtres
   const [bagFilter, setBagFilter] = useState('');
   const [bagKinds, setBagKinds] = useState<Record<MetaType, boolean>>({
     armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true, tool: true
@@ -909,6 +891,7 @@ export function EquipmentTab({
 
   return (
     <div className="space-y-6">
+      {/* Silhouette + slots */}
       <div className="stat-card">
         <div className="stat-header flex items-center gap-3">
           <Backpack className="text-purple-500" size={24} />
@@ -928,10 +911,7 @@ export function EquipmentTab({
               position="top-[27%] left-1/2 -translate-x-1/2"
               equipment={armor || null}
               type="armor"
-              onRequestOpenList={() => {
-                setInventoryModalType('armor');
-                setShowInventoryModal(true);
-              }}
+              onRequestOpenList={() => { setInventoryModalType('armor'); setShowInventoryModal(true); }}
               onToggleEquipFromSlot={() => toggleFromSlot('armor')}
               onOpenEditFromSlot={() => openEditFromSlot('armor')}
               isEquipped={!!armor}
@@ -943,10 +923,7 @@ export function EquipmentTab({
               position="top-[50%] left-[15%]"
               equipment={shield || null}
               type="shield"
-              onRequestOpenList={() => {
-                setInventoryModalType('shield');
-                setShowInventoryModal(true);
-              }}
+              onRequestOpenList={() => { setInventoryModalType('shield'); setShowInventoryModal(true); }}
               onToggleEquipFromSlot={() => toggleFromSlot('shield')}
               onOpenEditFromSlot={() => openEditFromSlot('shield')}
               isEquipped={!!shield}
@@ -1007,6 +984,7 @@ export function EquipmentTab({
         </div>
       </div>
 
+      {/* Argent */}
       <div className="stat-card">
         <div className="stat-header flex items-center gap-3">
           <Coins className="text-green-500" size={24} />
@@ -1041,6 +1019,7 @@ export function EquipmentTab({
         </div>
       </div>
 
+      {/* Sac */}
       <div className="stat-card">
         <div className="stat-header flex items-center gap-3">
           <Backpack className="text-purple-500" size={24} />
@@ -1059,7 +1038,6 @@ export function EquipmentTab({
               >
                 <FilterIcon size={16} /> Filtres
               </button>
-
               <div className="flex items-center gap-2 flex-1 min-w-[200px]">
                 <Search className="w-4 h-4 text-gray-400" />
                 <input value={bagFilter} onChange={(e) => setBagFilter(e.target.value)} placeholder="Filtrer le sac…" className="input-dark px-3 py-2 rounded-md w-full" />
@@ -1179,6 +1157,7 @@ export function EquipmentTab({
         </div>
       </div>
 
+      {/* Modals ajout / custom / édition */}
       {showList && (
         <EquipmentListModal
           onClose={() => { setShowList(false); setAllowedKinds(null); }}
@@ -1186,7 +1165,6 @@ export function EquipmentTab({
             try {
               const meta: ItemMeta = { ...(payload.meta as any), equipped: false };
               const finalDesc = injectMetaIntoDescription(payload.description || '', meta);
-
               const { data, error } = await supabase
                 .from('inventory_items')
                 .insert([{
@@ -1196,7 +1174,6 @@ export function EquipmentTab({
                 }])
                 .select()
                 .single();
-
               if (error) throw error;
               if (data) onInventoryUpdate([...inventory, data]);
               toast.success('Équipement ajouté');
@@ -1217,7 +1194,6 @@ export function EquipmentTab({
           onAdd={async (payload) => {
             try {
               const finalDesc = injectMetaIntoDescription(payload.description || '', { ...payload.meta, equipped: false });
-
               const { data, error } = await supabase
                 .from('inventory_items')
                 .insert([{
@@ -1227,7 +1203,6 @@ export function EquipmentTab({
                 }])
                 .select()
                 .single();
-
               if (error) throw error;
               if (data) onInventoryUpdate([...inventory, data]);
               toast.success('Objet personnalisé ajouté');
@@ -1265,6 +1240,7 @@ export function EquipmentTab({
           onClose={() => setShowWeaponsModal(false)}
           onEquip={(it) => performToggle(it, 'equip')}
           onUnequip={(it) => performToggle(it, 'unequip')}
+          player={player}
         />
       )}
 
@@ -1334,7 +1310,6 @@ export function EquipmentTab({
                       description: bagText,
                       isTextArea: true
                     };
-
                     const { error } = await supabase
                       .from('players')
                       .update({
@@ -1344,9 +1319,7 @@ export function EquipmentTab({
                         }
                       })
                       .eq('id', player.id);
-
                     if (error) throw error;
-
                     setBag(bagEquipment);
                     onPlayerUpdate({
                       ...player,
@@ -1355,7 +1328,6 @@ export function EquipmentTab({
                         bag: bagEquipment
                       }
                     });
-
                     toast.success('Contenu du sac sauvegardé');
                     setShowBagModal(false);
                   } catch (error) {
@@ -1409,6 +1381,7 @@ export function EquipmentTab({
         </div>
       )}
 
+      {/* Modal d'avertissement maîtrise (informative) */}
       <WeaponProficiencyWarningModal
         isOpen={showProficiencyWarning}
         weaponName={pendingWeaponEquip?.name || ''}
