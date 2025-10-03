@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { PlayerLike, canonicalClass, getChaModFromPlayerLike } from './ClassUtilsModal';
 import {
   Sparkles,
   Flame,
@@ -17,8 +16,11 @@ import {
   Plus,
   Minus,
 } from 'lucide-react';
-import type { ClassResources } from '../../../types/dnd';
-import { PlayerLike, canonicalClass, getChaModFromPlayerLike } from './ClassUtilsModal';
+import type { ClassResources, Player } from '../../../types/dnd';
+import { canonicalClass, getChaModFromPlayerLike } from './ClassUtilsModal';
+
+// Utiliser le type Player du fichier types/dnd.ts au lieu de créer PlayerLike
+type PlayerLike = Player;
 
 /* ===========================================================
    Ressources de classe
