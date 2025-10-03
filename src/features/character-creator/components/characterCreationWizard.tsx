@@ -159,7 +159,7 @@ interface WizardProps {
   onCancel?: () => void; // fermeture par l'hôte
 }
 
-export default function CharacterCreationWizard({ onFinish, onCancel }: WizardProps) {
+export default function characterCreationWizard({ onFinish, onCancel }: WizardProps) {
   // Étape courante
   const [currentStep, setCurrentStep] = useState(0);
 
