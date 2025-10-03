@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Shield, ScrollText, Sparkles, Loader2, ChevronDown, Check } from 'lucide-react';
+import { Shield, ScrollText, Sparkles, Loader2, ChevronDown, Check, Sword, Wrench } from 'lucide-react';
 import type { Player } from '../types/dnd';
 import { supabase } from '../lib/supabase';
 import MarkdownLite from './MarkdownLite';
@@ -211,7 +211,7 @@ function NotFound({ label, value }: { label: string; value?: string | null }) {
     <div className="text-sm text-gray-400">
       {value ? (
         <>
-          {label} “{value}” introuvable dans la source.
+          {label} "{value}" introuvable dans la source.
         </>
       ) : (
         <>Aucune sélection.</>
@@ -240,6 +240,24 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
   const generalFeats: string[] = Array.isArray(feats.generals) ? feats.generals : [];
   const styleFeats: string[] = Array.isArray(feats.styles) ? feats.styles : [];
 
+  // Extraire les maîtrises depuis les stats
+  const getPlayerProficiencies = () => {
+    if (!player.stats || typeof player.stats !== 'object') {
+      return { weapons: [], armors: [], tools: [] };
+    }
+
+    const stats = player.stats as any;
+    const creatorMeta = stats.creator_meta || {};
+    
+    return {
+      weapons: creatorMeta.weapon_proficiencies || stats.weapon_proficiencies || [],
+      armors: creatorMeta.armor_proficiencies || stats.armor_proficiencies || [],
+      tools: creatorMeta.tool_proficiencies || stats.tool_proficiencies || []
+    };
+  };
+
+  const proficiencies = getPlayerProficiencies();
+
   // Index des sources distantes
   const racesIdx = useMarkdownIndex(URLS.races);
   const histIdx = useMarkdownIndex(URLS.historiques);
@@ -247,7 +265,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
   const donsGenIdx = useMarkdownIndex(URLS.donsGeneraux);
   const stylesIdx = useMarkdownIndex(URLS.stylesCombat);
 
-  // Recherche d’une section par nom choisi
+  // Recherche d'une section par nom choisi
   const findSection = (
     idx: IndexCache,
     name: string | undefined | null
@@ -427,7 +445,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
         {(donsOrigIdx.loading || donsGenIdx.loading || stylesIdx.loading) && <LoadingInline />}
         {(donsOrigIdx.error || donsGenIdx.error || stylesIdx.error) && (
           <div className="text-sm text-red-400 space-y-1">
-            {donsOrigIdx.error && <div>Erreur Dons d’origine: {donsOrigIdx.error}</div>}
+            {donsOrigIdx.error && <div>Erreur Dons d'origine: {donsOrigIdx.error}</div>}
             {donsGenIdx.error && <div>Erreur Dons généraux: {donsGenIdx.error}</div>}
             {stylesIdx.error && <div>Erreur Styles de combat: {stylesIdx.error}</div>}
           </div>
@@ -440,7 +458,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
             {donsList.map((item, i) => (
               <div key={`${item.kind}-${item.name}-${i}`} className="border border-white/10 rounded-lg p-3 bg-gray-800/40">
                 <div className="text-sm uppercase tracking-wide text-gray-400">
-                  {item.kind === 'origine' ? 'Don d’origine' : item.kind === 'general' ? 'Don général' : 'Style de combat'}
+                  {item.kind === 'origine' ? 'Don d'origine' : item.kind === 'general' ? 'Don général' : 'Style de combat'}
                 </div>
                 <div className="text-base font-semibold mt-1 mb-2">{renderInline(item.name)}</div>
                 {item.hit ? (
@@ -452,6 +470,77 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
             ))}
           </div>
         )}
+      </SectionContainer>
+
+      {/* Maîtrises */}
+      <SectionContainer icon={<Shield size={18} className="text-indigo-400" />} title="Maîtrises" defaultOpen={false}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Maîtrises d'armes */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Sword className="w-4 h-4 text-red-400" />
+              <span className="text-sm font-medium text-white">Armes</span>
+            </div>
+            {proficiencies.weapons.length > 0 ? (
+              <div className="space-y-1">
+                {proficiencies.weapons.map((weapon, i) => (
+                  <span
+                    key={i}
+                    className="block px-2 py-1 text-xs bg-red-500/20 text-red-200 rounded border border-red-500/30"
+                  >
+                    {weapon}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">Selon classe</p>
+            )}
+          </div>
+
+          {/* Formation aux armures */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Shield className="w-4 h-4 text-blue-400" />
+              <span className="text-sm font-medium text-white">Armures</span>
+            </div>
+            {proficiencies.armors.length > 0 ? (
+              <div className="space-y-1">
+                {proficiencies.armors.map((armor, i) => (
+                  <span
+                    key={i}
+                    className="block px-2 py-1 text-xs bg-blue-500/20 text-blue-200 rounded border border-blue-500/30"
+                  >
+                    {armor}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">Selon classe</p>
+            )}
+          </div>
+
+          {/* Maîtrises d'outils */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Wrench className="w-4 h-4 text-yellow-400" />
+              <span className="text-sm font-medium text-white">Outils</span>
+            </div>
+            {proficiencies.tools.length > 0 ? (
+              <div className="space-y-1">
+                {proficiencies.tools.map((tool, i) => (
+                  <span
+                    key={i}
+                    className="block px-2 py-1 text-xs bg-yellow-500/20 text-yellow-200 rounded border border-yellow-500/30"
+                  >
+                    {tool}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">Aucune</p>
+            )}
+          </div>
+        </div>
       </SectionContainer>
 
       {/* Histoire du personnage */}
