@@ -180,6 +180,9 @@ const InfoBubble = ({
               className={`px-2 py-1 rounded text-xs border ${isEquipped ? 'border-green-500/40 text-green-300 bg-green-900/20' : 'border-gray-600 text-gray-300 hover:bg-gray-700/40'}`}
             >
               {isEquipped ? 'Équipé' : 'Non équipé'}
+            </button>
+          )}
+          {type === 'weapon' && (
             <button
               onClick={(e) => { e.stopPropagation(); onRequestOpenList?.(); }}
               className="px-3 py-1 rounded text-xs border border-gray-600 text-gray-200 hover:bg-gray-700/50"
