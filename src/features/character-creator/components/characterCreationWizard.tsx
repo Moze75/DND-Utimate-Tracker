@@ -1,544 +1,423 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Toaster, toast } from 'react-hot-toast';
-
-import ProgressBar from './ui/ProgressBar';
+import React, { useState, useCallback, useEffect } from 'react';
+import { DndClass } from '../types/character';
 import RaceSelection from './steps/RaceSelection';
 import ClassSelection from './steps/ClassSelection';
 import BackgroundSelection from './steps/BackgroundSelection';
 import AbilityScores from './steps/AbilityScores';
 import CharacterSummary from './steps/CharacterSummary';
-
-import { DndClass } from '../types/character';
-import type { CharacterExportPayload } from '../types/CharacterExport';
-import { supabase } from '../lib/supabase';
-import { calculateArmorClass, calculateHitPoints, calculateModifier } from '../utils/dndCalculations';
-
+import ExportModal from './export/ExportModal';
+import { CharacterExportPayload } from '../types/CharacterExport';
+import { calculateHitPoints, calculateArmorClass, calculateModifier } from '../utils/dndCalculations';
 import { races } from '../data/races';
 import { classes } from '../data/classes';
 import { backgrounds } from '../data/backgrounds';
 
-/* ===========================================================
-   Utilitaires
-   =========================================================== */
-
-// Convertit ft -> m en arrondissant au 0,5 m (30 ft → 9 m)
-const feetToMeters = (ft?: number) => {
-  const n = Number(ft);
-  if (!Number.isFinite(n)) return 9; // fallback raisonnable
-  return Math.round(n * 0.3048 * 2) / 2;
-};
-
-// Mappe une classe vers une image publique placée dans /public/*.png
-// Assurez-vous d'avoir ces fichiers:
-// - /Guerrier.png
-// - /Magicien.png
-// - /Voleur.png
-// - /Clerc.png
-// - /Rodeur.png      (sans accent)
-// - /Barbare.png
-// - /Barde.png
-// - /Druide.png
-// - /Moine.png
-// - /Paladin.png
-// - /Ensorceleur.png
-// - /Occultiste.png
-function getClassImageUrlLocal(className: DndClass | string | undefined | null): string | null {
-  if (!className) return null;
-  switch (className) {
-    case 'Guerrier': return '/Guerrier.png';
-    case 'Magicien': return '/Magicien.png';
-    case 'Roublard': return '/Voleur.png';   // fichier Voleur.png
-    case 'Clerc': return '/Clerc.png';
-    case 'Rôdeur': return '/Rodeur.png';     // sans accent dans le nom de fichier
-    case 'Barbare': return '/Barbare.png';
-    case 'Barde': return '/Barde.png';
-    case 'Druide': return '/Druide.png';
-    case 'Moine': return '/Moine.png';
-    case 'Paladin': return '/Paladin.png';
-    case 'Ensorceleur': return '/Ensorceleur.png';
-    case 'Occultiste': return '/Occultiste.png';
-    default:
-      // Normalisation basique (accents/majuscules) si une autre valeur arrive
-      const normalized = String(className)
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase();
-      if (normalized.includes('guerrier')) return '/Guerrier.png';
-      if (normalized.includes('magicien')) return '/Magicien.png';
-      if (normalized.includes('roublard') || normalized.includes('voleur')) return '/Voleur.png';
-      if (normalized.includes('clerc')) return '/Clerc.png';
-      if (normalized.includes('rodeur') || normalized.includes('rôdeur')) return '/Rodeur.png';
-      if (normalized.includes('barbare')) return '/Barbare.png';
-      if (normalized.includes('barde')) return '/Barde.png';
-      if (normalized.includes('druide')) return '/Druide.png';
-      if (normalized.includes('moine')) return '/Moine.png';
-      if (normalized.includes('paladin')) return '/Paladin.png';
-      if (normalized.includes('ensorceleur')) return '/Ensorceleur.png';
-      if (normalized.includes('occultiste')) return '/Occultiste.png';
-      return null;
-  }
+interface CharacterCreatorWizardProps {
+  onComplete: (characterData: any) => void;
+  onClose: () => void;
 }
 
-// Normalise le don d’historique pour coller à la liste attendue par l’app
-// ex: "Initié à la magie (Clerc)" => "Initié à la magie"
-function normalizeBackgroundFeat(feat?: string | null): string | undefined {
-  if (!feat) return undefined;
-  const trimmed = feat.trim();
-  if (trimmed.toLowerCase().startsWith('initié à la magie')) {
-    return 'Initié à la magie';
-  }
-  return trimmed;
-}
-
-// Parse l’or (“X po”) dans la liste d’items d’équipement
-function parseGoldFromItems(items?: string[]): number | undefined {
-  if (!Array.isArray(items)) return undefined;
-  let total = 0;
-  for (const it of items) {
-    const m = String(it).match(/(\d+)\s*po\b/i);
-    if (m) total += parseInt(m[1], 10);
-  }
-  return total > 0 ? total : undefined;
-}
-
-// Tente d'uploader une image (URL publique ou data URL) dans le bucket Supabase "avatars"
-// et retourne l'URL publique Supabase. En cas d'échec, retourne null.
-async function tryUploadAvatarFromUrl(playerId: string, url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const blob = await res.blob();
-
-    const contentType = blob.type || 'image/png';
-    const ext = (() => {
-      const t = contentType.split('/')[1]?.toLowerCase();
-      if (t === 'jpeg') return 'jpg';
-      return t || 'png';
-    })();
-
-    const fileName = `class-${Date.now()}.${ext}`;
-    const filePath = `${playerId}/${fileName}`;
-
-    const { error: uploadErr } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, blob, { upsert: true, contentType });
-
-    if (uploadErr) throw uploadErr;
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('avatars')
-      .getPublicUrl(filePath);
-
-    return publicUrl || null;
-  } catch (e) {
-    console.warn('Upload avatar depuis URL/dataURL impossible (fallback sur URL directe):', e);
-    return null;
-  }
-}
-
-// Notifie le parent (iframe/opener) qu’un personnage a été créé (fallback autonome)
-type CreatedEvent = {
-  type: 'creator:character_created';
-  payload: { playerId: string; player?: any };
-};
-const notifyParentCreated = (playerId: string, player?: any) => {
-  const msg: CreatedEvent = { type: 'creator:character_created', payload: { playerId, player } };
-  try { window.parent?.postMessage(msg, '*'); } catch {}
-  try { (window as any).opener?.postMessage(msg, '*'); } catch {}
-  try { window.postMessage(msg, '*'); } catch {}
-};
-
-/* ===========================================================
-   Étapes (sans sous-classe)
-   =========================================================== */
-
-const steps = ['Race', 'Classe', 'Historique', 'Caractéristiques', 'Résumé'];
-
-interface WizardProps {
-  onFinish?: (payload: CharacterExportPayload) => void; // mode intégré (recommandé)
-  onCancel?: () => void; // fermeture par l'hôte
-}
-
-export default function CharacterCreationWizard({ onFinish, onCancel }: WizardProps) {
-  // Étape courante
+const CharacterCreatorWizard: React.FC<CharacterCreatorWizardProps> = ({
+  onComplete,
+  onClose
+}) => {
+  // État de navigation
   const [currentStep, setCurrentStep] = useState(0);
-
-  // Identité
+  
+  // États des données du personnage
   const [characterName, setCharacterName] = useState('');
-
-  // Choix principaux
   const [selectedRace, setSelectedRace] = useState('');
   const [selectedClass, setSelectedClass] = useState<DndClass | ''>('');
   const [selectedBackground, setSelectedBackground] = useState('');
-
-  // Choix dépendants
-  const [backgroundEquipmentOption, setBackgroundEquipmentOption] = useState<'A' | 'B' | ''>('');
-  const [selectedClassSkills, setSelectedClassSkills] = useState<string[]>([]); // normalisées (ex: "Discrétion")
-
-  // Caractéristiques (base) et “effectives” (base + historique)
-  const [abilities, setAbilities] = useState<Record<string, number>>({
+  
+  // Caractéristiques de base (avant bonus raciaux/historique)
+  const [baseAbilities, setBaseAbilities] = useState<Record<string, number>>({
     'Force': 8,
     'Dextérité': 8,
     'Constitution': 8,
     'Intelligence': 8,
     'Sagesse': 8,
-    'Charisme': 8,
+    'Charisme': 8
   });
-  const [effectiveAbilities, setEffectiveAbilities] = useState<Record<string, number>>(abilities);
 
-  // Objet d'historique sélectionné
-  const selectedBackgroundObj = useMemo(
-    () => backgrounds.find((b) => b.name === selectedBackground) || null,
-    [selectedBackground]
-  );
+  // Sélections de classe
+  const [selectedClassSkills, setSelectedClassSkills] = useState<string[]>([]);
+  const [selectedEquipmentOption, setSelectedEquipmentOption] = useState<string>('');
 
-  // Resets cohérents
-  useEffect(() => {
-    setSelectedClassSkills([]);
-  }, [selectedClass]);
+  // Sélections d'historique
+  const [selectedBackgroundEquipmentOption, setSelectedBackgroundEquipmentOption] = useState<'A' | 'B' | ''>('');
 
-  useEffect(() => {
-    setBackgroundEquipmentOption('');
-  }, [selectedBackground]);
+  // État pour l'export
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportPayload, setExportPayload] = useState<CharacterExportPayload | null>(null);
+
+  const steps = [
+    {
+      id: 'race',
+      title: 'Espèce',
+      component: RaceSelection
+    },
+    {
+      id: 'class',
+      title: 'Classe',
+      component: ClassSelection
+    },
+    {
+      id: 'background',
+      title: 'Historique',
+      component: BackgroundSelection
+    },
+    {
+      id: 'abilities',
+      title: 'Caractéristiques',
+      component: AbilityScores
+    },
+    {
+      id: 'summary',
+      title: 'Résumé',
+      component: CharacterSummary
+    }
+  ];
+
+  // Calcul des caractéristiques finales avec bonus raciaux et d'historique
+  const finalAbilities = useCallback(() => {
+    const fa = { ...baseAbilities };
+    
+    // Bonus raciaux
+    const raceData = races.find(r => r.name === selectedRace);
+    if (raceData?.abilityScoreIncrease) {
+      Object.entries(raceData.abilityScoreIncrease).forEach(([ability, bonus]) => {
+        if (fa[ability] != null) fa[ability] += bonus;
+      });
+    }
+
+    // Bonus d'historique (si votre système en a)
+    const backgroundData = backgrounds.find(b => b.name === selectedBackground);
+    if (backgroundData?.abilityScoreIncrease) {
+      Object.entries(backgroundData.abilityScoreIncrease).forEach(([ability, bonus]) => {
+        if (fa[ability] != null) fa[ability] += bonus;
+      });
+    }
+
+    return fa;
+  }, [baseAbilities, selectedRace, selectedBackground]);
 
   // Navigation
-  const nextStep = () => setCurrentStep((s) => Math.min(s + 1, steps.length - 1));
-  const previousStep = () => setCurrentStep((s) => Math.max(s - 1, 0));
-
-  /* ===========================================================
-     Finalisation / Enregistrement
-     Deux modes:
-     - Mode intégré (onFinish fourni): on construit un payload complet puis onFinish(payload)
-     - Fallback autonome: on insère en base ici (comme avant), + upload avatar, puis onCancel()
-     =========================================================== */
-  const handleFinish = async () => {
-    try {
-      const raceData = races.find((r) => r.name === selectedRace);
-      const classData = classes.find((c) => c.name === selectedClass);
-
-      // Abilities finales (base + historique)
-      const finalAbilities = { ...effectiveAbilities };
-      if (raceData?.abilityScoreIncrease) {
-        Object.entries(raceData.abilityScoreIncrease).forEach(([ability, bonus]) => {
-          if (finalAbilities[ability] != null) {
-            finalAbilities[ability] += bonus;
-          }
-        });
-      }
-
-      // Dérivés de combat
-      const hitPoints = calculateHitPoints(finalAbilities['Constitution'] || 10, selectedClass as DndClass);
-      const armorClass = calculateArmorClass(finalAbilities['Dextérité'] || 10);
-      const initiative = calculateModifier(finalAbilities['Dextérité'] || 10);
-      const speedFeet = raceData?.speed || 30;
-
-      // Équipement d’historique selon Option A/B
-      const bgEquip =
-        backgroundEquipmentOption === 'A'
-          ? selectedBackgroundObj?.equipmentOptions?.optionA ?? []
-          : backgroundEquipmentOption === 'B'
-            ? selectedBackgroundObj?.equipmentOptions?.optionB ?? []
-            : [];
-
-      // Compétences maîtrisées
-      const backgroundSkills = selectedBackgroundObj?.skillProficiencies ?? [];
-      const proficientSkills = Array.from(new Set([...(selectedClassSkills || []), ...backgroundSkills]));
-
-      // Équipement combiné (classe + historique sélectionné)
-      const equipment = [
-        ...(classData?.equipment || []),
-        ...bgEquip,
-      ];
-
-      // Don d’historique (normalisé)
-      const backgroundFeat = normalizeBackgroundFeat(selectedBackgroundObj?.feat);
-
-      // Or initial: parser “X po” dans l’option choisie
-      const goldFromA = parseGoldFromItems(selectedBackgroundObj?.equipmentOptions?.optionA);
-      const goldFromB = parseGoldFromItems(selectedBackgroundObj?.equipmentOptions?.optionB);
-      const gold =
-        backgroundEquipmentOption === 'A'
-          ? goldFromA
-          : backgroundEquipmentOption === 'B'
-          ? goldFromB
-          : undefined;
-
-      // Image de classe par défaut
-      const avatarImageUrl = getClassImageUrlLocal(selectedClass) ?? undefined;
-
-      // MODE INTÉGRÉ (recommandé): remonter un CharacterExportPayload au parent
-      if (typeof onFinish === 'function') {
-        const payload: CharacterExportPayload = {
-          characterName: characterName.trim() || 'Héros sans nom',
-          selectedRace: selectedRace || '',
-          selectedClass: (selectedClass as DndClass) || '',
-          selectedBackground: selectedBackground || '',
-          level: 1,
-
-          finalAbilities,
-          proficientSkills,
-
-          equipment,
-          selectedBackgroundEquipmentOption: backgroundEquipmentOption || '',
-
-          hitPoints,
-          armorClass,
-          initiative,
-          speed: speedFeet, // le service d’intégration convertit en m
-
-          // Ajouts pour l’export correct
-          backgroundFeat,
-          gold,
-
-          // Dés de vie
-          hitDice: {
-            die:
-              (selectedClass === 'Magicien' || selectedClass === 'Ensorceleur')
-                ? 'd6'
-                : (selectedClass === 'Barde' || selectedClass === 'Clerc' || selectedClass === 'Druide' || selectedClass === 'Moine' || selectedClass === 'Rôdeur' || selectedClass === 'Roublard' || selectedClass === 'Occultiste')
-                ? 'd8'
-                : (selectedClass === 'Guerrier' || selectedClass === 'Paladin')
-                ? 'd10'
-                : 'd12', // Barbare
-            total: 1,
-            used: 0,
-          },
-
-          // Avatar par défaut depuis la classe
-          avatarImageUrl,
-        };
-
-        onFinish(payload);
-        return;
-      }
-
-      // FALLBACK AUTONOME (si aucun onFinish n’est fourni): insert direct en base + avatar
-      const { data: auth, error: authErr } = await supabase.auth.getUser();
-      if (authErr) throw authErr;
-      const user = auth?.user;
-      if (!user) {
-        toast.error('Vous devez être connecté pour créer un personnage');
-        return;
-      }
-
-      const featsData: any = {};
-      if (backgroundFeat) {
-        featsData.origins = [backgroundFeat];
-        featsData.origin = backgroundFeat;
-      }
-
-      const initialGold = gold ?? 0;
-
-      const characterData: any = {
-        user_id: user.id,
-        name: characterName.trim(),
-        adventurer_name: characterName.trim(),
-        level: 1,
-        current_hp: hitPoints,
-        max_hp: hitPoints,
-        class: selectedClass || null,
-        subclass: null,
-        race: selectedRace || null,
-        background: selectedBackground || null,
-        stats: {
-          armor_class: armorClass,
-          initiative: initiative,
-          speed: feetToMeters(speedFeet), // stock en mètres
-          proficiency_bonus: 2,
-          inspirations: 0,
-          feats: featsData,
-          coins: { gp: initialGold, sp: 0, cp: 0 },
-          gold: initialGold, // compat éventuelle
-          // Meta pour ne rien perdre côté schéma
-          creator_meta: {
-            class_skills: selectedClassSkills,
-            background_skillProficiencies: backgroundSkills,
-            background_equipment_option: backgroundEquipmentOption || null,
-            background_equipment_items: bgEquip,
-          },
-        },
-        abilities: null,
-        // Si votre table a ces colonnes (comme dans l’app): écrivez l’or top-level
-        gold: initialGold,
-        silver: 0,
-        copper: 0,
-        created_at: new Date().toISOString(),
-      };
-
-      const { data: inserted, error } = await supabase
-        .from('players')
-        .insert([characterData])
-        .select('*')
-        .single();
-
-      if (error) {
-        console.error('Error creating character:', error);
-        toast.error('Erreur lors de la création du personnage');
-        return;
-      }
-
-      // Avatar de classe: upload dans Supabase Storage et mise à jour de players.avatar_url
-      let finalPlayer = inserted;
-      if (inserted?.id && avatarImageUrl) {
-        try {
-          const uploaded = await tryUploadAvatarFromUrl(inserted.id, avatarImageUrl);
-          const finalUrl = uploaded ?? avatarImageUrl;
-
-          const { data: updatedPlayer, error: avatarErr } = await supabase
-            .from('players')
-            .update({ avatar_url: finalUrl })
-            .eq('id', inserted.id)
-            .select('*')
-            .single();
-
-          if (avatarErr) {
-            console.warn('Impossible de fixer avatar_url (fallback affichage direct):', avatarErr);
-          } else if (updatedPlayer) {
-            finalPlayer = updatedPlayer as typeof inserted;
-          }
-        } catch (e) {
-          console.warn('Echec de la mise à jour de l’avatar (upload/DB):', e);
-        }
-      }
-
-      if (inserted?.id) {
-        notifyParentCreated(inserted.id, finalPlayer);
-      }
-
-      toast.success('Personnage créé avec succès !');
-
-      if (typeof onCancel === 'function') {
-        onCancel();
-        return;
-      }
-
-      // Reset local si pas d’hôte
-      setCurrentStep(0);
-      setCharacterName('');
-      setSelectedRace('');
-      setSelectedClass('');
-      setSelectedBackground('');
-      setBackgroundEquipmentOption('');
-      setSelectedClassSkills([]);
-      setAbilities({
-        'Force': 8,
-        'Dextérité': 8,
-        'Constitution': 8,
-        'Intelligence': 8,
-        'Sagesse': 8,
-        'Charisme': 8,
-      });
-      setEffectiveAbilities({
-        'Force': 8,
-        'Dextérité': 8,
-        'Constitution': 8,
-        'Intelligence': 8,
-        'Sagesse': 8,
-        'Charisme': 8,
-      });
-    } catch (err) {
-      console.error('Error creating character:', err);
-      toast.error('Erreur lors de la création du personnage');
+  const handleNext = useCallback(() => {
+    if (currentStep < steps.length - 1) {
+      setCurrentStep(currentStep + 1);
     }
-  };
+  }, [currentStep, steps.length]);
 
-  /* ===========================================================
-     Rendu des étapes
-     =========================================================== */
-  const renderStep = () => {
+  const handlePrevious = useCallback(() => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+    }
+  }, [currentStep]);
+
+  // Réinitialisation des sélections lors du changement de classe
+  const handleClassSelect = useCallback((dndClass: DndClass) => {
+    if (dndClass !== selectedClass) {
+      setSelectedClassSkills([]);
+      setSelectedEquipmentOption('');
+    }
+    setSelectedClass(dndClass);
+  }, [selectedClass]);
+
+  // Réinitialisation des sélections lors du changement d'historique
+  const handleBackgroundSelect = useCallback((background: string) => {
+    if (background !== selectedBackground) {
+      setSelectedBackgroundEquipmentOption('');
+    }
+    setSelectedBackground(background);
+  }, [selectedBackground]);
+
+  // Génération du payload d'export
+  const generateExportPayload = useCallback((): CharacterExportPayload => {
+    const raceData = races.find(r => r.name === selectedRace);
+    const classData = classes.find(c => c.name === selectedClass);
+    const backgroundData = backgrounds.find(b => b.name === selectedBackground);
+    const abilities = finalAbilities();
+
+    // Équipement combiné
+    const classEquipment = classData?.equipmentOptions.find(opt => opt.label === selectedEquipmentOption)?.items || [];
+    const backgroundEquipment = selectedBackgroundEquipmentOption === 'A' 
+      ? (backgroundData as any)?.equipmentOptions?.optionA || []
+      : selectedBackgroundEquipmentOption === 'B'
+      ? (backgroundData as any)?.equipmentOptions?.optionB || []
+      : [];
+
+    // Compétences maîtrisées
+    const backgroundSkills = backgroundData?.skillProficiencies || [];
+    const allProficientSkills = [...selectedClassSkills, ...backgroundSkills];
+
+    return {
+      characterName,
+      selectedRace,
+      selectedClass: selectedClass as DndClass,
+      selectedBackground,
+      level: 1,
+      finalAbilities: abilities,
+      hitPoints: calculateHitPoints(abilities['Constitution'] || 10, selectedClass as DndClass),
+      armorClass: calculateArmorClass(abilities['Dextérité'] || 10),
+      initiative: calculateModifier(abilities['Dextérité'] || 10),
+      speed: raceData?.speed || 30,
+      proficientSkills: allProficientSkills,
+      equipment: [...classEquipment, ...backgroundEquipment],
+      selectedEquipmentOption,
+      selectedBackgroundEquipmentOption,
+      // Nouvelles données
+      weaponProficiencies: classData?.weaponProficiencies || [],
+      armorProficiencies: classData?.armorProficiencies || [],
+      toolProficiencies: classData?.toolProficiencies || [],
+      racialTraits: raceData?.traits || [],
+      classFeatures: classData?.features || [],
+      backgroundFeature: backgroundData?.feature || '',
+      savingThrows: classData?.savingThrows || [],
+      languages: raceData?.languages || [],
+      // Avatar si disponible
+      avatarImageUrl: undefined
+    };
+  }, [
+    characterName,
+    selectedRace,
+    selectedClass,
+    selectedBackground,
+    finalAbilities,
+    selectedClassSkills,
+    selectedEquipmentOption,
+    selectedBackgroundEquipmentOption
+  ]);
+
+  // Finalisation de la création
+  const handleFinish = useCallback(() => {
+    const payload = generateExportPayload();
+    setExportPayload(payload);
+    setShowExportModal(true);
+  }, [generateExportPayload]);
+
+  // Confirmation de l'export
+  const handleConfirmExport = useCallback(() => {
+    if (exportPayload) {
+      onComplete(exportPayload);
+      setShowExportModal(false);
+    }
+  }, [exportPayload, onComplete]);
+
+  // Validation des étapes
+  const canProceedToNext = useCallback(() => {
     switch (currentStep) {
-      case 0:
+      case 0: // Race
+        return selectedRace !== '';
+      case 1: // Class
+        const classData = classes.find(c => c.name === selectedClass);
+        const hasRequiredSkills = !classData || selectedClassSkills.length >= (classData.skillsToChoose || 0);
+        const hasEquipment = !classData || selectedEquipmentOption !== '';
+        return selectedClass !== '' && hasRequiredSkills && hasEquipment;
+      case 2: // Background
+        return selectedBackground !== '';
+      case 3: // Abilities
+        return Object.values(baseAbilities).every(score => score >= 8 && score <= 15);
+      case 4: // Summary
+        return characterName.trim() !== '';
+      default:
+        return true;
+    }
+  }, [currentStep, selectedRace, selectedClass, selectedBackground, baseAbilities, characterName, selectedClassSkills, selectedEquipmentOption]);
+
+  // Auto-navigation si toutes les données requises sont remplies
+  useEffect(() => {
+    // Optionnel: auto-advance logic
+  }, [currentStep]);
+
+  const renderCurrentStep = () => {
+    const CurrentStepComponent = steps[currentStep].component;
+    
+    const commonProps = {
+      onNext: handleNext,
+      onPrevious: handlePrevious
+    };
+
+    switch (currentStep) {
+      case 0: // Race
         return (
-          <RaceSelection
+          <CurrentStepComponent
+            {...commonProps}
             selectedRace={selectedRace}
             onRaceSelect={setSelectedRace}
-            onNext={nextStep}
           />
         );
-
-      case 1:
+      
+      case 1: // Class
         return (
-          <ClassSelection
+          <CurrentStepComponent
+            {...commonProps}
             selectedClass={selectedClass}
-            onClassSelect={setSelectedClass}
+            onClassSelect={handleClassSelect}
             selectedSkills={selectedClassSkills}
             onSelectedSkillsChange={setSelectedClassSkills}
-            onNext={nextStep}
-            onPrevious={previousStep}
+            selectedEquipmentOption={selectedEquipmentOption}
+            onSelectedEquipmentOptionChange={setSelectedEquipmentOption}
           />
         );
-
-      case 2:
+      
+      case 2: // Background
         return (
-          <BackgroundSelection
+          <CurrentStepComponent
+            {...commonProps}
             selectedBackground={selectedBackground}
-            onBackgroundSelect={setSelectedBackground}
-            selectedEquipmentOption={backgroundEquipmentOption}
-            onEquipmentOptionChange={setBackgroundEquipmentOption}
-            onNext={nextStep}
-            onPrevious={previousStep}
+            onBackgroundSelect={handleBackgroundSelect}
+            selectedBackgroundEquipmentOption={selectedBackgroundEquipmentOption}
+            onSelectedBackgroundEquipmentOptionChange={setSelectedBackgroundEquipmentOption}
           />
         );
-
-      case 3:
+      
+      case 3: // Abilities
         return (
-          <AbilityScores
-            abilities={abilities}
-            onAbilitiesChange={setAbilities}
-            selectedBackground={selectedBackgroundObj}
-            onEffectiveAbilitiesChange={setEffectiveAbilities}
-            onNext={nextStep}
-            onPrevious={previousStep}
+          <CurrentStepComponent
+            {...commonProps}
+            abilities={baseAbilities}
+            onAbilitiesChange={setBaseAbilities}
+            selectedRace={selectedRace}
+            selectedBackground={selectedBackground}
           />
         );
-
-      case 4:
+      
+      case 4: // Summary
         return (
-          <CharacterSummary
+          <CurrentStepComponent
+            {...commonProps}
             characterName={characterName}
             onCharacterNameChange={setCharacterName}
             selectedRace={selectedRace}
-            selectedClass={selectedClass as DndClass}
+            selectedClass={selectedClass}
             selectedBackground={selectedBackground}
-            abilities={effectiveAbilities}
-            selectedClassSkills={selectedClassSkills}
-            selectedBackgroundEquipmentOption={backgroundEquipmentOption}
+            abilities={finalAbilities()}
             onFinish={handleFinish}
-            onPrevious={previousStep}
+            selectedClassSkills={selectedClassSkills}
+            selectedBackgroundEquipmentOption={selectedBackgroundEquipmentOption}
+            selectedEquipmentOption={selectedEquipmentOption}
           />
         );
-
+      
       default:
         return null;
     }
   };
- 
-  /* ===========================================================
-     Layout général
-     =========================================================== */
-return (
-  <div className="min-h-screen bg-fantasy relative">
-    <Toaster
-      position="top-right"
-      toastOptions={{
-        className: 'bg-gray-800 text-white border border-gray-700',
-        duration: 4000,
-      }}
-    />
 
-    <div className="container mx-auto px-4 pt-0 pb-8">
-      <div className="max-w-6xl mx-auto">
-        <ProgressBar
-          currentStep={currentStep}
-          totalSteps={steps.length - 1}
-          steps={steps}
-        />
+  return (
+    <>
+      <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="w-full max-w-6xl max-h-[95vh] overflow-hidden bg-gray-900 border border-gray-800 rounded-xl shadow-xl">
+          {/* Header avec progression */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+            <h2 className="text-xl font-bold text-white">Créateur de personnage</h2>
+            <div className="flex items-center gap-4">
+              {/* Indicateur de progression */}
+              <div className="flex items-center gap-2">
+                {steps.map((step, index) => (
+                  <div
+                    key={step.id}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
+                      index === currentStep
+                        ? 'bg-red-600 text-white'
+                        : index < currentStep
+                        ? 'bg-green-600 text-white'
+                        : 'bg-gray-700 text-gray-400'
+                    }`}
+                  >
+                    {index + 1}
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-200 px-2 py-1 rounded hover:bg-gray-800 transition-colors"
+                aria-label="Fermer"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
 
-        <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 md:p-8">
-          {renderStep()}
+          {/* Titre de l'étape actuelle */}
+          <div className="px-6 py-3 border-b border-gray-800/50">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">
+                Étape {currentStep + 1}: {steps[currentStep].title}
+              </h3>
+              {/* Indicateur de validation */}
+              <div className="flex items-center gap-2">
+                {canProceedToNext() ? (
+                  <span className="text-green-400 text-sm">✓ Complété</span>
+                ) : (
+                  <span className="text-yellow-400 text-sm">⚠ Incomplet</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Contenu de l'étape */}
+          <div className="p-6 overflow-y-auto max-h-[calc(95vh-140px)]">
+            {renderCurrentStep()}
+          </div>
+
+          {/* Footer avec navigation */}
+          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-800/50 bg-gray-800/20">
+            <div className="text-sm text-gray-400">
+              Étape {currentStep + 1} sur {steps.length}
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handlePrevious}
+                disabled={currentStep === 0}
+                className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                  currentStep === 0
+                    ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                    : 'bg-gray-700 text-white hover:bg-gray-600'
+                }`}
+              >
+                Précédent
+              </button>
+              {currentStep < steps.length - 1 ? (
+                <button
+                  onClick={handleNext}
+                  disabled={!canProceedToNext()}
+                  className={`px-6 py-2 rounded-md font-medium transition-colors ${
+                    canProceedToNext()
+                      ? 'bg-red-600 text-white hover:bg-red-700'
+                      : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  Suivant
+                </button>
+              ) : (
+                <button
+                  onClick={handleFinish}
+                  disabled={!canProceedToNext()}
+                  className={`px-6 py-2 rounded-md font-medium transition-colors ${
+                    canProceedToNext()
+                      ? 'bg-green-600 text-white hover:bg-green-700'
+                      : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  Créer le personnage
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  </div>
-);
-}
+
+      {/* Modal d'export */}
+      <ExportModal
+        open={showExportModal}
+        payload={exportPayload}
+        onClose={() => setShowExportModal(false)}
+        onConfirm={handleConfirmExport}
+      />
+    </>
+  );
+};
+
+export default CharacterCreatorWizard;
