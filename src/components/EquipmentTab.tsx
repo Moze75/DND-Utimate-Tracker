@@ -184,10 +184,11 @@ const InfoBubble = ({
           )}
           {type === 'weapon' && (
             <button
-              onClick={(e) => { e.stopPropagation(); onRequestOpenList?.(); }}
-              className="px-3 py-1 rounded text-xs border border-gray-600 text-gray-200 hover:bg-gray-700/50"
+              onClick={(e) => { e.stopPropagation(); onOpenWeaponsManage?.(); }}
+              className="p-2 text-gray-400 hover:bg-gray-700/50 rounded-lg"
+              title="Gérer mes armes"
             >
-              Équiper depuis le sac
+              <Sword size={18} />
             </button>
           )}
           {(type === 'armor' || type === 'shield') && (
@@ -1390,4 +1391,4 @@ export function EquipmentTab({
       />
     </div>
   );
-}
+} 
