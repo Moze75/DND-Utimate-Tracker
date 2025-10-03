@@ -1,22 +1,7 @@
 /* ============================================================
  * Gestion & vérification des maîtrises d'armes
- * - Supporte variantes orthographiques / accents / apostrophes
- * - Supporte catégories générales + sous-catégories
- * - Fournit un objet de debug pour faciliter l'inspection
- *
- * Exporte (interfaces & fonctions utilisées ailleurs) :
- *  - interface WeaponProficiencyCheck
- *  - checkWeaponProficiency(weaponName, playerProficiencies)
- *  - getPlayerWeaponProficiencies(player)
- *  - getWeaponsByCategory()
- *  - isValidWeapon(weaponName)
- *  - getWeaponCategory(weaponName)
- *  - getAllAvailableProficiencies()
- *  - debugWeaponProficiency(weaponName, playerProficiencies)
  * ============================================================ */
 
-/* ===================== LISTES SOURCE ===================== */
-// Armes courantes
 const ARMES_COURANTES = [
   'Bâton de combat',
   'Dague',
@@ -34,7 +19,6 @@ const ARMES_COURANTES = [
   'Fronde'
 ];
 
-// Armes de guerre (complètes)
 const ARMES_DE_GUERRE = [
   'Cimeterre',
   'Coutille',
@@ -62,7 +46,6 @@ const ARMES_DE_GUERRE = [
   'Sarbacane'
 ];
 
-// Sous-ensembles particuliers
 const ARMES_GUERRE_FINESSE_OU_LEGERE = [
   'Cimeterre',
   'Épée courte',
@@ -76,154 +59,142 @@ const ARMES_GUERRE_LEGERE = [
   'Arbalète de poing'
 ];
 
-/* ===================== VARIANTES & SYNONYMES ===================== */
-/**
- * Variantes orthographiques / synonymes d'armes.
- * La clé est la forme canonique (une des listes ci-dessus).
- * Ajouter ici toutes les écritures rencontrées dans la DB ou imports.
- */
 const WEAPON_NAME_VARIANTS: Record<string, string[]> = {
-  'Bâton de combat': ['Baton de combat', 'Baton', 'Bâton', 'Baton (combat)', 'Bâton (combat)', 'Baton de marche', 'Bâton de marche', 'Baton combat'],
-  'Dague': ['Dague', 'Poignard', 'Dague simple', 'Dague (argent)', 'Dague en argent', 'Dague en argentée', 'Dague argentée'],
-  'Gourdin': ['Gourdin', 'Gourdin lourd'],
-  'Hachette': ['Hachette', 'Hache de jet', 'Petite hache', 'Petite hachette'],
+  'Bâton de combat': ['Baton de combat', 'Bâton', 'Baton', 'Baton combat', 'Bâton combat', 'Baton de marche', 'Bâton de marche'],
+  'Dague': ['Dague', 'Poignard'],
+  'Gourdin': ['Gourdin', 'Gourdin massif'],
+  'Hachette': ['Hachette', 'Hache de jet', 'Petite hache'],
   'Javeline': ['Javeline', 'Javelot'],
-  'Lance': ['Lance', 'Lance simple'],
-  'Marteau léger': ['Marteau leger', 'Petit marteau', 'Marteau léger', 'Marteau court', 'Marteau', 'Marteau (léger)'],
-  'Masse d\'armes': ['Masse d\'armes', 'Masse', 'Masse darmes', 'Masse arme', 'Masse d arme', 'Masse darme'],
-  'Massue': ['Massue', 'Gourdin massif'],
+  'Lance': ['Lance'],
+  'Marteau léger': ['Marteau leger', 'Petit marteau', 'Marteau léger'],
+  'Masse d\'armes': ['Masse', 'Masse d\'armes', 'Masse darmes', 'Masse darme'],
+  'Massue': ['Massue'],
   'Serpe': ['Serpe', 'Faucille'],
-  'Arbalète légère': ['Arbalète légère', 'Arbalete legere', 'Arbalete legere (light)', 'Arbalète legere'],
-  'Arc court': ['Arc court', 'Arc (court)', 'Petit arc', 'Arc leger'],
-  'Fléchette': ['Fléchette', 'Flechette', 'Dart', 'Fléchettes'],
+  'Arbalète légère': ['Arbalete legere', 'Arbalète légère'],
+  'Arc court': ['Arc court', 'Petit arc', 'Arc (court)'],
+  'Fléchette': ['Flechette', 'Dart', 'Fléchette'],
   'Fronde': ['Fronde', 'Lance-pierre'],
 
-  'Cimeterre': ['Cimeterre', 'Cimitarre', 'Cimitar', 'Cimetere'],
+  'Cimeterre': ['Cimeterre', 'Cimitarre', 'Cimetere'],
   'Coutille': ['Coutille', 'Guisarme', 'Guisarme-coutille'],
-  'Épée à deux mains': ['Epée à deux mains', 'Epee a deux mains', 'Épée a deux mains', 'Grande épée', 'Grande epee', 'Greatsword', 'Epée 2 mains', 'Epee 2 mains'],
-  'Épée courte': ['Epée courte', 'Epee courte', 'Shortsword', 'Epee courte (shortsword)', 'Epée courte'],
-  'Épée longue': ['Epée longue', 'Epee longue', 'Longsword', 'Epee longue (longsword)'],
-  'Fléau d\'armes': ['Fléau d\'armes', 'Fleau darmes', 'Fleau', 'Fléau', 'Fléau arme', 'Fléau a chaines', 'Fléau d arme', 'Flail'],
+  'Épée à deux mains': ['Epee a deux mains', 'Épée a deux mains', 'Grande épée', 'Greatsword', 'Epée 2 mains', 'Epee 2 mains'],
+  'Épée courte': ['Epee courte', 'Shortsword', 'Epée courte'],
+  'Épée longue': ['Epee longue', 'Longsword', 'Epée longue'],
+  'Fléau d\'armes': ['Fléau', 'Fleau', 'Fleau darmes', 'Flail'],
   'Fouet': ['Fouet', 'Whip'],
-  'Hache à deux mains': ['Hache a deux mains', 'Grande hache', 'Greataxe', 'Hache 2 mains', 'Hache lourde'],
-  'Hache d\'armes': ['Hache d armes', 'Hache darme', 'Battleaxe', 'Hache', 'Hache de bataille'],
-  'Hallebarde': ['Hallebarde', 'Halberd', 'Hallebarbe', 'Halebarde'],
-  'Lance d\'arçon': ['Lance d arçon', 'Lance darcon', 'Lance d arcon', 'Lance de cavalerie', 'Lance de chevalier', 'Lance lourde'],
-  'Maillet d\'armes': ['Maillet d armes', 'Maillet', 'Marteau lourd', 'Marteau a deux mains', 'Maul', 'Maillet darme'],
-  'Marteau de guerre': ['Marteau de guerre', 'Warhammer', 'Marteau lourd (warhammer)'],
-  'Morgenstern': ['Morgenstern', 'Morningstar', 'Morning star', 'Étoile du matin', 'Etoile du matin'],
-  'Pic de guerre': ['Pic de guerre', 'War pick', 'Pic de guerre (war pick)', 'Pic'],
+  'Hache à deux mains': ['Hache a deux mains', 'Grande hache', 'Greataxe', 'Hache 2 mains'],
+  'Hache d\'armes': ['Hache d armes', 'Hache darme', 'Battleaxe', 'Hache de bataille'],
+  'Hallebarde': ['Hallebarde', 'Halberd', 'Hallebarbe'],
+  'Lance d\'arçon': ['Lance darcon', 'Lance d arcon', 'Lance de cavalerie', 'Lance de chevalier'],
+  'Maillet d\'armes': ['Maillet d armes', 'Maillet', 'Maul', 'Marteau a deux mains'],
+  'Marteau de guerre': ['Marteau de guerre', 'Warhammer'],
+  'Morgenstern': ['Morgenstern', 'Morningstar', 'Morning star'],
+  'Pic de guerre': ['Pic de guerre', 'War pick', 'Pic'],
   'Pique': ['Pique', 'Pike'],
   'Rapière': ['Rapière', 'Rapiere', 'Rapier'],
   'Trident': ['Trident'],
-  'Arbalète de poing': ['Arbalète de poing', 'Arbalete de poing', 'Hand crossbow'],
-  'Arbalète lourde': ['Arbalète lourde', 'Arbalete lourde', 'Heavy crossbow'],
-  'Arc long': ['Arc long', 'Arc (long)', 'Longbow'],
+  'Arbalète de poing': ['Arbalete de poing', 'Hand crossbow'],
+  'Arbalète lourde': ['Arbalete lourde', 'Heavy crossbow'],
+  'Arc long': ['Arc long', 'Longbow'],
   'Mousquet': ['Mousquet', 'Musket'],
   'Pistolet': ['Pistolet', 'Pistol'],
   'Sarbacane': ['Sarbacane', 'Blowgun']
 };
 
-/* =============== NORMALISATION =============== */
-function normalizeText(str: string): string {
+/* ---------------- Normalisation ---------------- */
+function normalize(str: string): string {
   return str
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')        // accents
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/['’`]/g, ' ')                // apostrophes → espace
-    .replace(/\([^)]*\)/g, ' ')            // enlever parenthèses et contenu
-    .replace(/[^a-z0-9]+/g, ' ')           // tout sauf alphanum → espace
+    .replace(/['’`]/g, ' ')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-/**
- * Simplifie un nom d'arme utilisateur pour matcher le canon :
- * - Normalise
- * - Retire certains qualificatifs fréquents (en argent, argent, magique...)
- */
 function simplifyWeaponInput(name: string): string {
-  let n = normalizeText(name);
-  n = n
-    .replace(/\b(en )?argent(e|ee)?\b/g, '')
-    .replace(/\bmagique(s)?\b/g, '')
-    .replace(/\bplus un\b/g, '')
-    .replace(/\b\+?1\b/g, '')
-    .replace(/\bde? ?combat\b/g, '') // "bâton de combat" -> garde "baton", on recollera via variantes
-    .trim()
-    .replace(/\s+/g, ' ');
-  return n;
+  return normalize(
+    name
+      .replace(/\b(en )?argent(e|ee)?\b/gi, '')
+      .replace(/\bmagique(s)?\b/gi, '')
+      .replace(/\b(\+?1|plus un)\b/gi, '')
+  );
 }
 
-/* =============== INDEX DE RECHERCHE CANONIQUE =============== */
-interface CanonEntry {
-  canonical: string;
-  norm: string;
-}
-
-const ALL_CANONICAL_WEAPONS: string[] = [
-  ...ARMES_COURANTES,
-  ...ARMES_DE_GUERRE
-];
-
+interface CanonEntry { canonical: string; norm: string; }
 const CANON_INDEX: CanonEntry[] = [];
 
-(function buildCanonIndex() {
-  const added = new Set<string>();
-  for (const w of ALL_CANONICAL_WEAPONS) {
-    const canonNorm = normalizeText(w);
-    if (!added.has(canonNorm)) {
-      CANON_INDEX.push({ canonical: w, norm: canonNorm });
-      added.add(canonNorm);
-    }
-    const variants = WEAPON_NAME_VARIANTS[w] || [];
-    for (const v of variants) {
-      const vn = normalizeText(v);
-      if (!added.has(vn)) {
-        CANON_INDEX.push({ canonical: w, norm: vn });
-        added.add(vn);
-      }
+(function buildIndex() {
+  const seen = new Set<string>();
+  const all = [...ARMES_COURANTES, ...ARMES_DE_GUERRE];
+  for (const base of all) {
+    const n = normalize(base);
+    if (!seen.has(n)) { CANON_INDEX.push({ canonical: base, norm: n }); seen.add(n); }
+    for (const variant of (WEAPON_NAME_VARIANTS[base] || [])) {
+      const vn = normalize(variant);
+      if (!seen.has(vn)) { CANON_INDEX.push({ canonical: base, norm: vn }); seen.add(vn); }
     }
   }
 })();
 
-/**
- * Essaie de retrouver la forme canonique d'un nom d'arme utilisateur.
- */
-function resolveCanonicalWeapon(userWeaponName: string): string | null {
-  if (!userWeaponName) return null;
-  const simplified = simplifyWeaponInput(userWeaponName);
-  if (!simplified) return null;
-
-  // 1. Match direct dans l'index (norm)
-  const direct = CANON_INDEX.find(e => e.norm === simplified);
+function resolveCanonicalWeapon(input: string): string | null {
+  const simp = simplifyWeaponInput(input);
+  if (!simp) return null;
+  const direct = CANON_INDEX.find(e => e.norm === simp);
   if (direct) return direct.canonical;
-
-  // 2. Essai : si mot composé, tenter chaque segment principal
-  // (ex: "dague argentée" simplifié -> "dague", déjà couvert, mais au cas où)
-  const parts = simplified.split(' ');
+  const parts = simp.split(' ');
   if (parts.length > 1) {
-    for (const part of parts) {
-      const candidate = CANON_INDEX.find(e => e.norm === part);
-      if (candidate) return candidate.canonical;
+    for (const p of parts) {
+      const partMatch = CANON_INDEX.find(e => e.norm === p);
+      if (partMatch) return partMatch.canonical;
     }
   }
-
-  // 3. Dernier recours : recherche qui "commence par"
-  const starts = CANON_INDEX.find(e => simplified.startsWith(e.norm));
-  if (starts) return starts.canonical;
-
-  return null;
+  const starts = CANON_INDEX.find(e => simp.startsWith(e.norm));
+  return starts ? starts.canonical : null;
 }
 
-/* ===================== INTERFACE RESULTAT ===================== */
+function weaponIn(list: string[], weaponName: string): boolean {
+  const canon = resolveCanonicalWeapon(weaponName);
+  if (!canon) return false;
+  return list.some(w => normalize(w) === normalize(canon));
+}
+
+function detectCategory(weaponName: string): string {
+  if (weaponIn(ARMES_COURANTES, weaponName)) return 'Armes courantes';
+  if (weaponIn(ARMES_GUERRE_FINESSE_OU_LEGERE, weaponName)) return 'Armes de guerre (Finesse ou Légère)';
+  if (weaponIn(ARMES_GUERRE_LEGERE, weaponName)) return 'Armes de guerre (Légère)';
+  if (weaponIn(ARMES_DE_GUERRE, weaponName)) return 'Armes de guerre';
+  return 'Inconnue';
+}
+
+/* ---------------- Synonymes catégories ---------------- */
+const SIMPLE_CATEGORY_SYNONYMS = [
+  'armes courantes','arme courante','armes simples','arme simple','simple weapons','simple weapon'
+].map(normalize);
+const MARTIAL_CATEGORY_SYNONYMS = [
+  'armes de guerre','arme de guerre','armes martiales','arme martiale','martial weapons','martial weapon'
+].map(normalize);
+const MARTIAL_SUB_FINESSE_LIGHT = [
+  'armes de guerre presentant la propriete finesse ou legere',
+  'armes de guerre finesse ou legere',
+  'armes de guerre avec finesse ou legere',
+  'armes de guerre finesse legere'
+].map(normalize);
+const MARTIAL_SUB_LIGHT_ONLY = [
+  'armes de guerre dotees de la propriete legere',
+  'armes de guerre legere',
+  'armes de guerre legeres'
+].map(normalize);
+
+/* ---------------- Résultat ---------------- */
 export interface WeaponProficiencyCheck {
   isProficient: boolean;
   reason: string;
   category?: string;
   shouldApplyProficiencyBonus: boolean;
   proficiencySource?: string;
-  // Champs de debug supplémentaires
   debug?: {
     input: string;
     simplified: string;
@@ -234,57 +205,9 @@ export interface WeaponProficiencyCheck {
   };
 }
 
-/* ===================== CATÉGORISATION ===================== */
-function weaponInList(weaponName: string, list: string[]): boolean {
-  const canonical = resolveCanonicalWeapon(weaponName);
-  if (!canonical) return false;
-  return list.some(w => normalizeText(w) === normalizeText(canonical));
-}
-
-function detectCategory(weaponName: string): string {
-  if (weaponInList(weaponName, ARMES_COURANTES)) return 'Armes courantes';
-  if (weaponInList(weaponName, ARMES_GUERRE_FINESSE_OU_LEGERE)) return 'Armes de guerre (Finesse ou Légère)';
-  if (weaponInList(weaponName, ARMES_GUERRE_LEGERE)) return 'Armes de guerre (Légère)';
-  if (weaponInList(weaponName, ARMES_DE_GUERRE)) return 'Armes de guerre';
-  return 'Inconnue';
-}
-
-/* ===================== PROFICIENCIES CATEGORIES SYNO ===================== */
-const SIMPLE_CATEGORY_SYNONYMS = [
-  'armes courantes', 'arme courante',
-  'armes simples', 'arme simple',
-  'simple weapons', 'simple weapon'
-].map(normalizeText);
-
-const MARTIAL_CATEGORY_SYNONYMS = [
-  'armes de guerre', 'arme de guerre',
-  'armes martiales', 'arme martiale',
-  'martial weapons', 'martial weapon'
-].map(normalizeText);
-
-const MARTIAL_SUB_FINESSE_LIGHT_SYNONYMS = [
-  'armes de guerre presentant la propriete finesse ou legere',
-  'armes de guerre finesse ou legere',
-  'armes de guerre avec finesse ou legere',
-  'armes de guerre finesse legere',
-  'armes de guerre finesse',
-  'armes de guerre legere finesse'
-].map(normalizeText);
-
-const MARTIAL_SUB_LIGHT_ONLY_SYNONYMS = [
-  'armes de guerre dotees de la propriete legere',
-  'armes de guerre legere',
-  'armes de guerre legeres',
-  'armes de guerre propriete legere'
-].map(normalizeText);
-
-/* ===================== PRINCIPALE : checkWeaponProficiency ===================== */
-export function checkWeaponProficiency(
-  weaponName: string,
-  playerProficiencies: string[]
-): WeaponProficiencyCheck {
-
-  if (!weaponName || !weaponName.trim()) {
+/* ---------------- Vérification principale ---------------- */
+export function checkWeaponProficiency(weaponName: string, playerProficiencies: string[]): WeaponProficiencyCheck {
+  if (!weaponName?.trim()) {
     return {
       isProficient: false,
       reason: 'Nom d\'arme manquant',
@@ -294,70 +217,49 @@ export function checkWeaponProficiency(
         simplified: '',
         canonical: null,
         weaponCategory: 'Inconnue',
-        matchedBy: undefined,
-        normalizedProficiencies: playerProficiencies.map(p => normalizeText(p))
+        normalizedProficiencies: playerProficiencies.map(normalize)
       }
     };
   }
 
   const simplified = simplifyWeaponInput(weaponName);
   const canonical = resolveCanonicalWeapon(weaponName);
-  const normalizedProfs = playerProficiencies.map(p => normalizeText(p));
+  const normProfs = playerProficiencies.map(normalize);
   const weaponCategory = detectCategory(weaponName);
 
-  // 1. Maîtrise spécifique exacte (le joueur aurait listé "Dague" par ex.)
+  // Spécifique
   if (canonical) {
-    const directSpecific = normalizedProfs.find(p => p === normalizeText(canonical));
-    if (directSpecific) {
+    const exact = normProfs.find(p => p === normalize(canonical));
+    if (exact) {
       return {
         isProficient: true,
         reason: `Maîtrise spécifique de ${canonical}`,
         category: weaponCategory,
         shouldApplyProficiencyBonus: true,
-        proficiencySource: directSpecific,
-        debug: {
-          input: weaponName,
-          simplified,
-          canonical,
-            weaponCategory,
-          matchedBy: 'specificName',
-          normalizedProficiencies: normalizedProfs
-        }
+        proficiencySource: exact,
+        debug: { input: weaponName, simplified, canonical, weaponCategory, matchedBy: 'specificName', normalizedProficiencies: normProfs }
       };
     }
   }
 
-  // 2. Catégorie générale : Armes courantes
+  // Catégorie : Armes courantes
   if (weaponCategory === 'Armes courantes') {
-    const hasSimple = normalizedProfs.some(p =>
-      SIMPLE_CATEGORY_SYNONYMS.includes(p) ||
-      (p.includes('arme') && (p.includes('courante') || p.includes('simple')))
-    );
+    const hasSimple = normProfs.some(p => SIMPLE_CATEGORY_SYNONYMS.includes(p) || (p.includes('arme') && (p.includes('courant') || p.includes('simple'))));
     if (hasSimple) {
       return {
         isProficient: true,
         reason: 'Maîtrise des armes courantes',
-        category: 'Armes courantes',
+        category: weaponCategory,
         shouldApplyProficiencyBonus: true,
         proficiencySource: 'Catégorie Armes courantes',
-        debug: {
-          input: weaponName,
-          simplified,
-          canonical,
-          weaponCategory,
-          matchedBy: 'category',
-          normalizedProficiencies: normalizedProfs
-        }
+        debug: { input: weaponName, simplified, canonical, weaponCategory, matchedBy: 'category', normalizedProficiencies: normProfs }
       };
     }
   }
 
-  // 3. Catégorie générale : Armes de guerre
+  // Catégorie : Armes de guerre (toutes)
   if (weaponCategory.startsWith('Armes de guerre')) {
-    const hasMartial = normalizedProfs.some(p =>
-      MARTIAL_CATEGORY_SYNONYMS.includes(p) ||
-      (p.includes('arme') && (p.includes('guerre') || p.includes('martial')))
-    );
+    const hasMartial = normProfs.some(p => MARTIAL_CATEGORY_SYNONYMS.includes(p) || (p.includes('arme') && (p.includes('guerre') || p.includes('martial'))));
     if (hasMartial) {
       return {
         isProficient: true,
@@ -365,84 +267,49 @@ export function checkWeaponProficiency(
         category: weaponCategory,
         shouldApplyProficiencyBonus: true,
         proficiencySource: 'Catégorie Armes de guerre',
-        debug: {
-          input: weaponName,
-          simplified,
-          canonical,
-          weaponCategory,
-          matchedBy: 'category',
-          normalizedProficiencies: normalizedProfs
-        }
+        debug: { input: weaponName, simplified, canonical, weaponCategory, matchedBy: 'category', normalizedProficiencies: normProfs }
       };
     }
 
-    // 3.b Sous-catégorie finesse ou légère
     if (weaponCategory === 'Armes de guerre (Finesse ou Légère)') {
-      const hasSub = normalizedProfs.some(p => MARTIAL_SUB_FINESSE_LIGHT_SYNONYMS.includes(p) ||
-        (p.includes('finesse') && p.includes('legere')));
+      const hasSub = normProfs.some(p => MARTIAL_SUB_FINESSE_LIGHT.includes(p) || (p.includes('finesse') && p.includes('legere')));
       if (hasSub) {
         return {
           isProficient: true,
-          reason: 'Maîtrise des armes de guerre (Finesse ou Légère)',
+          reason: 'Maîtrise armes de guerre (Finesse ou Légère)',
           category: weaponCategory,
           shouldApplyProficiencyBonus: true,
-          proficiencySource: 'Sous-catégorie Finesse ou Légère',
-          debug: {
-            input: weaponName,
-            simplified,
-            canonical,
-            weaponCategory,
-            matchedBy: 'subCategory',
-            normalizedProficiencies: normalizedProfs
-          }
+          proficiencySource: 'Sous-catégorie Finesse/Légère',
+          debug: { input: weaponName, simplified, canonical, weaponCategory, matchedBy: 'subCategory', normalizedProficiencies: normProfs }
         };
       }
     }
 
-    // 3.c Sous-catégorie légère
     if (weaponCategory === 'Armes de guerre (Légère)') {
-      const hasLight = normalizedProfs.some(p =>
-        MARTIAL_SUB_LIGHT_ONLY_SYNONYMS.includes(p) ||
-        (p.includes('legere') && !p.includes('finesse'))
-      );
+      const hasLight = normProfs.some(p => MARTIAL_SUB_LIGHT_ONLY.includes(p) || (p.includes('legere') && !p.includes('finesse')));
       if (hasLight) {
         return {
           isProficient: true,
-          reason: 'Maîtrise des armes de guerre (Légère)',
+          reason: 'Maîtrise armes de guerre (Légère)',
           category: weaponCategory,
           shouldApplyProficiencyBonus: true,
           proficiencySource: 'Sous-catégorie Légère',
-          debug: {
-            input: weaponName,
-            simplified,
-            canonical,
-            weaponCategory,
-            matchedBy: 'subCategory',
-            normalizedProficiencies: normalizedProfs
-          }
+            debug: { input: weaponName, simplified, canonical, weaponCategory, matchedBy: 'subCategory', normalizedProficiencies: normProfs }
         };
       }
     }
   }
 
-  // 4. Aucune maîtrise
   return {
     isProficient: false,
     reason: `Aucune maîtrise pour cette arme (${weaponCategory})`,
     category: weaponCategory,
     shouldApplyProficiencyBonus: false,
-    debug: {
-      input: weaponName,
-      simplified,
-      canonical,
-      weaponCategory,
-      matchedBy: undefined,
-      normalizedProficiencies: normalizedProfs
-    }
+    debug: { input: weaponName, simplified, canonical, weaponCategory, normalizedProficiencies: normProfs }
   };
 }
 
-/* ===================== PROFICIENCIES PAR CLASSE ===================== */
+/* ---------------- Maîtrises par classe ---------------- */
 const CLASS_WEAPON_PROFICIENCIES: Record<string, string[]> = {
   'Guerrier': ['Armes courantes', 'Armes de guerre'],
   'Magicien': ['Armes courantes'],
@@ -458,41 +325,78 @@ const CLASS_WEAPON_PROFICIENCIES: Record<string, string[]> = {
   'Occultiste': ['Armes courantes']
 };
 
-/* ===================== EXTRACTION DES MAÎTRISES JOUEUR ===================== */
-export function getPlayerWeaponProficiencies(player: any): string[] {
-  const profs: string[] = [];
-
-  try {
-    // 1. Creator meta
-    if (player?.stats?.creator_meta?.weapon_proficiencies) {
-      const arr = player.stats.creator_meta.weapon_proficiencies;
-      if (Array.isArray(arr)) profs.push(...arr);
-    }
-    // 2. Stats direct
-    if (player?.stats?.weapon_proficiencies) {
-      const arr = player.stats.weapon_proficiencies;
-      if (Array.isArray(arr)) profs.push(...arr);
-    }
-    // 3. Classe
-    if (player?.class && CLASS_WEAPON_PROFICIENCIES[player.class]) {
-      profs.push(...CLASS_WEAPON_PROFICIENCIES[player.class]);
-    }
-
-    // 4. Nettoyage + unicité
-    const unique = [...new Set(profs)]
-      .filter(p => p && typeof p === 'string' && p.trim().length > 0);
-
-    return unique;
-  } catch (e) {
-    console.error('[WeaponProficiency] Erreur extraction maîtrises:', e);
-    if (player?.class && CLASS_WEAPON_PROFICIENCIES[player.class]) {
-      return CLASS_WEAPON_PROFICIENCIES[player.class];
-    }
-    return [];
-  }
+/* ---------------- Extraction maîtrises joueur ---------------- */
+function collectFrom(obj: any, path: string[]): any {
+  return path.reduce((acc, key) => (acc && acc[key] != null ? acc[key] : undefined), obj);
 }
 
-/* ===================== OUTILS PUBLICS ===================== */
+export function getPlayerWeaponProficiencies(player: any): string[] {
+  const out: string[] = [];
+  const pushArr = (arr: any) => {
+    if (Array.isArray(arr)) {
+      for (const v of arr) {
+        if (typeof v === 'string' && v.trim()) out.push(v.trim());
+      }
+    }
+  };
+
+  // Chemins explicites
+  const explicitPaths = [
+    ['stats','creator_meta','weapon_proficiencies'],
+    ['stats','creator_meta','weaponProficiencies'],
+    ['stats','weapon_proficiencies'],
+    ['stats','weaponProficiencies'],
+    ['weapon_proficiencies'],
+    ['weaponProficiencies'],
+    ['proficiencies','weapons'], // structure type { proficiencies: { weapons: [...] } }
+    ['proficiencies','weapon'],
+    ['proficiencies'] // si c'est directement un tableau
+  ];
+
+  for (const p of explicitPaths) {
+    const val = collectFrom(player, p);
+    pushArr(val);
+  }
+
+  // Si player.proficiencies est un objet avec diverses clés contenant des listes
+  if (player?.proficiencies && !Array.isArray(player.proficiencies) && typeof player.proficiencies === 'object') {
+    for (const k of Object.keys(player.proficiencies)) {
+      const lower = k.toLowerCase();
+      if (lower.includes('weapon') || lower.includes('arme')) {
+        pushArr(player.proficiencies[k]);
+      }
+    }
+  }
+
+  // Heuristique : parcourir les clés racines pour tableaux nommés avec 'weapon' ou 'arme'
+  for (const k of Object.keys(player || {})) {
+    if (Array.isArray(player[k]) && (k.toLowerCase().includes('weapon') || k.toLowerCase().includes('arme'))) {
+      pushArr(player[k]);
+    }
+  }
+
+  // Ajouter maîtrises de classe par défaut
+  if (player?.class && CLASS_WEAPON_PROFICIENCIES[player.class]) {
+    pushArr(CLASS_WEAPON_PROFICIENCIES[player.class]);
+  }
+
+  // Unicité
+  const unique = [...new Set(out)].filter(Boolean);
+
+  // Debug optionnel
+  // Active en console: window.__LOG_WEAPON_PROF__ = true;
+  try {
+    // @ts-ignore
+    if (typeof window !== 'undefined' && window.__LOG_WEAPON_PROF__) {
+      // @ts-ignore
+      console.log('[getPlayerWeaponProficiencies] RESULT:', unique);
+    }
+  } catch {}
+
+  return unique;
+}
+
+/* ---------------- Outils publics ---------------- */
 export function getWeaponsByCategory() {
   return {
     courantes: ARMES_COURANTES,
@@ -503,8 +407,7 @@ export function getWeaponsByCategory() {
 }
 
 export function isValidWeapon(weaponName: string): boolean {
-  if (!weaponName || !weaponName.trim()) return false;
-  return resolveCanonicalWeapon(weaponName) !== null;
+  return !!resolveCanonicalWeapon(weaponName);
 }
 
 export function getWeaponCategory(weaponName: string): string {
@@ -520,11 +423,11 @@ export function getAllAvailableProficiencies(): string[] {
   ];
 }
 
-/* ===================== DEBUG ===================== */
+/* ---------------- Debug ---------------- */
 export function debugWeaponProficiency(weaponName: string, playerProficiencies: string[]): void {
   console.group(`🗡️ Debug maîtrise: ${weaponName}`);
   console.log('Maîtrises joueur (brut):', playerProficiencies);
-  console.log('Maîtrises joueur (normalisées):', playerProficiencies.map(p => normalizeText(p)));
+  console.log('Maîtrises normalisées:', playerProficiencies.map(normalize));
   console.log('Simplifié:', simplifyWeaponInput(weaponName));
   console.log('Canonique:', resolveCanonicalWeapon(weaponName));
   console.log('Catégorie détectée:', getWeaponCategory(weaponName));
@@ -532,27 +435,4 @@ export function debugWeaponProficiency(weaponName: string, playerProficiencies: 
   const result = checkWeaponProficiency(weaponName, playerProficiencies);
   console.log('Résultat final:', result);
   console.groupEnd();
-}
-
-/* ===================== EXPORT SUPPLÉMENTAIRE (OPTIONNEL) ===================== */
-/**
- * Permet d'ajouter dynamiquement de nouvelles variantes à chaud si besoin
- * (ex: depuis une interface d'admin). Non utilisé directement mais utile.
- */
-export function registerWeaponVariant(canonical: string, variant: string) {
-  if (!WEAPON_NAME_VARIANTS[canonical]) {
-    WEAPON_NAME_VARIANTS[canonical] = [];
-  }
-  WEAPON_NAME_VARIANTS[canonical].push(variant);
-  // Rebuild minimal index entry
-  const normVar = normalizeText(variant);
-  const normCanon = normalizeText(canonical);
-  const already = CANON_INDEX.find(e => e.norm === normVar);
-  if (!already) {
-    CANON_INDEX.push({ canonical, norm: normVar });
-  }
-  // S'assurer que canon est présent aussi (devrait déjà l'être)
-  if (!CANON_INDEX.find(e => e.norm === normCanon)) {
-    CANON_INDEX.push({ canonical, norm: normCanon });
-  }
 }
