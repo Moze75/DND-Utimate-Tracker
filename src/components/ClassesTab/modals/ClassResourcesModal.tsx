@@ -545,7 +545,7 @@ export function ClassResourcesCard({
             onUpdateResource('used_lay_on_hands', clamped);
           }}
         />
-      ); 
+      );
 
       // Conduits divins (N3+) — total calculé → pas d'édition
       if (lvl >= 3) {
