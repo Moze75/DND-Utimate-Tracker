@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PlayerLike, canonicalClass, getChaModFromPlayerLike } from './ClassUtilsModal';
 import {
   Sparkles,
   Flame,
