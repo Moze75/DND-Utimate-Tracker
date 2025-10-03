@@ -515,7 +515,7 @@ useEffect(() => {
     }
 
   
-  return () => clearTimeout(timeoutId);
+
 }, []); // Dépendances vides = se déclenche uniquement au montage du composant
   const jewelryItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'jewelry'), [inventory]);
   const potionItems = useMemo(() => inventory.filter(i => parseMeta(i.description)?.type === 'potion'), [inventory]);
