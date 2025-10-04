@@ -379,15 +379,21 @@ export function PlayerProfileSettingsModal({
     const styles = Array.isArray(feats.styles) ? feats.styles.filter((s: string) => ALLOWED_FIGHTING_STYLES.has(s)) : [];
     setFightingStyles(styles.length > 0 ? styles : ['']);
 
-    // Charger les maîtrises
     if (player.stats && typeof player.stats === 'object') {
       const stats = player.stats as any;
       const creatorMeta = stats.creator_meta || {};
-      const weaponProfs = creatorMeta.weapon_proficiencies || stats.weapon_proficiencies || [];
-      const armorProfs = creatorMeta.armor_proficiencies || stats.armor_proficiencies || [];
-      
-      setWeaponProficiencies(Array.isArray(weaponProfs) ? weaponProfs : []);
-      setArmorProficiencies(Array.isArray(armorProfs) ? armorProfs : []);
+
+      let weaponProfs = creatorMeta.weapon_proficiencies || stats.weapon_proficiencies || [];
+      weaponProfs = Array.isArray(weaponProfs) ? weaponProfs : [];
+
+      let armorProfs = creatorMeta.armor_proficiencies || stats.armor_proficiencies || [];
+      armorProfs = Array.isArray(armorProfs) ? armorProfs : [];
+
+      setWeaponProficiencies(weaponProfs);
+      setArmorProficiencies(armorProfs);
+    } else {
+      setWeaponProficiencies([]);
+      setArmorProficiencies([]);
     }
   }, [
     open,

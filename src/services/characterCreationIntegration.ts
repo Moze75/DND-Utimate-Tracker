@@ -145,6 +145,13 @@ export async function createCharacterFromCreatorPayload(
     feats,
     coins, // compat
     gold: initialGold, // compat éventuelle
+    creator_meta: {
+      weapon_proficiencies: payload.weaponProficiencies || [],
+      armor_proficiencies: payload.armorProficiencies || [],
+      tool_proficiencies: payload.toolProficiencies || [],
+    },
+    weapon_proficiencies: payload.weaponProficiencies || [],
+    armor_proficiencies: payload.armorProficiencies || [],
   };
 
   // 3) Update robuste sur des colonnes existantes

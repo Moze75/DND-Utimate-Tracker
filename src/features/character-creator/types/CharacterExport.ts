@@ -36,4 +36,19 @@ export interface CharacterExportPayload {
   // NOUVEAU: image/portrait sélectionné dans le créateur
   // Peut être une data URL (data:image/png;base64,...) ou une URL publique
   avatarImageUrl?: string;
+
+  // Maîtrises d'armes, d'armures et d'outils
+  weaponProficiencies?: string[];
+  armorProficiencies?: string[];
+  toolProficiencies?: string[];
+
+  // Traits raciaux et capacités de classe
+  racialTraits?: string[];
+  classFeatures?: string[];
+  backgroundFeature?: string;
+  savingThrows?: string[];
+  languages?: string[];
+
+  // Option d'équipement de classe sélectionnée
+  selectedEquipmentOption?: string;
 }
