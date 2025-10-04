@@ -185,7 +185,9 @@ async function autoEquipItems(
     return;
   }
 
+  console.log('[autoEquipItems] Items reçus:', items.map(i => ({ name: i.name, type: i.meta.type, autoEquip: i.autoEquip })));
   const toEquip = items.filter(item => item.autoEquip);
+  console.log('[autoEquipItems] Items à équiper:', toEquip.map(i => ({ name: i.name, type: i.meta.type })));
   const equipmentUpdates: any = { ...player.equipment };
 
   const armorItem = toEquip.find(item => item.meta.type === 'armor');
@@ -222,12 +224,18 @@ async function autoEquipItems(
     }
   }
 
-  const weaponItem = toEquip.find(item => item.meta.type === 'weapon');
+  const weaponItems = toEquip.filter(item => item.meta.type === 'weapon');
   const equippedWeapons = [];
+  const equippedWeaponNames = new Set<string>();
 
-  if (weaponItem) {
+  for (const weaponItem of weaponItems) {
+    const normalizedName = smartCapitalize(weaponItem.name);
+    if (equippedWeaponNames.has(normalizedName)) {
+      continue;
+    }
+
     const dbItem = inventoryItems.find(i =>
-      smartCapitalize(i.name) === smartCapitalize(weaponItem.name)
+      smartCapitalize(i.name) === normalizedName
     );
     if (dbItem && weaponItem.meta.weapon) {
       equippedWeapons.push({
@@ -236,6 +244,8 @@ async function autoEquipItems(
         description: weaponItem.description,
         weapon_meta: weaponItem.meta.weapon,
       });
+
+      equippedWeaponNames.add(normalizedName);
 
       await createWeaponAttack(
         playerId,
@@ -251,6 +261,7 @@ async function autoEquipItems(
   }
 
   if (armorItem || shieldItem || equippedWeapons.length > 0) {
+    console.log('[autoEquipItems] Mise à jour equipment:', equipmentUpdates);
     const { error: updateError } = await supabase
       .from('players')
       .update({ equipment: equipmentUpdates })
@@ -258,7 +269,11 @@ async function autoEquipItems(
 
     if (updateError) {
       console.error('Erreur mise à jour equipment:', updateError);
+    } else {
+      console.log('[autoEquipItems] Equipment mis à jour avec succès');
     }
+  } else {
+    console.log('[autoEquipItems] Aucun équipement à mettre à jour');
   }
 }
 

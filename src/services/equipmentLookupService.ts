@@ -464,9 +464,9 @@ export async function enrichEquipmentList(items: string[]): Promise<EnrichedEqui
 export function determineAutoEquip(items: EnrichedEquipment[]): EnrichedEquipment[] {
   let hasArmor = false;
   let hasShield = false;
-  let hasWeapon = false;
+  const weaponNames = new Set<string>();
 
-  return items.map(item => {
+  const result = items.map(item => {
     const type = item.meta.type;
     let autoEquip = false;
 
@@ -476,9 +476,12 @@ export function determineAutoEquip(items: EnrichedEquipment[]): EnrichedEquipmen
     } else if (type === 'shield' && !hasShield) {
       autoEquip = true;
       hasShield = true;
-    } else if (type === 'weapon' && !hasWeapon) {
-      autoEquip = true;
-      hasWeapon = true;
+    } else if (type === 'weapon') {
+      const normalizedName = item.name.toLowerCase().trim();
+      if (!weaponNames.has(normalizedName)) {
+        autoEquip = true;
+        weaponNames.add(normalizedName);
+      }
     }
 
     return {
@@ -490,4 +493,7 @@ export function determineAutoEquip(items: EnrichedEquipment[]): EnrichedEquipmen
       }
     };
   });
+
+  console.log('[determineAutoEquip] R\u00e9sultat:', result.map(i => ({ name: i.name, type: i.meta.type, autoEquip: i.autoEquip })));
+  return result;
 }
