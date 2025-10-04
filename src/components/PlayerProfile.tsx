@@ -87,7 +87,8 @@ export function PlayerProfile({ player, onUpdate }: PlayerProfileProps) {
 
   const baseACFromStats = Number(stats.armor_class || 0);
   const armorAC = armorFormula ? computeArmorAC(armorFormula, dexMod) : baseACFromStats;
-  const totalAC = armorAC + shieldBonus;
+  const acBonus = Number((stats as any).ac_bonus || 0);
+  const totalAC = armorAC + shieldBonus + acBonus;
 
   /* ============================ Repos court / long (inchangé) ============================ */
 

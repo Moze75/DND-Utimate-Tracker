@@ -118,6 +118,7 @@ export interface PlayerStats {
   proficiency_bonus: number;
   inspirations: number;
   jack_of_all_trades?: boolean;
+  ac_bonus?: number;
 }
 
 export interface Ability {

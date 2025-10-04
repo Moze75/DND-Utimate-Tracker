@@ -295,6 +295,7 @@ export function PlayerProfileSettingsModal({
   // Nouveaux états pour les maîtrises
   const [weaponProficiencies, setWeaponProficiencies] = useState<string[]>([]);
   const [armorProficiencies, setArmorProficiencies] = useState<string[]>([]);
+  const [acBonus, setAcBonus] = useState<number>(0);
 
   const ALLOWED_RACES = useMemo(() => new Set(DND_RACES.filter(Boolean)), []);
   const ALLOWED_BACKGROUNDS = useMemo(() => new Set(DND_BACKGROUNDS.filter(Boolean)), []);
@@ -362,6 +363,7 @@ export function PlayerProfileSettingsModal({
     setInitField(initInitial !== undefined && initInitial !== null ? String(initInitial) : String(dexMod));
     setSpeedField(speedInitial > 0 ? String(speedInitial).replace('.', ',') : String(9));
     setProfField(profInitial > 0 ? String(profInitial) : String(profAuto));
+    setAcBonus((player.stats as any)?.ac_bonus ?? 0);
 
     const feats: any = (player.stats as any)?.feats || {};
 
@@ -540,6 +542,7 @@ export function PlayerProfileSettingsModal({
         initiative: Number.isFinite(initVal) ? initVal : dexMod,
         speed: Number.isFinite(speedVal) && speedVal > 0 ? speedVal : 9,
         proficiency_bonus: Number.isFinite(profVal) && profVal > 0 ? profVal : profAuto,
+        ac_bonus: acBonus,
         feats: featsData,
         creator_meta: {
           ...currentStats.creator_meta,
@@ -1226,6 +1229,29 @@ export function PlayerProfileSettingsModal({
                     className="input-dark w-full px-3 py-2 rounded-md"
                     placeholder="Auto si vide: selon niveau"
                   />
+                </div>
+              </div>
+
+              <div className="border-t border-gray-700/50 pt-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Bonus de CA
+                    <span className="text-xs text-gray-500 ml-2">(dons, objets magiques, etc.)</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={acBonus}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      setAcBonus(isNaN(val) ? 0 : val);
+                      setDirty(true);
+                    }}
+                    className="input-dark w-full px-3 py-2 rounded-md"
+                    placeholder="Bonus additionnel de CA (ex: +1 pour le style Défense)"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Ce bonus s'ajoute à votre CA calculée (armure + bouclier + DEX)
+                  </p>
                 </div>
               </div>
             </div>
