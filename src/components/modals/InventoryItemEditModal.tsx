@@ -6,7 +6,8 @@ import { InventoryItem } from '../../types/dnd';
 
 /* Types & utils alignés */
 type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment' | 'jewelry' | 'tool';
-interface WeaponMeta { damageDice: string; damageType: 'Tranchant' | 'Perforant' | 'Contondant'; properties: string; range: string; }
+type WeaponCategory = 'Armes courantes' | 'Armes de guerre' | 'Armes de guerre dotées de la propriété Légère' | 'Armes de guerre présentant la propriété Finesse ou Légère';
+interface WeaponMeta { damageDice: string; damageType: 'Tranchant' | 'Perforant' | 'Contondant'; properties: string; range: string; category?: WeaponCategory; }
 interface ArmorMeta { base: number; addDex: boolean; dexCap?: number | null; label: string; }
 interface ShieldMeta { bonus: number; }
 interface ItemMeta {
@@ -71,6 +72,7 @@ export function InventoryItemEditModal({
   const [wType, setWType] = React.useState<'Tranchant' | 'Perforant' | 'Contondant'>(existingMeta.weapon?.damageType || 'Tranchant');
   const [wProps, setWProps] = React.useState(existingMeta.weapon?.properties || '');
   const [wRange, setWRange] = React.useState(existingMeta.weapon?.range || '');
+  const [wCategory, setWCategory] = React.useState<WeaponCategory>(existingMeta.weapon?.category || 'Armes courantes');
 
   // Armor fields
   const [aBase, setABase] = React.useState<number>(existingMeta.armor?.base || 10);
@@ -102,6 +104,7 @@ export function InventoryItemEditModal({
           damageType: wType,
           properties: wProps,
           range: wRange,
+          category: wCategory,
         };
       } else if (type === 'armor') {
         newMeta.armor = {
@@ -181,6 +184,7 @@ export function InventoryItemEditModal({
       setWType('Tranchant');
       setWProps('');
       setWRange('Corps à corps');
+      setWCategory('Armes courantes');
     } else if (type === 'armor' && !existingMeta.armor) {
       setABase(10);
       setAAddDex(false);
@@ -255,6 +259,20 @@ export function InventoryItemEditModal({
           {type === 'weapon' && (
             <div className="space-y-3 border-t border-gray-700 pt-4">
               <h4 className="text-sm font-medium text-gray-300">Propriétés d'arme</h4>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Catégorie d'arme</label>
+                <select
+                  value={wCategory}
+                  onChange={(e) => setWCategory(e.target.value as WeaponCategory)}
+                  className="input-dark w-full px-2 py-1 text-sm rounded"
+                >
+                  <option value="Armes courantes">Armes courantes</option>
+                  <option value="Armes de guerre">Armes de guerre</option>
+                  <option value="Armes de guerre dotées de la propriété Légère">Armes de guerre dotées de la propriété Légère</option>
+                  <option value="Armes de guerre présentant la propriété Finesse ou Légère">Armes de guerre présentant la propriété Finesse ou Légère</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Cette catégorie détermine si votre bonus de maîtrise s'applique aux jets d'attaque</p>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">Dés de dégâts</label>

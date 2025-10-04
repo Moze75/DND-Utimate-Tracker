@@ -7,11 +7,13 @@ import { WeaponProficiencyWarningModal } from './WeaponProficiencyWarningModal';
 
 const META_PREFIX = '#meta:';
 
+type WeaponCategory = 'Armes courantes' | 'Armes de guerre' | 'Armes de guerre dotées de la propriété Légère' | 'Armes de guerre présentant la propriété Finesse ou Légère';
 type WeaponMeta = {
   damageDice: string;
   damageType: 'Tranchant' | 'Perforant' | 'Contondant';
   properties: string;
   range: string;
+  category?: WeaponCategory;
 };
 type ItemMeta = {
   type: 'weapon' | string;

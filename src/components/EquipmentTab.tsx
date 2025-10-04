@@ -44,12 +44,14 @@ interface Equipment {
 }
 
 type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment' | 'jewelry' | 'tool';
+type WeaponCategory = 'Armes courantes' | 'Armes de guerre' | 'Armes de guerre dotées de la propriété Légère' | 'Armes de guerre présentant la propriété Finesse ou Légère';
 
 interface WeaponMeta {
   damageDice: string;
   damageType: 'Tranchant' | 'Perforant' | 'Contondant';
   properties: string;
   range: string;
+  category?: WeaponCategory;
 }
 interface ArmorMeta {
   base: number;

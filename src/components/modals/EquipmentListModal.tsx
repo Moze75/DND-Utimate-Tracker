@@ -1,10 +1,12 @@
 import React from 'react';
 import { Search, X, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getWeaponCategory } from '../../utils/weaponProficiencyChecker';
 
 /* Types locaux (alignés sur EquipmentTab) */
 type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment' | 'jewelry' | 'tool';
-interface WeaponMeta { damageDice: string; damageType: 'Tranchant' | 'Perforant' | 'Contondant'; properties: string; range: string; }
+type WeaponCategory = 'Armes courantes' | 'Armes de guerre' | 'Armes de guerre dotées de la propriété Légère' | 'Armes de guerre présentant la propriété Finesse ou Légère';
+interface WeaponMeta { damageDice: string; damageType: 'Tranchant' | 'Perforant' | 'Contondant'; properties: string; range: string; category?: WeaponCategory; }
 interface ArmorMeta { base: number; addDex: boolean; dexCap?: number | null; label: string; }
 interface ShieldMeta { bonus: number; }
 export interface ItemMeta {
@@ -218,7 +220,14 @@ function parseWeapons(md: string): CatalogItem[] {
       const first = pm[1].trim().split(/[\/\s]/)[0]?.trim() || '';
       if (first) range = `${first} m`;
     }
-    items.push({ id: `weapon:${nom}`, kind: 'weapons', name: nom, weapon: { damageDice, damageType, properties: props || '', range } });
+    const detectedCategory = getWeaponCategory(nom);
+    const category: WeaponCategory | undefined =
+      detectedCategory === 'Armes courantes' ? 'Armes courantes' :
+      detectedCategory === 'Armes de guerre (Finesse ou Légère)' ? 'Armes de guerre présentant la propriété Finesse ou Légère' :
+      detectedCategory === 'Armes de guerre (Légère)' ? 'Armes de guerre dotées de la propriété Légère' :
+      detectedCategory === 'Armes de guerre' ? 'Armes de guerre' :
+      undefined;
+    items.push({ id: `weapon:${nom}`, kind: 'weapons', name: nom, weapon: { damageDice, damageType, properties: props || '', range, category } });
   }
   return items;
 }
