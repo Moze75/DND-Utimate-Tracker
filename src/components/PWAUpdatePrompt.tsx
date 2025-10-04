@@ -1,49 +1,43 @@
 import { useEffect, useState } from 'react';
-import { useRegisterSW } from 'virtual:pwa-register/react';
 import { RefreshCw, X } from 'lucide-react';
 
 export function PWAUpdatePrompt() {
-  const {
-    offlineReady: [offlineReady, setOfflineReady],
-    needRefresh: [needRefresh, setNeedRefresh],
-    updateServiceWorker,
-  } = useRegisterSW({
-    onRegistered(r) {
-      console.log('[PWA] Service Worker enregistré', r);
-    },
-    onRegisterError(error) {
-      console.error('[PWA] Erreur enregistrement SW:', error);
-    },
-  });
-
+  const [needRefresh, setNeedRefresh] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
 
   useEffect(() => {
-    if (offlineReady) {
-      console.log('[PWA] Application prête pour utilisation hors-ligne');
-    }
-  }, [offlineReady]);
-
-  useEffect(() => {
-    if (needRefresh) {
+    const handlePWAUpdate = (event: Event) => {
+      console.log('[PWA] Nouvelle version disponible');
+      setNeedRefresh(true);
       setShowPrompt(true);
-    }
-  }, [needRefresh]);
+    };
+
+    const handlePWAOffline = (event: Event) => {
+      console.log('[PWA] Application prête hors-ligne');
+    };
+
+    window.addEventListener('pwa:need-refresh', handlePWAUpdate);
+    window.addEventListener('pwa:offline-ready', handlePWAOffline);
+
+    return () => {
+      window.removeEventListener('pwa:need-refresh', handlePWAUpdate);
+      window.removeEventListener('pwa:offline-ready', handlePWAOffline);
+    };
+  }, []);
 
   const close = () => {
-    setOfflineReady(false);
     setNeedRefresh(false);
     setShowPrompt(false);
   };
 
   const handleUpdate = () => {
-    updateServiceWorker(true);
+    window.location.reload();
   };
 
   if (!showPrompt) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 bg-gray-800 border border-gray-700 rounded-lg shadow-2xl z-50 animate-slide-up">
+    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 bg-gray-800 border border-gray-700 rounded-lg shadow-2xl z-50">
       <div className="p-4">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
