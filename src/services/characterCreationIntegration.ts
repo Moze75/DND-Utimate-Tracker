@@ -228,6 +228,18 @@ async function autoEquipItems(
     }
   }
 
+  // IMPORTANT : Récupérer le player à jour APRÈS avoir équipé armure/bouclier et AVANT les armes
+  const { data: updatedPlayer } = await supabase
+    .from('players')
+    .select('*')
+    .eq('id', playerId)
+    .single();
+
+  if (!updatedPlayer) {
+    console.error('[autoEquipItems] Impossible de récupérer le player à jour');
+    return;
+  }
+
   // Équiper les armes (logique existante pour les armes)
   const weaponItems = toEquip.filter(item => item.meta.type === 'weapon');
   if (weaponItems.length > 0) {
@@ -268,7 +280,7 @@ async function autoEquipItems(
           playerId,
           weaponItem.name,
           weaponItem.meta.weapon,
-          freshPlayer
+          updatedPlayer
         );
       }
     }
@@ -279,7 +291,7 @@ async function autoEquipItems(
 
     if (equippedWeapons.length > 0) {
       const equipmentUpdates = {
-        ...freshPlayer.equipment,
+        ...updatedPlayer.equipment,
         weapons: equippedWeapons
       };
 
