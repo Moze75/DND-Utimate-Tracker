@@ -615,7 +615,8 @@ export function EquipmentTab({
       const existing = attacks.find(a => norm(a.name) === norm(name));
 
       const explicitCategory = w?.category;
-      const proficiencyResult = checkWeaponProficiency(weaponName || name, playerWeaponProficiencies, explicitCategory);
+      const weaponProperties = w?.properties;
+      const proficiencyResult = checkWeaponProficiency(weaponName || name, playerWeaponProficiencies, explicitCategory, weaponProperties);
 
       const payload = {
         player_id: player.id,
@@ -743,7 +744,8 @@ export function EquipmentTab({
         if (meta.equipped === targetEquipped) return;
 
         const explicitCategory = meta.weapon?.category;
-        const proficiencyResult = checkWeaponProficiency(freshItem.name, playerWeaponProficiencies, explicitCategory);
+        const weaponProperties = meta.weapon?.properties;
+        const proficiencyResult = checkWeaponProficiency(freshItem.name, playerWeaponProficiencies, explicitCategory, weaponProperties);
         const nextMeta = { ...meta, equipped: targetEquipped, forced: !proficiencyResult.isProficient && targetEquipped }; // forced indicatif
         await updateItemMetaComplete(freshItem, nextMeta);
 
@@ -861,7 +863,8 @@ export function EquipmentTab({
     if (isWeapon && !equipped) {
       try {
         const explicitCategory = meta.weapon?.category;
-        const result = checkWeaponProficiency(freshItem.name, playerWeaponProficiencies, explicitCategory);
+        const weaponProperties = meta.weapon?.properties;
+        const result = checkWeaponProficiency(freshItem.name, playerWeaponProficiencies, explicitCategory, weaponProperties);
         showWarning = !result.isProficient;
       } catch {}
     }
@@ -1091,7 +1094,8 @@ export function EquipmentTab({
               if (isWeapon) {
                 try {
                   const explicitCategory = meta?.weapon?.category;
-                  weaponProficiency = checkWeaponProficiency(item.name, playerWeaponProficiencies, explicitCategory);
+                  const weaponProperties = meta?.weapon?.properties;
+                  weaponProficiency = checkWeaponProficiency(item.name, playerWeaponProficiencies, explicitCategory, weaponProperties);
                 } catch {}
               }
               const notProficient = isWeapon && weaponProficiency && !weaponProficiency.isProficient;

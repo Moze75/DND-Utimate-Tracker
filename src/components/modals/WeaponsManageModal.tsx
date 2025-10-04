@@ -86,7 +86,8 @@ export function WeaponsManageModal({
     const playerProficiencies = getPlayerWeaponProficiencies(player);
     const meta = parseMeta(item.description);
     const explicitCategory = meta?.weapon?.category;
-    const proficiencyResult = checkWeaponProficiency(item.name, playerProficiencies, explicitCategory);
+    const weaponProperties = meta?.weapon?.properties;
+    const proficiencyResult = checkWeaponProficiency(item.name, playerProficiencies, explicitCategory, weaponProperties);
 
     if (!proficiencyResult.isProficient) {
       // Arme non maîtrisée : afficher l'avertissement
@@ -129,7 +130,8 @@ export function WeaponsManageModal({
   const getProficiencyStatus = (weaponName: string, meta: ItemMeta | null) => {
     const playerProficiencies = getPlayerWeaponProficiencies(player);
     const explicitCategory = meta?.weapon?.category;
-    const proficiencyResult = checkWeaponProficiency(weaponName, playerProficiencies, explicitCategory);
+    const weaponProperties = meta?.weapon?.properties;
+    const proficiencyResult = checkWeaponProficiency(weaponName, playerProficiencies, explicitCategory, weaponProperties);
     return proficiencyResult;
   };
 

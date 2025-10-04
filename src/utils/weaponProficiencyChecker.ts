@@ -161,11 +161,33 @@ function weaponIn(list: string[], weaponName: string): boolean {
   return list.some(w => normalize(w) === normalize(canon));
 }
 
-function detectCategory(weaponName: string): string {
+/* ---------------- Détection des propriétés d'arme ---------------- */
+function hasWeaponProperty(properties: string | undefined, propertyName: string): boolean {
+  if (!properties) return false;
+  const normalized = normalize(properties);
+  const normalizedProperty = normalize(propertyName);
+  // Vérifie si la propriété est présente (séparée par virgules, espaces, ou en tant que mot complet)
+  return normalized.split(/[,\s]+/).some(prop => prop === normalizedProperty || prop.includes(normalizedProperty));
+}
+
+function detectCategory(weaponName: string, properties?: string): string {
+  // 1. Vérifier d'abord les listes hardcodées par nom
   if (weaponIn(ARMES_COURANTES, weaponName)) return 'Armes courantes';
   if (weaponIn(ARMES_GUERRE_FINESSE_OU_LEGERE, weaponName)) return 'Armes de guerre (Finesse ou Légère)';
   if (weaponIn(ARMES_GUERRE_LEGERE, weaponName)) return 'Armes de guerre (Légère)';
   if (weaponIn(ARMES_DE_GUERRE, weaponName)) return 'Armes de guerre';
+
+  // 2. Si l'arme n'est pas dans les listes hardcodées, vérifier les propriétés
+  if (properties) {
+    const hasFinesse = hasWeaponProperty(properties, 'finesse');
+    const hasLight = hasWeaponProperty(properties, 'légère') || hasWeaponProperty(properties, 'legere') || hasWeaponProperty(properties, 'light');
+
+    // Si l'arme a Finesse OU Légère, elle appartient à la catégorie "Finesse ou Légère"
+    if (hasFinesse || hasLight) {
+      return 'Armes de guerre (Finesse ou Légère)';
+    }
+  }
+
   return 'Inconnue';
 }
 
@@ -209,7 +231,8 @@ export interface WeaponProficiencyCheck {
 export function checkWeaponProficiency(
   weaponName: string,
   playerProficiencies: string[],
-  explicitCategory?: string
+  explicitCategory?: string,
+  weaponProperties?: string
 ): WeaponProficiencyCheck {
   if (!weaponName?.trim()) {
     return {
@@ -231,7 +254,8 @@ export function checkWeaponProficiency(
   const normProfs = playerProficiencies.map(normalize);
 
   // Si une catégorie explicite est fournie (arme personnalisée), l'utiliser
-  const weaponCategory = explicitCategory || detectCategory(weaponName);
+  // Sinon, détecter la catégorie en tenant compte des propriétés de l'arme
+  const weaponCategory = explicitCategory || detectCategory(weaponName, weaponProperties);
 
   // Spécifique (uniquement pour les armes connues, pas pour les armes personnalisées)
   if (canonical && !explicitCategory) {
