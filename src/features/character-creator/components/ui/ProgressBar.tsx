@@ -114,7 +114,7 @@ return (
                 }}>
               Créez votre personnage
             </h1>
-            <p className="text-gray-900 text-base font-bold uppercase tracking-wide"
+            <p className="text-gray-900 text-base font-bold tracking-wide"
                style={{
                  textShadow: '0 0 8px rgba(255, 255, 255, 0.8), 0 0 16px rgba(255, 255, 255, 0.5)'
                }}>
