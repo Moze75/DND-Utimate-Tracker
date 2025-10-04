@@ -26,25 +26,9 @@ import { SpellbookModal } from './SpellbookModal';
 import { KnownSpellsSection } from './KnownSpellsSection';
 import { SpellSlotSelectionModal } from './SpellSlotSelectionModal';
 import type { Player, SpellSlots, ClassResources, DndClass } from '../types/dnd';
+import { getSpellSlotsByLevel } from '../utils/spellSlots2024';
 
 /* ============================ Helpers ============================ */
-
-const getSpellSlotsByLevel = (playerClass: DndClass | null | undefined, level: number): SpellSlots => {
-  const slots: SpellSlots = {};
-  if (playerClass === 'Moine') return slots;
-
-  if (level >= 1) { slots.level1 = level === 1 ? 2 : 3; slots.used1 = 0; }
-  if (level >= 3) { slots.level2 = level === 3 ? 2 : 3; slots.used2 = 0; }
-  if (level >= 5) { slots.level3 = level === 5 ? 2 : 3; slots.used3 = 0; }
-  if (level >= 7) { slots.level4 = level === 7 ? 1 : 3; slots.used4 = 0; }
-  if (level >= 9) { slots.level5 = level === 9 ? 1 : 2; slots.used5 = 0; }
-  if (level >= 11) { slots.level6 = 1; slots.used6 = 0; }
-  if (level >= 13) { slots.level7 = 1; slots.used7 = 0; }
-  if (level >= 15) { slots.level8 = 1; slots.used8 = 0; }
-  if (level >= 17) { slots.level9 = 1; slots.used9 = 0; }
-
-  return slots;
-};
 
 const getChaModFromPlayer = (p: Player): number => {
   const abilities: any = (p as any)?.abilities;
