@@ -16,6 +16,7 @@ import { calculateArmorClass, calculateHitPoints, calculateModifier } from '../u
 import { races } from '../data/races';
 import { classes } from '../data/classes';
 import { backgrounds } from '../data/backgrounds';
+import { enrichEquipmentList, determineAutoEquip } from '../../../services/equipmentLookupService';
 
 /* ===========================================================
    Utilitaires
@@ -132,6 +133,9 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
   // Étape courante
   const [currentStep, setCurrentStep] = useState(0);
 
+  // État de chargement des équipements
+  const [loadingEquipment, setLoadingEquipment] = useState(false);
+
   // Identité
   const [characterName, setCharacterName] = useState('');
 
@@ -239,6 +243,20 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
 
       // MODE INTÉGRÉ
       if (typeof onFinish === 'function') {
+        setLoadingEquipment(true);
+
+        let equipmentDetails;
+        try {
+          const enriched = await enrichEquipmentList(equipment);
+          equipmentDetails = determineAutoEquip(enriched);
+        } catch (error) {
+          console.error('Erreur lors de l\'enrichissement des équipements:', error);
+          toast.error('Impossible de charger les équipements. Création sans équipement.');
+          equipmentDetails = [];
+        } finally {
+          setLoadingEquipment(false);
+        }
+
         const payload: CharacterExportPayload = {
           characterName: characterName.trim() || 'Héros sans nom',
           selectedRace: selectedRace || '',
@@ -257,6 +275,7 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
           backgroundFeat,
           gold: gold > 0 ? gold : undefined,
           weaponProficiencies: classData?.weaponProficiencies || [],
+          equipmentDetails,
           armorProficiencies: classData?.armorProficiencies || [],
           toolProficiencies: classData?.toolProficiencies || [],
           racialTraits: raceData?.traits || [],
@@ -492,6 +511,15 @@ export default function CharacterCreationWizard({ onFinish, onCancel }: WizardPr
           duration: 4000,
         }}
       />
+
+      {loadingEquipment && (
+        <div className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center">
+          <div className="bg-gray-900 border border-gray-700 rounded-lg p-6 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto mb-4" />
+            <p className="text-gray-200">Préparation de l'équipement...</p>
+          </div>
+        </div>
+      )}
 
       <div className="container mx-auto px-4 pt-0 pb-8">
         <div className="max-w-6xl mx-auto">

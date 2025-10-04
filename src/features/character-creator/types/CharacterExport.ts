@@ -1,4 +1,40 @@
-// Type de données exportées vers l’app DND-Ultimate-Tracker
+type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment' | 'jewelry' | 'tool';
+
+interface WeaponMeta {
+  damageDice: string;
+  damageType: 'Tranchant' | 'Perforant' | 'Contondant';
+  properties: string;
+  range: string;
+}
+
+interface ArmorMeta {
+  base: number;
+  addDex: boolean;
+  dexCap?: number | null;
+  label: string;
+}
+
+interface ShieldMeta {
+  bonus: number;
+}
+
+export interface ItemMeta {
+  type: MetaType;
+  quantity?: number;
+  equipped?: boolean;
+  weapon?: WeaponMeta;
+  armor?: ArmorMeta;
+  shield?: ShieldMeta;
+}
+
+export interface EnrichedEquipment {
+  name: string;
+  description: string;
+  meta: ItemMeta;
+  autoEquip: boolean;
+}
+
+// Type de données exportées vers l'app DND-Ultimate-Tracker
 export interface CharacterExportPayload {
   characterName: string;
   selectedRace: string;
@@ -51,4 +87,7 @@ export interface CharacterExportPayload {
 
   // Option d'équipement de classe sélectionnée
   selectedEquipmentOption?: string;
+
+  // Équipements enrichis avec métadonnées complètes
+  equipmentDetails?: EnrichedEquipment[];
 }

@@ -1,6 +1,8 @@
 import { supabase } from '../lib/supabase';
 import { Player } from '../types/dnd';
-import { CharacterExportPayload } from '../types/CharacterExport';
+import { CharacterExportPayload, EnrichedEquipment, ItemMeta } from '../types/CharacterExport';
+import { attackService } from './attackService';
+import { checkWeaponProficiency, getPlayerWeaponProficiencies } from '../utils/weaponProficiencyChecker';
 
 // Skills utilisés par StatsTab (orthographe FR)
 const SKILL_GROUPS: Record<'Force' | 'Dextérité' | 'Constitution' | 'Intelligence' | 'Sagesse' | 'Charisme', string[]> = {
@@ -98,6 +100,168 @@ async function tryUploadAvatarFromUrl(playerId: string, url: string): Promise<st
   }
 }
 
+const META_PREFIX = '#meta:';
+
+const stripPriceParentheses = (name: string) =>
+  name.replace(/\s*\((?:\d+|\w+|\s|,|\.|\/|-)+\s*p[oa]?\)\s*$/i, '').trim();
+
+const smartCapitalize = (name: string) => {
+  const base = stripPriceParentheses(name).trim();
+  if (!base) return '';
+  const lower = base.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+};
+
+function injectMetaIntoDescription(desc: string, meta: ItemMeta): string {
+  const metaLine = `${META_PREFIX}${JSON.stringify(meta)}`;
+  return desc ? `${desc}\n${metaLine}` : metaLine;
+}
+
+async function insertEquipmentIntoInventory(
+  playerId: string,
+  items: EnrichedEquipment[]
+): Promise<void> {
+  if (!items || items.length === 0) return;
+
+  const insertions = items.map(item => ({
+    player_id: playerId,
+    name: smartCapitalize(item.name),
+    description: injectMetaIntoDescription(item.description, item.meta),
+  }));
+
+  const { error } = await supabase
+    .from('inventory_items')
+    .insert(insertions);
+
+  if (error) {
+    console.error('Erreur insertion équipements:', error);
+    throw error;
+  }
+}
+
+async function createWeaponAttack(
+  playerId: string,
+  weaponName: string,
+  weaponMeta: any,
+  player: Player
+): Promise<void> {
+  try {
+    const weaponProficiencies = getPlayerWeaponProficiencies(player);
+    const proficiencyResult = checkWeaponProficiency(weaponName, weaponProficiencies);
+
+    const payload = {
+      player_id: playerId,
+      name: weaponName,
+      damage_dice: weaponMeta.damageDice || '1d6',
+      damage_type: weaponMeta.damageType || 'Tranchant',
+      range: weaponMeta.range || 'Corps à corps',
+      properties: weaponMeta.properties || '',
+      manual_attack_bonus: null,
+      manual_damage_bonus: null,
+      expertise: proficiencyResult.shouldApplyProficiencyBonus,
+      attack_type: 'physical' as const,
+      spell_level: null as any,
+      ammo_count: 0,
+    };
+
+    await attackService.addAttack(payload);
+  } catch (err) {
+    console.error('Création attaque échouée:', err);
+  }
+}
+
+async function autoEquipItems(
+  playerId: string,
+  items: EnrichedEquipment[],
+  player: Player
+): Promise<void> {
+  const { data: inventoryItems, error } = await supabase
+    .from('inventory_items')
+    .select('*')
+    .eq('player_id', playerId);
+
+  if (error || !inventoryItems) {
+    console.error('Impossible de récupérer l\'inventaire:', error);
+    return;
+  }
+
+  const toEquip = items.filter(item => item.autoEquip);
+  const equipmentUpdates: any = { ...player.equipment };
+
+  const armorItem = toEquip.find(item => item.meta.type === 'armor');
+  if (armorItem) {
+    const dbItem = inventoryItems.find(i =>
+      smartCapitalize(i.name) === smartCapitalize(armorItem.name)
+    );
+    if (dbItem && armorItem.meta.armor) {
+      equipmentUpdates.armor = {
+        name: armorItem.name,
+        description: armorItem.description,
+        inventory_item_id: dbItem.id,
+        armor_formula: armorItem.meta.armor,
+        shield_bonus: null,
+        weapon_meta: null,
+      };
+    }
+  }
+
+  const shieldItem = toEquip.find(item => item.meta.type === 'shield');
+  if (shieldItem) {
+    const dbItem = inventoryItems.find(i =>
+      smartCapitalize(i.name) === smartCapitalize(shieldItem.name)
+    );
+    if (dbItem && shieldItem.meta.shield) {
+      equipmentUpdates.shield = {
+        name: shieldItem.name,
+        description: shieldItem.description,
+        inventory_item_id: dbItem.id,
+        shield_bonus: shieldItem.meta.shield.bonus,
+        armor_formula: null,
+        weapon_meta: null,
+      };
+    }
+  }
+
+  const weaponItems = toEquip.filter(item => item.meta.type === 'weapon');
+  const equippedWeapons = [];
+
+  for (const weaponItem of weaponItems) {
+    const dbItem = inventoryItems.find(i =>
+      smartCapitalize(i.name) === smartCapitalize(weaponItem.name)
+    );
+    if (dbItem && weaponItem.meta.weapon) {
+      equippedWeapons.push({
+        inventory_item_id: dbItem.id,
+        name: weaponItem.name,
+        description: weaponItem.description,
+        weapon_meta: weaponItem.meta.weapon,
+      });
+
+      await createWeaponAttack(
+        playerId,
+        weaponItem.name,
+        weaponItem.meta.weapon,
+        player
+      );
+    }
+  }
+
+  if (equippedWeapons.length > 0) {
+    equipmentUpdates.weapons = equippedWeapons;
+  }
+
+  if (armorItem || shieldItem || equippedWeapons.length > 0) {
+    const { error: updateError } = await supabase
+      .from('players')
+      .update({ equipment: equipmentUpdates })
+      .eq('id', playerId);
+
+    if (updateError) {
+      console.error('Erreur mise à jour equipment:', updateError);
+    }
+  }
+}
+
 export async function createCharacterFromCreatorPayload(
   session: any,
   payload: CharacterExportPayload
@@ -180,7 +344,7 @@ export async function createCharacterFromCreatorPayload(
 
   if (payload.avatarImageUrl) {
     const uploaded = await tryUploadAvatarFromUrl(playerId as string, payload.avatarImageUrl);
-    const finalUrl = uploaded ?? payload.avatarImageUrl; // fallback: garder l’URL telle quelle
+    const finalUrl = uploaded ?? payload.avatarImageUrl;
     const { error: avatarErr } = await supabase
       .from('players')
       .update({ avatar_url: finalUrl })
@@ -188,13 +352,21 @@ export async function createCharacterFromCreatorPayload(
     if (avatarErr) console.warn('Impossible de fixer avatar_url:', avatarErr);
   }
 
-  // 4) Retourne le player complet
   const { data: newPlayer, error: fetchError } = await supabase
     .from('players')
     .select('*')
     .eq('id', playerId)
     .single();
   if (fetchError) throw fetchError;
+
+  if (payload.equipmentDetails && payload.equipmentDetails.length > 0) {
+    try {
+      await insertEquipmentIntoInventory(playerId as string, payload.equipmentDetails);
+      await autoEquipItems(playerId as string, payload.equipmentDetails, newPlayer as Player);
+    } catch (error) {
+      console.error('Erreur lors de l\'insertion/équipement des items:', error);
+    }
+  }
 
   return newPlayer as Player;
 }
