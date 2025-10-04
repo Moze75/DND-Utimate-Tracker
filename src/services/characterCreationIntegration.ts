@@ -189,6 +189,7 @@ async function autoEquipItems(
   const toEquip = items.filter(item => item.autoEquip);
   console.log('[autoEquipItems] Items à équiper:', toEquip.map(i => ({ name: i.name, type: i.meta.type })));
   const equipmentUpdates: any = { ...player.equipment };
+  const inventoryUpdates: Promise<any>[] = [];
 
   const armorItem = toEquip.find(item => item.meta.type === 'armor');
   if (armorItem) {
@@ -204,6 +205,16 @@ async function autoEquipItems(
         shield_bonus: null,
         weapon_meta: null,
       };
+
+      const updatedMeta = { ...armorItem.meta, equipped: true };
+      const updatedDesc = injectMetaIntoDescription(armorItem.description, updatedMeta);
+      inventoryUpdates.push(
+        supabase
+          .from('inventory_items')
+          .update({ description: updatedDesc })
+          .eq('id', dbItem.id)
+      );
+      console.log('[autoEquipItems] Armure marquée comme équipée:', armorItem.name);
     }
   }
 
@@ -221,6 +232,16 @@ async function autoEquipItems(
         armor_formula: null,
         weapon_meta: null,
       };
+
+      const updatedMeta = { ...shieldItem.meta, equipped: true };
+      const updatedDesc = injectMetaIntoDescription(shieldItem.description, updatedMeta);
+      inventoryUpdates.push(
+        supabase
+          .from('inventory_items')
+          .update({ description: updatedDesc })
+          .eq('id', dbItem.id)
+      );
+      console.log('[autoEquipItems] Bouclier marqué comme équipé:', shieldItem.name);
     }
   }
 
@@ -247,6 +268,16 @@ async function autoEquipItems(
 
       equippedWeaponNames.add(normalizedName);
 
+      const updatedMeta = { ...weaponItem.meta, equipped: true };
+      const updatedDesc = injectMetaIntoDescription(weaponItem.description, updatedMeta);
+      inventoryUpdates.push(
+        supabase
+          .from('inventory_items')
+          .update({ description: updatedDesc })
+          .eq('id', dbItem.id)
+      );
+      console.log('[autoEquipItems] Arme marquée comme équipée:', weaponItem.name);
+
       await createWeaponAttack(
         playerId,
         weaponItem.name,
@@ -258,6 +289,11 @@ async function autoEquipItems(
 
   if (equippedWeapons.length > 0) {
     equipmentUpdates.weapons = equippedWeapons;
+  }
+
+  if (inventoryUpdates.length > 0) {
+    console.log('[autoEquipItems] Mise à jour des métadonnées equipped dans inventory_items...');
+    await Promise.allSettled(inventoryUpdates);
   }
 
   if (armorItem || shieldItem || equippedWeapons.length > 0) {
