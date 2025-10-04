@@ -200,14 +200,18 @@ const MARTIAL_CATEGORY_SYNONYMS = [
 ].map(normalize);
 const MARTIAL_SUB_FINESSE_LIGHT = [
   'armes de guerre presentant la propriete finesse ou legere',
+  'armes de guerre présentant la propriété finesse ou légère',
   'armes de guerre finesse ou legere',
   'armes de guerre avec finesse ou legere',
-  'armes de guerre finesse legere'
+  'armes de guerre finesse legere',
+  'armes de guerre (finesse ou legere)'
 ].map(normalize);
 const MARTIAL_SUB_LIGHT_ONLY = [
   'armes de guerre dotees de la propriete legere',
+  'armes de guerre dotées de la propriété légère',
   'armes de guerre legere',
-  'armes de guerre legeres'
+  'armes de guerre legeres',
+  'armes de guerre (legere)'
 ].map(normalize);
 
 /* ---------------- Résultat ---------------- */
@@ -225,6 +229,31 @@ export interface WeaponProficiencyCheck {
     matchedBy?: 'category' | 'specificName' | 'subCategory';
     normalizedProficiencies: string[];
   };
+}
+
+/* ---------------- Normalisation de catégorie explicite ---------------- */
+function normalizeExplicitCategory(explicitCategory?: string): string | undefined {
+  if (!explicitCategory) return undefined;
+
+  const normalized = normalize(explicitCategory);
+
+  // Mapper les formats longs vers les formats internes courts
+  if (normalized.includes('finesse') || normalized.includes('legere')) {
+    if (normalized.includes('finesse') && normalized.includes('legere')) {
+      return 'Armes de guerre (Finesse ou Légère)';
+    }
+    if (normalized.includes('legere') && !normalized.includes('finesse')) {
+      return 'Armes de guerre (Légère)';
+    }
+  }
+
+  // Si c'est déjà au format court, le retourner tel quel
+  if (explicitCategory === 'Armes de guerre (Finesse ou Légère)') return explicitCategory;
+  if (explicitCategory === 'Armes de guerre (Légère)') return explicitCategory;
+  if (explicitCategory === 'Armes courantes') return explicitCategory;
+  if (explicitCategory === 'Armes de guerre') return explicitCategory;
+
+  return explicitCategory;
 }
 
 /* ---------------- Vérification principale ---------------- */
@@ -253,9 +282,12 @@ export function checkWeaponProficiency(
   const canonical = resolveCanonicalWeapon(weaponName);
   const normProfs = playerProficiencies.map(normalize);
 
+  // Normaliser la catégorie explicite pour qu'elle corresponde au format interne
+  const normalizedExplicitCategory = normalizeExplicitCategory(explicitCategory);
+
   // Si une catégorie explicite est fournie (arme personnalisée), l'utiliser
   // Sinon, détecter la catégorie en tenant compte des propriétés de l'arme
-  const weaponCategory = explicitCategory || detectCategory(weaponName, weaponProperties);
+  const weaponCategory = normalizedExplicitCategory || detectCategory(weaponName, weaponProperties);
 
   // Spécifique (uniquement pour les armes connues, pas pour les armes personnalisées)
   if (canonical && !explicitCategory) {
