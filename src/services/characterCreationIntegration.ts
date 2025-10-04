@@ -223,6 +223,23 @@ async function autoEquipItems(
     console.log('[autoEquipItems] Aucune armure à équiper dans toEquip');
   }
 
+  // IMPORTANT : Récupérer le player à jour APRÈS l'armure et AVANT le bouclier
+  const { data: playerAfterArmor } = await supabase
+    .from('players')
+    .select('*')
+    .eq('id', playerId)
+    .single();
+
+  if (!playerAfterArmor) {
+    console.error('[autoEquipItems] Impossible de récupérer le player après armure');
+    return;
+  }
+
+  console.log('[autoEquipItems] Player après armure:', {
+    hasArmor: !!playerAfterArmor.equipment?.armor,
+    equipment: playerAfterArmor.equipment
+  });
+
   // Équiper le bouclier
   const shieldItem = toEquip.find(item => item.meta.type === 'shield');
   if (shieldItem) {
@@ -233,7 +250,7 @@ async function autoEquipItems(
     console.log('[autoEquipItems] DB item trouvé:', dbItem ? `${dbItem.name} (id: ${dbItem.id})` : 'NON TROUVÉ');
     if (dbItem) {
       console.log('[autoEquipItems] Appel de equipItem pour le bouclier:', shieldItem.name);
-      const success = await inventoryService.equipItem(playerId, dbItem, freshPlayer, 'shield');
+      const success = await inventoryService.equipItem(playerId, dbItem, playerAfterArmor, 'shield');
       console.log('[autoEquipItems] Résultat equipItem bouclier:', success ? 'SUCCÈS' : 'ÉCHEC');
     } else {
       console.error('[autoEquipItems] ERREUR: Impossible de trouver le bouclier dans l\'inventaire DB');
@@ -253,6 +270,12 @@ async function autoEquipItems(
     console.error('[autoEquipItems] Impossible de récupérer le player à jour');
     return;
   }
+
+  console.log('[autoEquipItems] Player après équipement armure/bouclier:', {
+    hasArmor: !!updatedPlayer.equipment?.armor,
+    hasShield: !!updatedPlayer.equipment?.shield,
+    equipment: updatedPlayer.equipment
+  });
 
   // Équiper les armes (logique existante pour les armes)
   const weaponItems = toEquip.filter(item => item.meta.type === 'weapon');
