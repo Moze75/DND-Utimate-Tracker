@@ -415,21 +415,31 @@ export async function createCharacterFromCreatorPayload(
     if (avatarErr) console.warn('Impossible de fixer avatar_url:', avatarErr);
   }
 
-  const { data: newPlayer, error: fetchError } = await supabase
+  // Récupérer le player AVANT l'équipement (pour passer à autoEquipItems)
+  const { data: playerBeforeEquip, error: fetchError1 } = await supabase
     .from('players')
     .select('*')
     .eq('id', playerId)
     .single();
-  if (fetchError) throw fetchError;
+  if (fetchError1) throw fetchError1;
 
   if (payload.equipmentDetails && payload.equipmentDetails.length > 0) {
     try {
       await insertEquipmentIntoInventory(playerId as string, payload.equipmentDetails);
-      await autoEquipItems(playerId as string, payload.equipmentDetails, newPlayer as Player);
+      await autoEquipItems(playerId as string, payload.equipmentDetails, playerBeforeEquip as Player);
     } catch (error) {
       console.error('Erreur lors de l\'insertion/équipement des items:', error);
     }
   }
 
-  return newPlayer as Player;
+  // IMPORTANT : Récupérer le player APRÈS l'équipement pour avoir les données à jour
+  const { data: finalPlayer, error: fetchError2 } = await supabase
+    .from('players')
+    .select('*')
+    .eq('id', playerId)
+    .single();
+  if (fetchError2) throw fetchError2;
+
+  console.log('[createCharacterFromCreatorPayload] Player final retourné avec equipment:', finalPlayer?.equipment);
+  return finalPlayer as Player;
 }
