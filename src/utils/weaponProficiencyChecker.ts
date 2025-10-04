@@ -206,7 +206,11 @@ export interface WeaponProficiencyCheck {
 }
 
 /* ---------------- Vérification principale ---------------- */
-export function checkWeaponProficiency(weaponName: string, playerProficiencies: string[]): WeaponProficiencyCheck {
+export function checkWeaponProficiency(
+  weaponName: string,
+  playerProficiencies: string[],
+  explicitCategory?: string
+): WeaponProficiencyCheck {
   if (!weaponName?.trim()) {
     return {
       isProficient: false,
@@ -225,10 +229,12 @@ export function checkWeaponProficiency(weaponName: string, playerProficiencies: 
   const simplified = simplifyWeaponInput(weaponName);
   const canonical = resolveCanonicalWeapon(weaponName);
   const normProfs = playerProficiencies.map(normalize);
-  const weaponCategory = detectCategory(weaponName);
 
-  // Spécifique
-  if (canonical) {
+  // Si une catégorie explicite est fournie (arme personnalisée), l'utiliser
+  const weaponCategory = explicitCategory || detectCategory(weaponName);
+
+  // Spécifique (uniquement pour les armes connues, pas pour les armes personnalisées)
+  if (canonical && !explicitCategory) {
     const exact = normProfs.find(p => p === normalize(canonical));
     if (exact) {
       return {

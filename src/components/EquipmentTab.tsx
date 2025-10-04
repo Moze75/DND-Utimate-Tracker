@@ -614,7 +614,8 @@ export function EquipmentTab({
       const attacks = await attackService.getPlayerAttacks(player.id);
       const existing = attacks.find(a => norm(a.name) === norm(name));
 
-      const proficiencyResult = checkWeaponProficiency(weaponName || name, playerWeaponProficiencies);
+      const explicitCategory = w?.category;
+      const proficiencyResult = checkWeaponProficiency(weaponName || name, playerWeaponProficiencies, explicitCategory);
 
       const payload = {
         player_id: player.id,
@@ -741,7 +742,8 @@ export function EquipmentTab({
         const targetEquipped = mode === 'equip';
         if (meta.equipped === targetEquipped) return;
 
-        const proficiencyResult = checkWeaponProficiency(freshItem.name, playerWeaponProficiencies);
+        const explicitCategory = meta.weapon?.category;
+        const proficiencyResult = checkWeaponProficiency(freshItem.name, playerWeaponProficiencies, explicitCategory);
         const nextMeta = { ...meta, equipped: targetEquipped, forced: !proficiencyResult.isProficient && targetEquipped }; // forced indicatif
         await updateItemMetaComplete(freshItem, nextMeta);
 
@@ -858,7 +860,8 @@ export function EquipmentTab({
     let showWarning = false;
     if (isWeapon && !equipped) {
       try {
-        const result = checkWeaponProficiency(freshItem.name, playerWeaponProficiencies);
+        const explicitCategory = meta.weapon?.category;
+        const result = checkWeaponProficiency(freshItem.name, playerWeaponProficiencies, explicitCategory);
         showWarning = !result.isProficient;
       } catch {}
     }
@@ -1087,7 +1090,8 @@ export function EquipmentTab({
               let weaponProficiency: WeaponProficiencyCheck | null = null;
               if (isWeapon) {
                 try {
-                  weaponProficiency = checkWeaponProficiency(item.name, playerWeaponProficiencies);
+                  const explicitCategory = meta?.weapon?.category;
+                  weaponProficiency = checkWeaponProficiency(item.name, playerWeaponProficiencies, explicitCategory);
                 } catch {}
               }
               const notProficient = isWeapon && weaponProficiency && !weaponProficiency.isProficient;

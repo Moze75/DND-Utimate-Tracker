@@ -4,7 +4,8 @@ import toast from 'react-hot-toast';
 
 /* Types locaux alignés */
 type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment' | 'jewelry' | 'tool';
-interface WeaponMeta { damageDice: string; damageType: 'Tranchant' | 'Perforant' | 'Contondant'; properties: string; range: string; }
+type WeaponCategory = 'Armes courantes' | 'Armes de guerre' | 'Armes de guerre dotées de la propriété Légère' | 'Armes de guerre présentant la propriété Finesse ou Légère';
+interface WeaponMeta { damageDice: string; damageType: 'Tranchant' | 'Perforant' | 'Contondant'; properties: string; range: string; category?: WeaponCategory; }
 interface ArmorMeta { base: number; addDex: boolean; dexCap?: number | null; label: string; }
 interface ShieldMeta { bonus: number; }
 export interface ItemMeta {
@@ -45,6 +46,7 @@ export function CustomItemModal({
   const [wType, setWType] = React.useState<'Tranchant' | 'Perforant' | 'Contondant'>('Tranchant');
   const [wProps, setWProps] = React.useState('');
   const [wRange, setWRange] = React.useState('Corps à corps');
+  const [wCategory, setWCategory] = React.useState<WeaponCategory>('Armes courantes');
 
   React.useEffect(() => {
     const prev = document.body.style.overflow;
@@ -64,7 +66,7 @@ export function CustomItemModal({
     } else if (type === 'shield') {
       meta.shield = { bonus: shieldBonus };
     } else if (type === 'weapon') {
-      meta.weapon = { damageDice: wDice, damageType: wType, properties: wProps, range: wRange };
+      meta.weapon = { damageDice: wDice, damageType: wType, properties: wProps, range: wRange, category: wCategory };
     }
     onAdd({ name: cleanName, description: description.trim(), meta });
     onClose();
@@ -107,11 +109,23 @@ export function CustomItemModal({
         )}
         {type === 'shield' && (<div className="mt-3"><label className="block text-sm text-gray-400 mb-1">Bonus de bouclier</label><input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={shieldBonus} onChange={e => setShieldBonus(parseInt(e.target.value) || 0)} /></div>)}
         {type === 'weapon' && (
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div><label className="block text-sm text-gray-400 mb-1">Dés de dégâts</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wDice} onChange={e => setWDice(e.target.value)} placeholder="1d6" /></div>
-            <div><label className="block text-sm text-gray-400 mb-1">Type de dégâts</label><select className="input-dark w-full px-3 py-2 rounded-md" value={wType} onChange={e => setWType(e.target.value as any)}><option>Tranchant</option><option>Perforant</option><option>Contondant</option></select></div>
-            <div><label className="block text-sm text-gray-400 mb-1">Propriété(s)</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wProps} onChange={e => setWProps(e.target.value)} placeholder="Finesse, Polyvalente..." /></div>
-            <div><label className="block text sm text-gray-400 mb-1">Portée</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wRange} onChange={e => setWRange(e.target.value)} placeholder="Corps à corps, 6 m..." /></div>
+          <div className="mt-3 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div><label className="block text-sm text-gray-400 mb-1">Dés de dégâts</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wDice} onChange={e => setWDice(e.target.value)} placeholder="1d6" /></div>
+              <div><label className="block text-sm text-gray-400 mb-1">Type de dégâts</label><select className="input-dark w-full px-3 py-2 rounded-md" value={wType} onChange={e => setWType(e.target.value as any)}><option>Tranchant</option><option>Perforant</option><option>Contondant</option></select></div>
+              <div><label className="block text-sm text-gray-400 mb-1">Propriété(s)</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wProps} onChange={e => setWProps(e.target.value)} placeholder="Finesse, Polyvalente..." /></div>
+              <div><label className="block text-sm text-gray-400 mb-1">Portée</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wRange} onChange={e => setWRange(e.target.value)} placeholder="Corps à corps, 6 m..." /></div>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Catégorie d'arme</label>
+              <select className="input-dark w-full px-3 py-2 rounded-md" value={wCategory} onChange={e => setWCategory(e.target.value as WeaponCategory)}>
+                <option value="Armes courantes">Armes courantes</option>
+                <option value="Armes de guerre">Armes de guerre</option>
+                <option value="Armes de guerre dotées de la propriété Légère">Armes de guerre dotées de la propriété Légère</option>
+                <option value="Armes de guerre présentant la propriété Finesse ou Légère">Armes de guerre présentant la propriété Finesse ou Légère</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">Cette catégorie détermine si votre bonus de maîtrise s'applique aux jets d'attaque</p>
+            </div>
           </div>
         )}
 

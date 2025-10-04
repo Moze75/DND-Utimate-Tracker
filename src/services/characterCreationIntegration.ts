@@ -147,7 +147,8 @@ async function createWeaponAttack(
 ): Promise<void> {
   try {
     const weaponProficiencies = getPlayerWeaponProficiencies(player);
-    const proficiencyResult = checkWeaponProficiency(weaponName, weaponProficiencies);
+    const explicitCategory = weaponMeta?.category;
+    const proficiencyResult = checkWeaponProficiency(weaponName, weaponProficiencies, explicitCategory);
 
     const payload = {
       player_id: playerId,

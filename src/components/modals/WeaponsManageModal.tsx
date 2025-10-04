@@ -84,16 +84,21 @@ export function WeaponsManageModal({
   // ✅ AJOUT : Fonction pour équiper avec vérification des maîtrises
   const handleEquipWithProficiencyCheck = async (item: InventoryItem) => {
     const playerProficiencies = getPlayerWeaponProficiencies(player);
-    const proficiencyResult = checkWeaponProficiency(item.name, playerProficiencies);
-    
+    const meta = parseMeta(item.description);
+    const explicitCategory = meta?.weapon?.category;
+    const proficiencyResult = checkWeaponProficiency(item.name, playerProficiencies, explicitCategory);
+
     if (!proficiencyResult.isProficient) {
       // Arme non maîtrisée : afficher l'avertissement
       setPendingWeaponEquip(item);
       setProficiencyCheck(proficiencyResult);
       setShowProficiencyWarning(true);
+      // Ne pas réinitialiser pendingId ici car la modal va s'afficher
+      return { needsConfirmation: true };
     } else {
       // Arme maîtrisée : équiper directement
       await onEquip(item);
+      return { needsConfirmation: false };
     }
   };
 
@@ -101,9 +106,15 @@ export function WeaponsManageModal({
   const handleProficiencyWarningConfirm = async () => {
     setShowProficiencyWarning(false);
     if (pendingWeaponEquip) {
-      await onEquip(pendingWeaponEquip);
-      setPendingWeaponEquip(null);
-      setProficiencyCheck(null);
+      try {
+        await onEquip(pendingWeaponEquip);
+      } catch (error) {
+        console.error('Erreur lors de l\'\u00e9quipement:', error);
+      } finally {
+        setPendingWeaponEquip(null);
+        setProficiencyCheck(null);
+        setPendingId(null); // Réinitialiser l'état de pending
+      }
     }
   };
 
@@ -111,12 +122,14 @@ export function WeaponsManageModal({
     setShowProficiencyWarning(false);
     setPendingWeaponEquip(null);
     setProficiencyCheck(null);
+    setPendingId(null); // Réinitialiser l'état de pending
   };
 
   // ✅ AJOUT : Fonction pour vérifier les maîtrises et afficher un indicateur
-  const getProficiencyStatus = (weaponName: string) => {
+  const getProficiencyStatus = (weaponName: string, meta: ItemMeta | null) => {
     const playerProficiencies = getPlayerWeaponProficiencies(player);
-    const proficiencyResult = checkWeaponProficiency(weaponName, playerProficiencies);
+    const explicitCategory = meta?.weapon?.category;
+    const proficiencyResult = checkWeaponProficiency(weaponName, playerProficiencies, explicitCategory);
     return proficiencyResult;
   };
 
@@ -134,9 +147,9 @@ export function WeaponsManageModal({
           const w = meta?.weapon;
           const isPending = pendingId === it.id;
           const isEquipped = meta?.equipped === true;
-          
+
           // ✅ AJOUT : Vérification des maîtrises pour l'affichage
-          const proficiencyStatus = getProficiencyStatus(it.name);
+          const proficiencyStatus = getProficiencyStatus(it.name, meta);
           
           return (
             <div key={it.id} className="rounded-md border border-gray-700/50 bg-gray-800/40 p-2">
@@ -209,13 +222,17 @@ export function WeaponsManageModal({
                           e.stopPropagation();
                           if (isPending) return;
                           setPendingId(it.id);
-                          try { 
+                          try {
                             // ✅ MODIFICATION : Utiliser la fonction avec vérification
-                            await handleEquipWithProficiencyCheck(it);
+                            const result = await handleEquipWithProficiencyCheck(it);
+                            // Si une confirmation est nécessaire, ne pas réinitialiser pendingId
+                            // car l'équipement se fera après confirmation
+                            if (!result?.needsConfirmation) {
+                              setPendingId(null);
+                            }
                           } catch (error) {
                             console.error('Erreur équipement:', error);
-                          } finally { 
-                            setPendingId(null); 
+                            setPendingId(null);
                           }
                         }}
                         disabled={isPending}
