@@ -109,8 +109,33 @@
     </script>
     <script type="module" src="/src/main.tsx"></script>
 
-    <!-- Script pour détecter display-mode -->
+    <!-- Enregistrement du Service Worker (optionnel, si tu en as un) -->
     <script>
+      // N'enregistre le SW que si le fichier /sw.js existe réellement.
+      // Si tu utilises vite-plugin-pwa, tu peux retirer ce bloc et laisser le plugin injecter.
+      if ('serviceWorker' in navigator) {
+        // Évite l'enregistrement en mode dev pour ne pas polluer (adaptable)
+        const isDev = /localhost|127\.0\.0\.1/.test(location.hostname);
+        if (!isDev) {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker
+              .register('/sw.js')
+              .then(reg => {
+                console.log('[SW] enregistré', reg.scope);
+              })
+              .catch(err => {
+                console.log('[SW] échec enregistrement', err);
+              });
+          });
+        } else {
+          console.log('[SW] ignoré en mode dev');
+        }
+      }
+    </script>
+
+    <!-- (Optionnel) Script pour détecter/display-mode vs add to home screen -->
+    <script>
+      // Démo: log l'état display-mode
       const checkDisplayMode = () => {
         const standalone = window.matchMedia('(display-mode: standalone)').matches
           || window.navigator.standalone === true;

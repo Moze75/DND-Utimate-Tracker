@@ -1,12 +1,14 @@
 {
   "name": "D&D Ultimate Tracker",
-  "short_name": "D&D Tracker",
+  "short_name": "D&D",
   "description": "Gestionnaire de personnage D&D - Suivez vos PV, sorts, équipement et plus encore !",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#111827",
   "theme_color": "#111827",
+  "categories": ["games", "entertainment"],
+  "lang": "fr",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -19,6 +21,15 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mes Personnages",
+      "short_name": "Personnages",
+      "description": "Accéder à la liste des personnages",
+      "url": "/",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }
