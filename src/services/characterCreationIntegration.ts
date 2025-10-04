@@ -222,10 +222,10 @@ async function autoEquipItems(
     }
   }
 
-  const weaponItems = toEquip.filter(item => item.meta.type === 'weapon');
+  const weaponItem = toEquip.find(item => item.meta.type === 'weapon');
   const equippedWeapons = [];
 
-  for (const weaponItem of weaponItems) {
+  if (weaponItem) {
     const dbItem = inventoryItems.find(i =>
       smartCapitalize(i.name) === smartCapitalize(weaponItem.name)
     );

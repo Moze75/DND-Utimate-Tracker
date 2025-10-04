@@ -384,6 +384,12 @@ function parseEquipmentString(item: string): { quantity: number; name: string } 
   if (match) {
     return { quantity: parseInt(match[1]), name: match[2].trim() };
   }
+
+  const parenthesesMatch = item.match(/^(.+?)\s*\((\d+)\s*(?:flasques?|exemplaires?|unités?)\)$/i);
+  if (parenthesesMatch) {
+    return { quantity: parseInt(parenthesesMatch[2]), name: parenthesesMatch[1].trim() };
+  }
+
   return { quantity: 1, name: item.trim() };
 }
 
@@ -413,40 +419,38 @@ export async function enrichEquipmentList(items: string[]): Promise<EnrichedEqui
       const parsed = parseEquipmentString(item);
       if (!parsed) continue;
 
-      for (let i = 0; i < parsed.quantity; i++) {
-        const catalogItem = findEquipmentByName(parsed.name, catalogs);
+      const catalogItem = findEquipmentByName(parsed.name, catalogs);
 
-        if (catalogItem) {
-          let meta: ItemMeta = { type: 'equipment', quantity: 1, equipped: false };
+      if (catalogItem) {
+        let meta: ItemMeta = { type: 'equipment', quantity: parsed.quantity, equipped: false };
 
-          if (catalogItem.kind === 'armors' && catalogItem.armor) {
-            meta = { type: 'armor', quantity: 1, equipped: false, armor: catalogItem.armor };
-          } else if (catalogItem.kind === 'shields' && catalogItem.shield) {
-            meta = { type: 'shield', quantity: 1, equipped: false, shield: catalogItem.shield };
-          } else if (catalogItem.kind === 'weapons' && catalogItem.weapon) {
-            meta = { type: 'weapon', quantity: 1, equipped: false, weapon: catalogItem.weapon };
-          } else if (catalogItem.kind === 'tools') {
-            meta = { type: 'tool', quantity: 1, equipped: false };
-          }
-
-          enriched.push({
-            name: catalogItem.name,
-            description: catalogItem.description || '',
-            meta,
-            autoEquip: false,
-          });
-        } else {
-          enriched.push({
-            name: smartCapitalize(parsed.name),
-            description: '',
-            meta: {
-              type: 'equipment',
-              quantity: 1,
-              equipped: false,
-            },
-            autoEquip: false,
-          });
+        if (catalogItem.kind === 'armors' && catalogItem.armor) {
+          meta = { type: 'armor', quantity: parsed.quantity, equipped: false, armor: catalogItem.armor };
+        } else if (catalogItem.kind === 'shields' && catalogItem.shield) {
+          meta = { type: 'shield', quantity: parsed.quantity, equipped: false, shield: catalogItem.shield };
+        } else if (catalogItem.kind === 'weapons' && catalogItem.weapon) {
+          meta = { type: 'weapon', quantity: parsed.quantity, equipped: false, weapon: catalogItem.weapon };
+        } else if (catalogItem.kind === 'tools') {
+          meta = { type: 'tool', quantity: parsed.quantity, equipped: false };
         }
+
+        enriched.push({
+          name: catalogItem.name,
+          description: catalogItem.description || '',
+          meta,
+          autoEquip: false,
+        });
+      } else {
+        enriched.push({
+          name: smartCapitalize(parsed.name),
+          description: '',
+          meta: {
+            type: 'equipment',
+            quantity: parsed.quantity,
+            equipped: false,
+          },
+          autoEquip: false,
+        });
       }
     }
 
@@ -458,13 +462,24 @@ export async function enrichEquipmentList(items: string[]): Promise<EnrichedEqui
 }
 
 export function determineAutoEquip(items: EnrichedEquipment[]): EnrichedEquipment[] {
+  let hasArmor = false;
+  let hasShield = false;
+  let hasWeapon = false;
+
   return items.map(item => {
     const type = item.meta.type;
+    let autoEquip = false;
 
-    const autoEquip =
-      type === 'armor' ||
-      type === 'shield' ||
-      type === 'weapon';
+    if (type === 'armor' && !hasArmor) {
+      autoEquip = true;
+      hasArmor = true;
+    } else if (type === 'shield' && !hasShield) {
+      autoEquip = true;
+      hasShield = true;
+    } else if (type === 'weapon' && !hasWeapon) {
+      autoEquip = true;
+      hasWeapon = true;
+    }
 
     return {
       ...item,
