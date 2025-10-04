@@ -207,25 +207,39 @@ async function autoEquipItems(
   // Équiper l'armure
   const armorItem = toEquip.find(item => item.meta.type === 'armor');
   if (armorItem) {
+    console.log('[autoEquipItems] Armure trouvée à équiper:', armorItem.name);
     const dbItem = inventoryItems.find(i =>
       smartCapitalize(i.name) === smartCapitalize(armorItem.name)
     );
+    console.log('[autoEquipItems] DB item trouvé:', dbItem ? `${dbItem.name} (id: ${dbItem.id})` : 'NON TROUVÉ');
     if (dbItem) {
-      console.log('[autoEquipItems] Équipement de l\'armure:', armorItem.name);
-      await inventoryService.equipItem(playerId, dbItem, freshPlayer, 'armor');
+      console.log('[autoEquipItems] Appel de equipItem pour l\'armure:', armorItem.name);
+      const success = await inventoryService.equipItem(playerId, dbItem, freshPlayer, 'armor');
+      console.log('[autoEquipItems] Résultat equipItem armure:', success ? 'SUCCÈS' : 'ÉCHEC');
+    } else {
+      console.error('[autoEquipItems] ERREUR: Impossible de trouver l\'armure dans l\'inventaire DB');
     }
+  } else {
+    console.log('[autoEquipItems] Aucune armure à équiper dans toEquip');
   }
 
   // Équiper le bouclier
   const shieldItem = toEquip.find(item => item.meta.type === 'shield');
   if (shieldItem) {
+    console.log('[autoEquipItems] Bouclier trouvé à équiper:', shieldItem.name);
     const dbItem = inventoryItems.find(i =>
       smartCapitalize(i.name) === smartCapitalize(shieldItem.name)
     );
+    console.log('[autoEquipItems] DB item trouvé:', dbItem ? `${dbItem.name} (id: ${dbItem.id})` : 'NON TROUVÉ');
     if (dbItem) {
-      console.log('[autoEquipItems] Équipement du bouclier:', shieldItem.name);
-      await inventoryService.equipItem(playerId, dbItem, freshPlayer, 'shield');
+      console.log('[autoEquipItems] Appel de equipItem pour le bouclier:', shieldItem.name);
+      const success = await inventoryService.equipItem(playerId, dbItem, freshPlayer, 'shield');
+      console.log('[autoEquipItems] Résultat equipItem bouclier:', success ? 'SUCCÈS' : 'ÉCHEC');
+    } else {
+      console.error('[autoEquipItems] ERREUR: Impossible de trouver le bouclier dans l\'inventaire DB');
     }
+  } else {
+    console.log('[autoEquipItems] Aucun bouclier à équiper dans toEquip');
   }
 
   // IMPORTANT : Récupérer le player à jour APRÈS avoir équipé armure/bouclier et AVANT les armes

@@ -105,9 +105,14 @@ export const inventoryService = {
     type: 'armor' | 'shield'
   ): Promise<boolean> {
     try {
+      console.log(`[inventoryService.equipItem] Tentative d'équipement de ${type}: ${item.name}`);
+      console.log('[inventoryService.equipItem] Item description:', item.description);
+
       const meta = parseMeta(item.description);
+      console.log('[inventoryService.equipItem] Meta parsé:', meta);
+
       if (!meta || meta.type !== type) {
-        console.error(`Item ${item.name} n'est pas de type ${type}`);
+        console.error(`[inventoryService.equipItem] ERREUR: Item ${item.name} n'est pas de type ${type}. Meta type trouvé:`, meta?.type);
         return false;
       }
 
