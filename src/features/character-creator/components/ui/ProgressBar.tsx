@@ -83,7 +83,7 @@ return (
     {/* Bandeau pleine largeur avec image de fond - tout en haut */}
     <div className="w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] -mt-1 h-64"> {/* ← ICI */}
       {/* Image de fond */}
-      <div 
+      <div
         className="absolute inset-0"
         style={{
           backgroundImage: "url('/background/ddbground.png')",
@@ -94,26 +94,34 @@ return (
         >
           {/* Overlay blanc transparent (20% d'opacité pour plus de transparence) */}
           <div className="absolute inset-0 bg-white/20"></div>
+
+          {/* Dégradé progressif vers le bas pour fusionner avec le background */}
+          <div
+            className="absolute inset-x-0 bottom-0 h-24"
+            style={{
+              background: 'linear-gradient(to bottom, rgba(17, 24, 39, 0) 0%, rgba(17, 24, 39, 0.5) 40%, rgba(17, 24, 39, 0.8) 70%, rgba(17, 24, 39, 1) 100%)'
+            }}
+          />
         </div>
 
         {/* Contenu par-dessus le fond */}
         <div className="relative z-10 px-4 py-12 max-w-6xl mx-auto">
           {/* Titre principal avec plus d'espace au dessus */}
           <div className="text-center">
-            <h1 className="text-4xl font-bold text-black mb-2" 
-                style={{ 
-                  textShadow: '0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.6), 0 0 30px rgba(255, 255, 255, 0.4)' 
+            <h1 className="text-4xl font-bold text-black mb-2"
+                style={{
+                  textShadow: '0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.6), 0 0 30px rgba(255, 255, 255, 0.4)'
                 }}>
               Créez votre personnage
             </h1>
-            <p className="text-gray-900 font-medium"
-               style={{ 
-                 textShadow: '0 0 8px rgba(255, 255, 255, 0.8), 0 0 16px rgba(255, 255, 255, 0.5)' 
+            <p className="text-gray-900 text-base font-bold uppercase tracking-wide"
+               style={{
+                 textShadow: '0 0 8px rgba(255, 255, 255, 0.8), 0 0 16px rgba(255, 255, 255, 0.5)'
                }}>
               Choisissez vite mais choisissez bien
             </p>
           </div>
-        </div> 
+        </div>
       </div>
 
       {/* Barre de progression en dessous du bandeau */}
