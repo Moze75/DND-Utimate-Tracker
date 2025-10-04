@@ -63,12 +63,6 @@ const extractAbilityMod = (player: Player, keys: string[]) => {
 const getChaModFromPlayer = (player: Player): number =>
   extractAbilityMod(player, ['charisme', 'charisma', 'cha', 'car']);
 
-const getWisModFromPlayer = (player: Player): number =>
-  extractAbilityMod(player, ['sagesse', 'wisdom', 'wis', 'sag']);
-
-const getIntModFromPlayer = (player: Player): number =>
-  extractAbilityMod(player, ['intelligence', 'intellect', 'int']);
-
 /* ============================ Sous-classes (helpers) ============================ */
 
 // Canonicalisation minimale pour RPC (même logique que PlayerProfileSettingsModal)
@@ -77,50 +71,177 @@ function mapClassForRpc(pClass: DndClass | null | undefined): string | null | un
   return pClass;
 }
 
-/* ============================ Tables “sorts à ajouter” ============================ */
+/* ============================ Tables de progression des sorts (2024) ============================ */
+// Source : https://github.com/Moze75/Ultimate_Tracker/tree/main/Tableau%20de%20progression%20des%20classes
+// Ces tableaux suivent les règles officielles D&D 2024
 
 const clampLevel = (n: number) => Math.max(1, Math.min(20, n));
 
+// Barde — Sorts mineurs et préparés (2024)
 const BARD_CANTRIPS = [0, 2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4];
-const BARD_KNOWN    = [0, 4,5,6,7,8,9,10,11,12,14,15,15,16,18,19,19,20,22,22,22];
+const BARD_PREPARED = [0, 4,5,6,7,9,10,11,12,14,15,16,16,17,17,18,18,19,20,21,22];
 
+// Ensorceleur — Sorts mineurs et préparés (2024)
 const SORCERER_CANTRIPS = [0, 4,4,4,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,6,6];
-const SORCERER_KNOWN    = [0, 2,3,4,5,6,7,8,9,10,11,12,12,13,13,14,14,15,15,15,15];
+const SORCERER_PREPARED = [0, 2,4,6,7,9,10,11,12,14,15,16,16,17,17,18,18,19,20,21,22];
 
-// Occultiste (Warlock)
+// Occultiste — Sorts mineurs et préparés (2024)
 const WARLOCK_CANTRIPS = [0, 2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4];
-const WARLOCK_KNOWN    = [0, 2,3,4,5,6,7,8,9,10,10,11,11,12,12,13,13,14,14,15,15];
+const WARLOCK_PREPARED = [0, 2,3,4,5,6,7,8,9,10,10,11,11,12,12,13,13,14,14,15,15];
 
-// Paladin
-const PALADIN_KNOWN = [0, 0,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11];
+// Clerc — Sorts mineurs et préparés (2024)
+const CLERIC_CANTRIPS = [0, 3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5];
+const CLERIC_PREPARED = [0, 4,5,6,7,9,10,11,12,14,15,16,16,17,17,18,18,19,20,21,22];
 
-// Rôdeur
-const RANGER_KNOWN = [0, 0,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11];
+// Druide — Sorts mineurs et préparés (2024)
+const DRUID_CANTRIPS = [0, 2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4];
+const DRUID_PREPARED = [0, 4,5,6,7,9,10,11,12,14,15,16,16,17,17,18,18,19,20,21,22];
 
-// Clerc — cantrips par paliers
-const getClericCantrips = (lvl: number) => {
-  if (lvl >= 10) return 5;
-  if (lvl >= 4) return 4;
-  return 3;
-};
+// Magicien — Sorts mineurs et préparés (2024)
+const WIZARD_CANTRIPS = [0, 3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5];
+const WIZARD_PREPARED = [0, 4,5,6,7,9,10,11,12,14,15,16,16,17,18,19,21,22,23,24,25];
 
-// Druide — cantrips par paliers
-const getDruidCantrips = (lvl: number) => {
-  if (lvl >= 8) return 4;
-  if (lvl >= 4) return 3;
-  return 2;
-};
+// Paladin — Sorts préparés (2024)
+const PALADIN_PREPARED = [0, 2,3,4,5,6,6,7,7,9,9,10,10,11,11,12,12,14,14,15,15];
 
-// Magicien — cantrips standard 5e
-const getWizardCantrips = (lvl: number) => {
-  if (lvl >= 10) return 5;
-  if (lvl >= 4) return 4;
-  return 3;
+// Rôdeur — Sorts préparés (2024)
+const RANGER_PREPARED = [0, 2,3,4,5,6,6,7,7,9,9,10,10,11,11,12,12,14,14,15,15];
+
+// Tables d'emplacements de sorts (2024)
+// Full Casters (Barde, Ensorceleur, Clerc, Druide, Magicien)
+const FULL_CASTER_SLOTS = [
+  {},
+  { level1: 2 },
+  { level1: 3 },
+  { level1: 4, level2: 2 },
+  { level1: 4, level2: 3 },
+  { level1: 4, level2: 3, level3: 2 },
+  { level1: 4, level2: 3, level3: 3 },
+  { level1: 4, level2: 3, level3: 3, level4: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 2 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 2 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 2, level6: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 2, level6: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 2, level6: 1, level7: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 2, level6: 1, level7: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 2, level6: 1, level7: 1, level8: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 2, level6: 1, level7: 1, level8: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 2, level6: 1, level7: 1, level8: 1, level9: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 3, level6: 1, level7: 1, level8: 1, level9: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 3, level6: 2, level7: 1, level8: 1, level9: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 3, level6: 2, level7: 2, level8: 1, level9: 1 }
+];
+
+// Half Casters (Paladin, Rôdeur)
+const HALF_CASTER_SLOTS = [
+  {},
+  {},
+  { level1: 2 },
+  { level1: 3 },
+  { level1: 3 },
+  { level1: 4, level2: 2 },
+  { level1: 4, level2: 2 },
+  { level1: 4, level2: 3 },
+  { level1: 4, level2: 3 },
+  { level1: 4, level2: 3, level3: 2 },
+  { level1: 4, level2: 3, level3: 2 },
+  { level1: 4, level2: 3, level3: 3 },
+  { level1: 4, level2: 3, level3: 3 },
+  { level1: 4, level2: 3, level3: 3, level4: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 2 },
+  { level1: 4, level2: 3, level3: 3, level4: 2 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 1 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 2 },
+  { level1: 4, level2: 3, level3: 3, level4: 3, level5: 2 }
+];
+
+// Occultiste (Pact Magic - spécial)
+const WARLOCK_SLOTS = [
+  {},
+  { pact_slots: 1, pact_level: 1 },
+  { pact_slots: 2, pact_level: 1 },
+  { pact_slots: 2, pact_level: 2 },
+  { pact_slots: 2, pact_level: 2 },
+  { pact_slots: 2, pact_level: 3 },
+  { pact_slots: 2, pact_level: 3 },
+  { pact_slots: 2, pact_level: 4 },
+  { pact_slots: 2, pact_level: 4 },
+  { pact_slots: 2, pact_level: 5 },
+  { pact_slots: 2, pact_level: 5 },
+  { pact_slots: 3, pact_level: 5 },
+  { pact_slots: 3, pact_level: 5 },
+  { pact_slots: 3, pact_level: 5 },
+  { pact_slots: 3, pact_level: 5 },
+  { pact_slots: 3, pact_level: 5 },
+  { pact_slots: 3, pact_level: 5 },
+  { pact_slots: 4, pact_level: 5 },
+  { pact_slots: 4, pact_level: 5 },
+  { pact_slots: 4, pact_level: 5 },
+  { pact_slots: 4, pact_level: 5 }
+];
+
+// Fonction helper pour obtenir les emplacements de sorts selon les règles 2024
+const getSpellSlotsByLevel = (playerClass: string | null | undefined, level: number, currentSlots: any) => {
+  const lvl = clampLevel(level);
+
+  // Moine et non-lanceurs
+  if (playerClass === 'Moine' || playerClass === 'Guerrier' || playerClass === 'Barbare' || playerClass === 'Roublard') {
+    return currentSlots || {};
+  }
+
+  // Occultiste (Pact Magic)
+  if (playerClass === 'Occultiste') {
+    const warlockData = WARLOCK_SLOTS[lvl];
+    return {
+      ...currentSlots,
+      pact_slots: warlockData.pact_slots,
+      pact_level: warlockData.pact_level,
+      used_pact_slots: currentSlots?.used_pact_slots || 0
+    };
+  }
+
+  // Full casters
+  const fullCasters = ['Magicien', 'Ensorceleur', 'Barde', 'Clerc', 'Druide'];
+  if (fullCasters.includes(playerClass || '')) {
+    const slots = FULL_CASTER_SLOTS[lvl];
+    return {
+      ...currentSlots,
+      ...slots,
+      used1: currentSlots?.used1 || 0,
+      used2: currentSlots?.used2 || 0,
+      used3: currentSlots?.used3 || 0,
+      used4: currentSlots?.used4 || 0,
+      used5: currentSlots?.used5 || 0,
+      used6: currentSlots?.used6 || 0,
+      used7: currentSlots?.used7 || 0,
+      used8: currentSlots?.used8 || 0,
+      used9: currentSlots?.used9 || 0
+    };
+  }
+
+  // Half casters
+  const halfCasters = ['Paladin', 'Rôdeur'];
+  if (halfCasters.includes(playerClass || '')) {
+    const slots = HALF_CASTER_SLOTS[lvl];
+    return {
+      ...currentSlots,
+      ...slots,
+      used1: currentSlots?.used1 || 0,
+      used2: currentSlots?.used2 || 0,
+      used3: currentSlots?.used3 || 0,
+      used4: currentSlots?.used4 || 0,
+      used5: currentSlots?.used5 || 0
+    };
+  }
+
+  return currentSlots || {};
 };
 
 type SpellInfo =
-  | { kind: 'known'; cantrips?: number; known?: number; label: string; note?: string }
-  | { kind: 'prepared'; cantrips?: number; preparedCount: number; preparedFormula: string; label: string; note?: string }
+  | { kind: 'prepared'; cantrips?: number; prepared: number; label: string; note?: string }
   | { kind: 'none' };
 
 const getSpellKnowledgeInfo = (player: Player, newLevel: number): SpellInfo => {
@@ -130,81 +251,72 @@ const getSpellKnowledgeInfo = (player: Player, newLevel: number): SpellInfo => {
   switch (cls) {
     case 'Barde': {
       return {
-        kind: 'known',
+        kind: 'prepared',
         cantrips: BARD_CANTRIPS[lvl],
-        known: BARD_KNOWN[lvl],
+        prepared: BARD_PREPARED[lvl],
         label: 'Barde',
-        note: 'Valeurs totales au nouveau niveau'
+        note: 'Nombre de sorts préparés au niveau ' + newLevel
       };
     }
     case 'Ensorceleur': {
       return {
-        kind: 'known',
+        kind: 'prepared',
         cantrips: SORCERER_CANTRIPS[lvl],
-        known: SORCERER_KNOWN[lvl],
+        prepared: SORCERER_PREPARED[lvl],
         label: 'Ensorceleur',
-        note: 'Valeurs totales au nouveau niveau'
+        note: 'Nombre de sorts préparés au niveau ' + newLevel
       };
     }
     case 'Occultiste': {
       return {
-        kind: 'known',
+        kind: 'prepared',
         cantrips: WARLOCK_CANTRIPS[lvl],
-        known: WARLOCK_KNOWN[lvl],
+        prepared: WARLOCK_PREPARED[lvl],
         label: 'Occultiste',
-        note: 'Valeurs totales au nouveau niveau'
+        note: 'Nombre de sorts préparés au niveau ' + newLevel
       };
     }
     case 'Clerc': {
-      const wis = getWisModFromPlayer(player);
-      const prepared = Math.max(1, lvl + wis);
       return {
         kind: 'prepared',
-        cantrips: getClericCantrips(lvl),
-        preparedCount: prepared,
-        preparedFormula: `Niveau (${lvl}) + mod. Sagesse (${wis >= 0 ? `+${wis}` : wis})`,
+        cantrips: CLERIC_CANTRIPS[lvl],
+        prepared: CLERIC_PREPARED[lvl],
         label: 'Clerc',
-        note: 'Préparation quotidienne (liste complète)'
+        note: 'Nombre de sorts préparés au niveau ' + newLevel
       };
     }
     case 'Druide': {
-      const wis = getWisModFromPlayer(player);
-      const prepared = Math.max(1, lvl + wis);
       return {
         kind: 'prepared',
-        cantrips: getDruidCantrips(lvl),
-        preparedCount: prepared,
-        preparedFormula: `Niveau (${lvl}) + mod. Sagesse (${wis >= 0 ? `+${wis}` : wis})`,
+        cantrips: DRUID_CANTRIPS[lvl],
+        prepared: DRUID_PREPARED[lvl],
         label: 'Druide',
-        note: 'Préparation quotidienne (liste complète)'
+        note: 'Nombre de sorts préparés au niveau ' + newLevel
       };
     }
     case 'Magicien': {
-      const intel = getIntModFromPlayer(player);
-      const prepared = Math.max(1, lvl + intel);
       return {
         kind: 'prepared',
-        cantrips: getWizardCantrips(lvl),
-        preparedCount: prepared,
-        preparedFormula: `Niveau (${lvl}) + mod. Intelligence (${intel >= 0 ? `+${intel}` : intel})`,
+        cantrips: WIZARD_CANTRIPS[lvl],
+        prepared: WIZARD_PREPARED[lvl],
         label: 'Magicien',
-        note: 'Préparation quotidienne (grimoire)'
+        note: 'Nombre de sorts préparés au niveau ' + newLevel
       };
     }
     case 'Paladin': {
       return {
-        kind: 'known',
-        known: PALADIN_KNOWN[lvl],
+        kind: 'prepared',
+        prepared: PALADIN_PREPARED[lvl],
         label: 'Paladin',
-        note: 'Valeur totale des sorts connus au nouveau niveau'
+        note: 'Nombre de sorts préparés au niveau ' + newLevel
       };
     }
     case 'Rodeur': {
       return {
-        kind: 'known',
-        known: RANGER_KNOWN[lvl],
-        label: 'Rodeur',
-        note: 'Valeur totale des sorts connus au nouveau niveau'
+        kind: 'prepared',
+        prepared: RANGER_PREPARED[lvl],
+        label: 'Rôdeur',
+        note: 'Nombre de sorts préparés au niveau ' + newLevel
       };
     }
     default:
@@ -289,79 +401,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         used: player.hit_dice?.used || 0
       };
 
-      const getSpellSlotsByLevel = (playerClass: string | null | undefined, level: number) => {
-        const slots: any = {};
-        
-        if (playerClass === 'Moine') {
-          return player.spell_slots || {};
-        }
-        
-        const fullCasters = ['Magicien', 'Ensorceleur', 'Barde', 'Clerc', 'Druide'];
-        const halfCasters = ['Paladin', 'Rôdeur'];
-        
-        if (fullCasters.includes(playerClass || '')) {
-          if (level >= 1) {
-            slots.level1 = level === 1 ? 2 : level === 2 ? 3 : 4;
-            slots.used1 = player.spell_slots?.used1 || 0;
-          }
-          if (level >= 3) {
-            slots.level2 = level === 3 ? 2 : 3;
-            slots.used2 = player.spell_slots?.used2 || 0;
-          }
-          if (level >= 5) {
-            slots.level3 = level === 5 ? 2 : 3;
-            slots.used3 = player.spell_slots?.used3 || 0;
-          }
-          if (level >= 7) {
-            slots.level4 = level === 7 ? 1 : level === 8 ? 2 : 3;
-            slots.used4 = player.spell_slots?.used4 || 0;
-          }
-          if (level >= 9) {
-            slots.level5 = level === 9 ? 1 : level >= 10 ? 2 : 1;
-            slots.used5 = player.spell_slots?.used5 || 0;
-          }
-          if (level >= 11) {
-            slots.level6 = 1;
-            slots.used6 = player.spell_slots?.used6 || 0;
-          }
-          if (level >= 13) {
-            slots.level7 = 1;
-            slots.used7 = player.spell_slots?.used7 || 0;
-          }
-          if (level >= 15) {
-            slots.level8 = 1;
-            slots.used8 = player.spell_slots?.used8 || 0;
-          }
-          if (level >= 17) {
-            slots.level9 = 1;
-            slots.used9 = player.spell_slots?.used9 || 0;
-          }
-        } else if (halfCasters.includes(playerClass || '')) {
-          if (level >= 2) {
-            slots.level1 = level === 2 ? 2 : level <= 4 ? 3 : 4;
-            slots.used1 = player.spell_slots?.used1 || 0;
-          }
-          if (level >= 5) {
-            slots.level2 = level <= 6 ? 2 : 3;
-            slots.used2 = player.spell_slots?.used2 || 0;
-          }
-          if (level >= 9) {
-            slots.level3 = level <= 10 ? 2 : 3;
-            slots.used3 = player.spell_slots?.used3 || 0;
-          }
-          if (level >= 13) {
-            slots.level4 = level <= 14 ? 1 : level <= 16 ? 2 : 3;
-            slots.used4 = player.spell_slots?.used4 || 0;
-          }
-          if (level >= 17) {
-            slots.level5 = level <= 18 ? 1 : 2;
-            slots.used5 = player.spell_slots?.used5 || 0;
-          }
-        }
-        
-        return { ...player.spell_slots, ...slots };
-      };
-
       // Ressources de classe — inclut Paladin Conduits divins (N3+)
       const getClassResourcesByLevel = (playerClass: string | null | undefined, level: number) => {
         const resources: any = { ...player.class_resources };
@@ -421,7 +460,7 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         return resources;
       };
 
-      const newSpellSlots = getSpellSlotsByLevel(player.class, newLevel);
+      const newSpellSlots = getSpellSlotsByLevel(player.class, newLevel, player.spell_slots);
       const newClassResources = getClassResourcesByLevel(player.class, newLevel);
 
       const nextSubclass =
@@ -499,79 +538,6 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         used: player.hit_dice?.used || 0
       };
 
-      const getSpellSlotsByLevel = (playerClass: string | null | undefined, level: number) => {
-        const slots: any = {};
-        
-        if (playerClass === 'Moine') {
-          return player.spell_slots || {};
-        }
-        
-        const fullCasters = ['Magicien', 'Ensorceleur', 'Barde', 'Clerc', 'Druide'];
-        const halfCasters = ['Paladin', 'Rôdeur'];
-        
-        if (fullCasters.includes(playerClass || '')) {
-          if (level >= 1) {
-            slots.level1 = level === 1 ? 2 : level === 2 ? 3 : 4;
-            slots.used1 = player.spell_slots?.used1 || 0;
-          }
-          if (level >= 3) {
-            slots.level2 = level === 3 ? 2 : 3;
-            slots.used2 = player.spell_slots?.used2 || 0;
-          }
-          if (level >= 5) {
-            slots.level3 = level === 5 ? 2 : 3;
-            slots.used3 = player.spell_slots?.used3 || 0;
-          }
-          if (level >= 7) {
-            slots.level4 = level === 7 ? 1 : level === 8 ? 2 : 3;
-            slots.used4 = player.spell_slots?.used4 || 0;
-          }
-          if (level >= 9) {
-            slots.level5 = level === 9 ? 1 : level >= 10 ? 2 : 1;
-            slots.used5 = player.spell_slots?.used5 || 0;
-          }
-          if (level >= 11) {
-            slots.level6 = 1;
-            slots.used6 = player.spell_slots?.used6 || 0;
-          }
-          if (level >= 13) {
-            slots.level7 = 1;
-            slots.used7 = player.spell_slots?.used7 || 0;
-          }
-          if (level >= 15) {
-            slots.level8 = 1;
-            slots.used8 = player.spell_slots?.used8 || 0;
-          }
-          if (level >= 17) {
-            slots.level9 = 1;
-            slots.used9 = player.spell_slots?.used9 || 0;
-          }
-        } else if (halfCasters.includes(playerClass || '')) {
-          if (level >= 2) {
-            slots.level1 = level === 2 ? 2 : level <= 4 ? 3 : 4;
-            slots.used1 = player.spell_slots?.used1 || 0;
-          }
-          if (level >= 5) {
-            slots.level2 = level <= 6 ? 2 : 3;
-            slots.used2 = player.spell_slots?.used2 || 0;
-          }
-          if (level >= 9) {
-            slots.level3 = level <= 10 ? 2 : 3;
-            slots.used3 = player.spell_slots?.used3 || 0;
-          }
-          if (level >= 13) {
-            slots.level4 = level <= 14 ? 1 : level <= 16 ? 2 : 3;
-            slots.used4 = player.spell_slots?.used4 || 0;
-          }
-          if (level >= 17) {
-            slots.level5 = level <= 18 ? 1 : 2;
-            slots.used5 = player.spell_slots?.used5 || 0;
-          }
-        }
-        
-        return { ...player.spell_slots, ...slots };
-      };
-
       // Ressources de classe — inclut Paladin Conduits divins (N3+)
       const getClassResourcesByLevel = (playerClass: string | null | undefined, level: number) => {
         const resources: any = { ...player.class_resources };
@@ -631,7 +597,7 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
         return resources;
       };
 
-      const newSpellSlots = getSpellSlotsByLevel(player.class, newLevel);
+      const newSpellSlots = getSpellSlotsByLevel(player.class, newLevel, player.spell_slots);
       const newClassResources = getClassResourcesByLevel(player.class, newLevel);
 
       const nextSubclass =
@@ -834,45 +800,22 @@ export function LevelUpModal({ isOpen, onClose, player, onUpdate }: LevelUpModal
                 <h5 className="font-medium text-gray-200">Sorts à ajouter (indicatif)</h5>
               </div>
 
-              {spellInfo.kind === 'known' && (
+              {spellInfo.kind === 'prepared' && (
                 <div className="space-y-1 text-sm">
                   <p className="text-gray-300">
                     Classe: <span className="font-semibold">{spellInfo.label}</span>
                   </p>
                   {typeof spellInfo.cantrips === 'number' && spellInfo.cantrips > 0 && (
                     <p className="text-gray-300">
-                      Sorts mineurs connus au niveau {newLevel}: <span className="font-semibold">{spellInfo.cantrips}</span>
-                    </p>
-                  )}
-                  {typeof spellInfo.known === 'number' && (
-                    <p className="text-gray-300">
-                      Sorts connus au niveau {newLevel}: <span className="font-semibold">{spellInfo.known}</span>
-                    </p>
-                  )}
-                  {spellInfo.note && (
-                    <p className="text-xs text-gray-500 mt-2">
-                      {spellInfo.note}. Si vous en avez déjà appris, ajoutez simplement la différence depuis l’onglet Sorts.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {spellInfo.kind === 'prepared' && (
-                <div className="space-y-1 text-sm">
-                  <p className="text-gray-300">
-                    Classe: <span className="font-semibold">{spellInfo.label}</span>
-                  </p>
-                  {typeof spellInfo.cantrips === 'number' && (
-                    <p className="text-gray-300">
-                      Sorts mineurs connus au niveau {newLevel}: <span className="font-semibold">{spellInfo.cantrips}</span>
+                      Sorts mineurs au niveau {newLevel}: <span className="font-semibold">{spellInfo.cantrips}</span>
                     </p>
                   )}
                   <p className="text-gray-300">
-                    Préparation quotidienne: <span className="font-semibold">{spellInfo.preparedCount}</span> ({spellInfo.preparedFormula})
+                    Sorts préparés au niveau {newLevel}: <span className="font-semibold">{spellInfo.prepared}</span>
                   </p>
                   {spellInfo.note && (
                     <p className="text-xs text-gray-500 mt-2">
-                      {spellInfo.note}. Gérez vos sorts dans l’onglet Sorts; ce nombre est un total au nouveau niveau.
+                      {spellInfo.note}. Gérez vos sorts dans l'onglet Sorts.
                     </p>
                   )}
                 </div>
