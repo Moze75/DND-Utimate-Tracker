@@ -188,129 +188,115 @@ async function autoEquipItems(
   console.log('[autoEquipItems] Items reçus:', items.map(i => ({ name: i.name, type: i.meta.type, autoEquip: i.autoEquip })));
   const toEquip = items.filter(item => item.autoEquip);
   console.log('[autoEquipItems] Items à équiper:', toEquip.map(i => ({ name: i.name, type: i.meta.type })));
-  const equipmentUpdates: any = { ...player.equipment };
-  const inventoryUpdates: Promise<any>[] = [];
 
+  // Récupérer le player le plus à jour
+  const { data: freshPlayer } = await supabase
+    .from('players')
+    .select('*')
+    .eq('id', playerId)
+    .single();
+
+  if (!freshPlayer) {
+    console.error('Impossible de récupérer le player');
+    return;
+  }
+
+  // Import dynamique du service d'inventaire
+  const { inventoryService } = await import('./inventoryService');
+
+  // Équiper l'armure
   const armorItem = toEquip.find(item => item.meta.type === 'armor');
   if (armorItem) {
     const dbItem = inventoryItems.find(i =>
       smartCapitalize(i.name) === smartCapitalize(armorItem.name)
     );
-    if (dbItem && armorItem.meta.armor) {
-      equipmentUpdates.armor = {
-        name: armorItem.name,
-        description: armorItem.description,
-        inventory_item_id: dbItem.id,
-        armor_formula: armorItem.meta.armor,
-        shield_bonus: null,
-        weapon_meta: null,
-      };
-
-      const updatedMeta = { ...armorItem.meta, equipped: true };
-      const updatedDesc = injectMetaIntoDescription(armorItem.description, updatedMeta);
-      inventoryUpdates.push(
-        supabase
-          .from('inventory_items')
-          .update({ description: updatedDesc })
-          .eq('id', dbItem.id)
-      );
-      console.log('[autoEquipItems] Armure marquée comme équipée:', armorItem.name);
+    if (dbItem) {
+      console.log('[autoEquipItems] Équipement de l\'armure:', armorItem.name);
+      await inventoryService.equipItem(playerId, dbItem, freshPlayer, 'armor');
     }
   }
 
+  // Équiper le bouclier
   const shieldItem = toEquip.find(item => item.meta.type === 'shield');
   if (shieldItem) {
     const dbItem = inventoryItems.find(i =>
       smartCapitalize(i.name) === smartCapitalize(shieldItem.name)
     );
-    if (dbItem && shieldItem.meta.shield) {
-      equipmentUpdates.shield = {
-        name: shieldItem.name,
-        description: shieldItem.description,
-        inventory_item_id: dbItem.id,
-        shield_bonus: shieldItem.meta.shield.bonus,
-        armor_formula: null,
-        weapon_meta: null,
+    if (dbItem) {
+      console.log('[autoEquipItems] Équipement du bouclier:', shieldItem.name);
+      await inventoryService.equipItem(playerId, dbItem, freshPlayer, 'shield');
+    }
+  }
+
+  // Équiper les armes (logique existante pour les armes)
+  const weaponItems = toEquip.filter(item => item.meta.type === 'weapon');
+  if (weaponItems.length > 0) {
+    const equippedWeapons = [];
+    const equippedWeaponNames = new Set<string>();
+    const inventoryUpdates: Promise<any>[] = [];
+
+    for (const weaponItem of weaponItems) {
+      const normalizedName = smartCapitalize(weaponItem.name);
+      if (equippedWeaponNames.has(normalizedName)) {
+        continue;
+      }
+
+      const dbItem = inventoryItems.find(i =>
+        smartCapitalize(i.name) === normalizedName
+      );
+      if (dbItem && weaponItem.meta.weapon) {
+        equippedWeapons.push({
+          inventory_item_id: dbItem.id,
+          name: weaponItem.name,
+          description: weaponItem.description,
+          weapon_meta: weaponItem.meta.weapon,
+        });
+
+        equippedWeaponNames.add(normalizedName);
+
+        const updatedMeta = { ...weaponItem.meta, equipped: true };
+        const updatedDesc = injectMetaIntoDescription(weaponItem.description, updatedMeta);
+        inventoryUpdates.push(
+          supabase
+            .from('inventory_items')
+            .update({ description: updatedDesc })
+            .eq('id', dbItem.id)
+        );
+        console.log('[autoEquipItems] Arme marquée comme équipée:', weaponItem.name);
+
+        await createWeaponAttack(
+          playerId,
+          weaponItem.name,
+          weaponItem.meta.weapon,
+          freshPlayer
+        );
+      }
+    }
+
+    if (inventoryUpdates.length > 0) {
+      await Promise.allSettled(inventoryUpdates);
+    }
+
+    if (equippedWeapons.length > 0) {
+      const equipmentUpdates = {
+        ...freshPlayer.equipment,
+        weapons: equippedWeapons
       };
 
-      const updatedMeta = { ...shieldItem.meta, equipped: true };
-      const updatedDesc = injectMetaIntoDescription(shieldItem.description, updatedMeta);
-      inventoryUpdates.push(
-        supabase
-          .from('inventory_items')
-          .update({ description: updatedDesc })
-          .eq('id', dbItem.id)
-      );
-      console.log('[autoEquipItems] Bouclier marqué comme équipé:', shieldItem.name);
+      const { error: updateError } = await supabase
+        .from('players')
+        .update({ equipment: equipmentUpdates })
+        .eq('id', playerId);
+
+      if (updateError) {
+        console.error('Erreur mise à jour armes:', updateError);
+      } else {
+        console.log('[autoEquipItems] Armes mises à jour avec succès');
+      }
     }
   }
 
-  const weaponItems = toEquip.filter(item => item.meta.type === 'weapon');
-  const equippedWeapons = [];
-  const equippedWeaponNames = new Set<string>();
-
-  for (const weaponItem of weaponItems) {
-    const normalizedName = smartCapitalize(weaponItem.name);
-    if (equippedWeaponNames.has(normalizedName)) {
-      continue;
-    }
-
-    const dbItem = inventoryItems.find(i =>
-      smartCapitalize(i.name) === normalizedName
-    );
-    if (dbItem && weaponItem.meta.weapon) {
-      equippedWeapons.push({
-        inventory_item_id: dbItem.id,
-        name: weaponItem.name,
-        description: weaponItem.description,
-        weapon_meta: weaponItem.meta.weapon,
-      });
-
-      equippedWeaponNames.add(normalizedName);
-
-      const updatedMeta = { ...weaponItem.meta, equipped: true };
-      const updatedDesc = injectMetaIntoDescription(weaponItem.description, updatedMeta);
-      inventoryUpdates.push(
-        supabase
-          .from('inventory_items')
-          .update({ description: updatedDesc })
-          .eq('id', dbItem.id)
-      );
-      console.log('[autoEquipItems] Arme marquée comme équipée:', weaponItem.name);
-
-      await createWeaponAttack(
-        playerId,
-        weaponItem.name,
-        weaponItem.meta.weapon,
-        player
-      );
-    }
-  }
-
-  if (equippedWeapons.length > 0) {
-    equipmentUpdates.weapons = equippedWeapons;
-  }
-
-  if (inventoryUpdates.length > 0) {
-    console.log('[autoEquipItems] Mise à jour des métadonnées equipped dans inventory_items...');
-    await Promise.allSettled(inventoryUpdates);
-  }
-
-  if (armorItem || shieldItem || equippedWeapons.length > 0) {
-    console.log('[autoEquipItems] Mise à jour equipment:', equipmentUpdates);
-    const { error: updateError } = await supabase
-      .from('players')
-      .update({ equipment: equipmentUpdates })
-      .eq('id', playerId);
-
-    if (updateError) {
-      console.error('Erreur mise à jour equipment:', updateError);
-    } else {
-      console.log('[autoEquipItems] Equipment mis à jour avec succès');
-    }
-  } else {
-    console.log('[autoEquipItems] Aucun équipement à mettre à jour');
-  }
+  console.log('[autoEquipItems] Auto-équipement terminé');
 }
 
 export async function createCharacterFromCreatorPayload(
