@@ -81,7 +81,7 @@ export function CustomItemModal({
           <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg"><X /></button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="space-y-3">
           <div>
             <label className="block text-sm text-gray-400 mb-1">Nom</label>
             <input className="input-dark w-full px-3 py-2 rounded-md" value={name} onChange={e => setName(e.target.value)} />
@@ -110,12 +110,6 @@ export function CustomItemModal({
         {type === 'shield' && (<div className="mt-3"><label className="block text-sm text-gray-400 mb-1">Bonus de bouclier</label><input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={shieldBonus} onChange={e => setShieldBonus(parseInt(e.target.value) || 0)} /></div>)}
         {type === 'weapon' && (
           <div className="mt-3 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div><label className="block text-sm text-gray-400 mb-1">Dés de dégâts</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wDice} onChange={e => setWDice(e.target.value)} placeholder="1d6" /></div>
-              <div><label className="block text-sm text-gray-400 mb-1">Type de dégâts</label><select className="input-dark w-full px-3 py-2 rounded-md" value={wType} onChange={e => setWType(e.target.value as any)}><option>Tranchant</option><option>Perforant</option><option>Contondant</option></select></div>
-              <div><label className="block text-sm text-gray-400 mb-1">Propriété(s)</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wProps} onChange={e => setWProps(e.target.value)} placeholder="Finesse, Polyvalente..." /></div>
-              <div><label className="block text-sm text-gray-400 mb-1">Portée</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wRange} onChange={e => setWRange(e.target.value)} placeholder="Corps à corps, 6 m..." /></div>
-            </div>
             <div>
               <label className="block text-sm text-gray-400 mb-1">Catégorie d'arme</label>
               <select className="input-dark w-full px-3 py-2 rounded-md" value={wCategory} onChange={e => setWCategory(e.target.value as WeaponCategory)}>
@@ -125,6 +119,12 @@ export function CustomItemModal({
                 <option value="Armes de guerre présentant la propriété Finesse ou Légère">Armes de guerre présentant la propriété Finesse ou Légère</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">Cette catégorie détermine si votre bonus de maîtrise s'applique aux jets d'attaque</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div><label className="block text-sm text-gray-400 mb-1">Dés de dégâts</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wDice} onChange={e => setWDice(e.target.value)} placeholder="1d6" /></div>
+              <div><label className="block text-sm text-gray-400 mb-1">Type de dégâts</label><select className="input-dark w-full px-3 py-2 rounded-md" value={wType} onChange={e => setWType(e.target.value as any)}><option>Tranchant</option><option>Perforant</option><option>Contondant</option></select></div>
+              <div><label className="block text-sm text-gray-400 mb-1">Propriété(s)</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wProps} onChange={e => setWProps(e.target.value)} placeholder="Finesse, Polyvalente..." /></div>
+              <div><label className="block text-sm text-gray-400 mb-1">Portée</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wRange} onChange={e => setWRange(e.target.value)} placeholder="Corps à corps, 6 m..." /></div>
             </div>
           </div>
         )}

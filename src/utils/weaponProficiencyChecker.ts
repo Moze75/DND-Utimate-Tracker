@@ -263,9 +263,38 @@ export function checkWeaponProficiency(
     }
   }
 
-  // Catégorie : Armes de guerre (toutes)
-  if (weaponCategory.startsWith('Armes de guerre')) {
-    const hasMartial = normProfs.some(p => MARTIAL_CATEGORY_SYNONYMS.includes(p) || (p.includes('arme') && (p.includes('guerre') || p.includes('martial'))));
+  // Vérification des sous-catégories AVANT la catégorie générale
+  if (weaponCategory === 'Armes de guerre (Finesse ou Légère)') {
+    const hasSub = normProfs.some(p => MARTIAL_SUB_FINESSE_LIGHT.includes(p));
+    if (hasSub) {
+      return {
+        isProficient: true,
+        reason: 'Maîtrise armes de guerre (Finesse ou Légère)',
+        category: weaponCategory,
+        shouldApplyProficiencyBonus: true,
+        proficiencySource: 'Sous-catégorie Finesse/Légère',
+        debug: { input: weaponName, simplified, canonical, weaponCategory, matchedBy: 'subCategory', normalizedProficiencies: normProfs }
+      };
+    }
+  }
+
+  if (weaponCategory === 'Armes de guerre (Légère)') {
+    const hasLight = normProfs.some(p => MARTIAL_SUB_LIGHT_ONLY.includes(p));
+    if (hasLight) {
+      return {
+        isProficient: true,
+        reason: 'Maîtrise armes de guerre (Légère)',
+        category: weaponCategory,
+        shouldApplyProficiencyBonus: true,
+        proficiencySource: 'Sous-catégorie Légère',
+        debug: { input: weaponName, simplified, canonical, weaponCategory, matchedBy: 'subCategory', normalizedProficiencies: normProfs }
+      };
+    }
+  }
+
+  // Catégorie : Armes de guerre (toutes) - Vérifie UNIQUEMENT si pas une sous-catégorie
+  if (weaponCategory === 'Armes de guerre') {
+    const hasMartial = normProfs.some(p => MARTIAL_CATEGORY_SYNONYMS.includes(p) || (p.includes('arme') && (p.includes('guerre') || p.includes('martial')) && !p.includes('finesse') && !p.includes('legere')));
     if (hasMartial) {
       return {
         isProficient: true,
@@ -275,34 +304,6 @@ export function checkWeaponProficiency(
         proficiencySource: 'Catégorie Armes de guerre',
         debug: { input: weaponName, simplified, canonical, weaponCategory, matchedBy: 'category', normalizedProficiencies: normProfs }
       };
-    }
-
-    if (weaponCategory === 'Armes de guerre (Finesse ou Légère)') {
-      const hasSub = normProfs.some(p => MARTIAL_SUB_FINESSE_LIGHT.includes(p) || (p.includes('finesse') && p.includes('legere')));
-      if (hasSub) {
-        return {
-          isProficient: true,
-          reason: 'Maîtrise armes de guerre (Finesse ou Légère)',
-          category: weaponCategory,
-          shouldApplyProficiencyBonus: true,
-          proficiencySource: 'Sous-catégorie Finesse/Légère',
-          debug: { input: weaponName, simplified, canonical, weaponCategory, matchedBy: 'subCategory', normalizedProficiencies: normProfs }
-        };
-      }
-    }
-
-    if (weaponCategory === 'Armes de guerre (Légère)') {
-      const hasLight = normProfs.some(p => MARTIAL_SUB_LIGHT_ONLY.includes(p) || (p.includes('legere') && !p.includes('finesse')));
-      if (hasLight) {
-        return {
-          isProficient: true,
-          reason: 'Maîtrise armes de guerre (Légère)',
-          category: weaponCategory,
-          shouldApplyProficiencyBonus: true,
-          proficiencySource: 'Sous-catégorie Légère',
-            debug: { input: weaponName, simplified, canonical, weaponCategory, matchedBy: 'subCategory', normalizedProficiencies: normProfs }
-        };
-      }
     }
   }
 
@@ -354,9 +355,9 @@ export function getPlayerWeaponProficiencies(player: any): string[] {
     ['stats','weaponProficiencies'],
     ['weapon_proficiencies'],
     ['weaponProficiencies'],
-    ['proficiencies','weapons'], // structure type { proficiencies: { weapons: [...] } }
+    ['proficiencies','weapons'],
     ['proficiencies','weapon'],
-    ['proficiencies'] // si c'est directement un tableau
+    ['proficiencies']
   ];
 
   for (const p of explicitPaths) {
@@ -381,16 +382,13 @@ export function getPlayerWeaponProficiencies(player: any): string[] {
     }
   }
 
-  // Ajouter maîtrises de classe par défaut
-  if (player?.class && CLASS_WEAPON_PROFICIENCIES[player.class]) {
-    pushArr(CLASS_WEAPON_PROFICIENCIES[player.class]);
-  }
+  // NE PLUS ajouter automatiquement les maîtrises de classe
+  // Les maîtrises doivent être explicitement sélectionnées dans PlayerProfileSettingsModal
 
   // Unicité
   const unique = [...new Set(out)].filter(Boolean);
 
   // Debug optionnel
-  // Active en console: window.__LOG_WEAPON_PROF__ = true;
   try {
     // @ts-ignore
     if (typeof window !== 'undefined' && window.__LOG_WEAPON_PROF__) {
