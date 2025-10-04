@@ -12,6 +12,7 @@ function App() {
   const [session, setSession] = useState<any>(null);
   const [selectedCharacter, setSelectedCharacter] = useState<Player | null>(null);
   const [refreshingSession, setRefreshingSession] = useState(false);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
 
   const [LoginPage, setLoginPage] = useState<React.ComponentType<any> | null>(null);
   const [CharacterSelectionPage, setCharacterSelectionPage] = useState<React.ComponentType<any> | null>(null);
@@ -82,7 +83,16 @@ function App() {
       }
     };
 
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.warn('[APP] Timeout de chargement détecté');
+        setLoadingTimeout(true);
+      }
+    }, 15000);
+
     initSession();
+
+    return () => clearTimeout(timeoutId);
   }, []);
 
   // Écoute des changements d’état d’authentification
@@ -214,6 +224,29 @@ function App() {
           <div className="text-center space-y-4">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto" />
             <p className="text-gray-400">Chargement en cours...</p>
+            {loadingTimeout && (
+              <div className="mt-6 p-4 bg-yellow-900/50 border border-yellow-700 rounded-lg max-w-md mx-auto">
+                <p className="text-yellow-200 text-sm mb-3">
+                  Le chargement prend plus de temps que prévu.
+                </p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Recharger la page
+                </button>
+                <button
+                  onClick={async () => {
+                    const { cleanupOldServiceWorkers } = await import('./utils/pwaCleanup');
+                    await cleanupOldServiceWorkers();
+                    window.location.reload();
+                  }}
+                  className="ml-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Nettoyer le cache et recharger
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </>

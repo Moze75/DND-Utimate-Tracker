@@ -3,10 +3,14 @@
   "short_name": "D&D Tracker",
   "description": "Gestionnaire de personnage D&D - Suivez vos PV, sorts, équipement et plus encore !",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#111827",
   "theme_color": "#111827",
+  "dir": "ltr",
+  "lang": "fr",
+  "categories": ["games", "entertainment", "utilities"],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -19,6 +23,21 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mes Personnages",
+      "short_name": "Personnages",
+      "description": "Accéder à la liste des personnages",
+      "url": "/",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }
