@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 /* Types locaux alignés */
-type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment' | 'jewelry' | 'tool';
+type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment' | 'jewelry' | 'tool' | 'other';
 type WeaponCategory = 'Armes courantes' | 'Armes de guerre' | 'Armes de guerre dotées de la propriété Légère' | 'Armes de guerre présentant la propriété Finesse ou Légère';
 interface WeaponMeta { damageDice: string; damageType: 'Tranchant' | 'Perforant' | 'Contondant'; properties: string; range: string; category?: WeaponCategory; }
 interface ArmorMeta { base: number; addDex: boolean; dexCap?: number | null; label: string; }
@@ -96,6 +96,7 @@ export function CustomItemModal({
               <option value="shield">Bouclier</option>
               <option value="jewelry">Bijoux</option>
               <option value="tool">Outils</option>
+              <option value="other">Autre</option>
             </select>
           </div>
         </div>

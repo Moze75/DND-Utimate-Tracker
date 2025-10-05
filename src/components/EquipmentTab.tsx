@@ -43,7 +43,7 @@ interface Equipment {
   } | null;
 }
 
-type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment' | 'jewelry' | 'tool';
+type MetaType = 'armor' | 'shield' | 'weapon' | 'potion' | 'equipment' | 'jewelry' | 'tool' | 'other';
 type WeaponCategory = 'Armes courantes' | 'Armes de guerre' | 'Armes de guerre dotées de la propriété Légère' | 'Armes de guerre présentant la propriété Finesse ou Légère';
 
 interface WeaponMeta {
@@ -266,26 +266,50 @@ const InfoBubble = ({
               const meta = parseMeta(item.description);
               return meta?.type === 'equipment';
             });
+            const otherItems = inventory.filter(item => {
+              const meta = parseMeta(item.description);
+              return meta?.type === 'other';
+            });
 
-            if (equipmentItems.length > 0) {
+            if (equipmentItems.length > 0 || otherItems.length > 0) {
               return (
-                <div>
-                  <div className="text-xs text-gray-400 mb-1 font-medium">Équipements :</div>
-                  <div className="space-y-1">
-                    {equipmentItems.map(item => {
-                      const meta = parseMeta(item.description);
-                      const qty = meta?.quantity ?? 1;
-                      return (
-                        <div key={item.id} className="text-sm text-gray-300 pl-2">
-                          • {smartCapitalize(item.name)}{qty > 1 && ` x${qty}`}
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div className="space-y-3">
+                  {equipmentItems.length > 0 && (
+                    <div>
+                      <div className="text-xs text-gray-400 mb-1 font-medium">Équipements :</div>
+                      <div className="space-y-1">
+                        {equipmentItems.map(item => {
+                          const meta = parseMeta(item.description);
+                          const qty = meta?.quantity ?? 1;
+                          return (
+                            <div key={item.id} className="text-sm text-gray-300 pl-2">
+                              • {smartCapitalize(item.name)}{qty > 1 && ` x${qty}`}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {otherItems.length > 0 && (
+                    <div>
+                      <div className="text-xs text-gray-400 mb-1 font-medium">Autres :</div>
+                      <div className="space-y-1">
+                        {otherItems.map(item => {
+                          const meta = parseMeta(item.description);
+                          const qty = meta?.quantity ?? 1;
+                          return (
+                            <div key={item.id} className="text-sm text-gray-300 pl-2">
+                              • {smartCapitalize(item.name)}{qty > 1 && ` x${qty}`}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             }
-            return equipmentItems.length === 0 && !bagText ? (
+            return equipmentItems.length === 0 && otherItems.length === 0 && !bagText ? (
               <div className="text-sm text-gray-400">Sac vide</div>
             ) : null;
           })()}
@@ -902,7 +926,7 @@ export function EquipmentTab({
   // Sac / filtres
   const [bagFilter, setBagFilter] = useState('');
   const [bagKinds, setBagKinds] = useState<Record<MetaType, boolean>>({
-    armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true, tool: true
+    armor: true, shield: true, weapon: true, equipment: true, potion: true, jewelry: true, tool: true, other: true
   });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filteredInventory = useMemo(() => {
@@ -1131,6 +1155,7 @@ export function EquipmentTab({
                         {meta?.type === 'tool' && <span className="text-xs px-2 py-0.5 rounded bg-teal-900/30 text-teal-300">Outil</span>}
                         {meta?.type === 'jewelry' && <span className="text-xs px-2 py-0.5 rounded bg-yellow-900/30 text-yellow-300">Bijou</span>}
                         {meta?.type === 'potion' && <span className="text-xs px-2 py-0.5 rounded bg-green-900/30 text-green-300">Potion/Poison</span>}
+                        {meta?.type === 'other' && <span className="text-xs px-2 py-0.5 rounded bg-slate-900/30 text-slate-300">Autre</span>}
                       </div>
 
                       {expanded[item.id] && (isArmor || isShield || isWeapon) && (
@@ -1412,7 +1437,7 @@ export function EquipmentTab({
               </button>
             </div>
             <div className="space-y-1">
-              {(['armor','shield','weapon','equipment','potion','jewelry','tool'] as MetaType[]).map(k => (
+              {(['armor','shield','weapon','equipment','potion','jewelry','tool','other'] as MetaType[]).map(k => (
                 <label key={k} className="flex items-center justify-between text-sm text-gray-200 px-2 py-1 rounded hover:bg-gray-800/60 cursor-pointer">
                   <span>
                     {k === 'armor' ? 'Armure'
@@ -1420,7 +1445,8 @@ export function EquipmentTab({
                       : k === 'weapon' ? 'Arme'
                       : k === 'potion' ? 'Potion/Poison'
                       : k === 'jewelry' ? 'Bijoux'
-                      : k === 'tool' ? 'Outils' : 'Équipement'}
+                      : k === 'tool' ? 'Outils'
+                      : k === 'other' ? 'Autre' : 'Équipement'}
                   </span>
                   <input
                     type="checkbox"
