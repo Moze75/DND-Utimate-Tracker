@@ -107,6 +107,7 @@ export function WeaponsManageModal({
       setProficiencyCheck(proficiencyResult);
       setShowProficiencyWarning(true);
     } else {
+      setPendingId(item.id);
       try {
         await onEquip(item);
       } catch (error) {
@@ -121,6 +122,7 @@ export function WeaponsManageModal({
   const handleProficiencyWarningConfirm = async () => {
     setShowProficiencyWarning(false);
     if (pendingWeaponEquip) {
+      setPendingId(pendingWeaponEquip.id);
       try {
         await onEquip(pendingWeaponEquip);
       } catch (error) {
@@ -128,7 +130,7 @@ export function WeaponsManageModal({
       } finally {
         setPendingWeaponEquip(null);
         setProficiencyCheck(null);
-        setPendingId(null); // Réinitialiser l'état de pending
+        setPendingId(null);
       }
     }
   };
@@ -137,7 +139,6 @@ export function WeaponsManageModal({
     setShowProficiencyWarning(false);
     setPendingWeaponEquip(null);
     setProficiencyCheck(null);
-    setPendingId(null); // Réinitialiser l'état de pending
   };
 
   // ✅ AJOUT : Fonction pour vérifier les maîtrises et afficher un indicateur
@@ -240,7 +241,6 @@ export function WeaponsManageModal({
                         onClick={(e) => {
                           e.stopPropagation();
                           if (isPending) return;
-                          setPendingId(it.id);
                           handleEquipClick(it);
                         }}
                         disabled={isPending}
