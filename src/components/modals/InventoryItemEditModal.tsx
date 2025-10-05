@@ -172,6 +172,7 @@ export function InventoryItemEditModal({
       case 'potion': return 'Potion/Poison';
       case 'jewelry': return 'Bijoux';
       case 'tool': return 'Outils';
+      case 'other': return 'Autre';
       case 'equipment': return 'Équipement';
       default: return 'Équipement';
     }
@@ -235,6 +236,7 @@ export function InventoryItemEditModal({
               <option value="potion">Potion/Poison</option>
               <option value="jewelry">Bijoux</option>
               <option value="tool">Outils</option>
+              <option value="other">Autre</option>
             </select>
             {lockType && (
               <p className="text-xs text-gray-500 mt-1">

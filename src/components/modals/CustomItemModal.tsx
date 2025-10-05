@@ -73,21 +73,21 @@ export function CustomItemModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999]">
-      <div className="fixed inset-0 bg-black/70" onClick={onClose} />
-      <div className="fixed inset-0 bg-gray-900/95 w-screen h-screen overflow-y-auto p-4">
-        <div className="flex items-center justify-between mb-2">
+    <div className="fixed inset-0 z-[9999]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="fixed inset-0 bg-black/60" />
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(32rem,95vw)] max-h-[90vh] overflow-y-auto bg-gray-900/95 border border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-100">Objet personnalisé</h3>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg"><X /></button>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-800 rounded-lg"><X size={20} /></button>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Nom</label>
-            <input className="input-dark w-full px-3 py-2 rounded-md" value={name} onChange={e => setName(e.target.value)} />
+            <label className="block text-sm font-medium text-gray-300 mb-1">Nom</label>
+            <input className="input-dark w-full px-3 py-2 rounded-md" value={name} onChange={e => setName(e.target.value)} placeholder="Nom de l'objet" />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Type</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Type</label>
             <select className="input-dark w-full px-3 py-2 rounded-md" value={type} onChange={e => setType(e.target.value as MetaType)}>
               <option value="equipment">Équipement</option>
               <option value="potion">Potion / Poison</option>
@@ -102,23 +102,35 @@ export function CustomItemModal({
         </div>
 
         {type === 'armor' && (
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div><label className="block text-sm text-gray-400 mb-1">Base CA</label><input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={armBase} onChange={e => setArmBase(parseInt(e.target.value) || 10)} /></div>
-            <div className="flex items-center gap-2"><input id="addDex" type="checkbox" checked={armAddDex} onChange={e => setArmAddDex(e.target.checked)} /><label htmlFor="addDex" className="text-sm text-gray-300">Ajoute mod DEX</label></div>
-            <div><label className="block text-sm text-gray-400 mb-1">Cap DEX (vide = illimité)</label><input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={armDexCap} onChange={e => setArmDexCap(e.target.value === '' ? '' : parseInt(e.target.value))} /></div>
+          <div className="mt-4 space-y-3 border-t border-gray-700 pt-4">
+            <h4 className="text-sm font-medium text-gray-300">Propriétés d'armure</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div><label className="block text-xs text-gray-400 mb-1">Base CA</label><input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={armBase} onChange={e => setArmBase(parseInt(e.target.value) || 10)} /></div>
+              <div className="flex items-center gap-2"><input id="addDex" type="checkbox" checked={armAddDex} onChange={e => setArmAddDex(e.target.checked)} /><label htmlFor="addDex" className="text-sm text-gray-300">Ajoute mod DEX</label></div>
+              <div><label className="block text-xs text-gray-400 mb-1">Cap DEX (vide = illimité)</label><input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={armDexCap} onChange={e => setArmDexCap(e.target.value === '' ? '' : parseInt(e.target.value))} /></div>
+            </div>
           </div>
         )}
-        {type === 'shield' && (<div className="mt-3"><label className="block text-sm text-gray-400 mb-1">Bonus de bouclier</label><input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={shieldBonus} onChange={e => setShieldBonus(parseInt(e.target.value) || 0)} /></div>)}
+        {type === 'shield' && (
+          <div className="mt-4 space-y-3 border-t border-gray-700 pt-4">
+            <h4 className="text-sm font-medium text-gray-300">Propriétés de bouclier</h4>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Bonus de bouclier</label>
+              <input type="number" className="input-dark w-full px-3 py-2 rounded-md" value={shieldBonus} onChange={e => setShieldBonus(parseInt(e.target.value) || 0)} />
+            </div>
+          </div>
+        )}
         {type === 'weapon' && (
-          <div className="mt-3 space-y-3">
+          <div className="mt-4 space-y-3 border-t border-gray-700 pt-4">
+            <h4 className="text-sm font-medium text-gray-300">Propriétés d'arme</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div><label className="block text-sm text-gray-400 mb-1">Dés de dégâts</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wDice} onChange={e => setWDice(e.target.value)} placeholder="1d6" /></div>
-              <div><label className="block text-sm text-gray-400 mb-1">Type de dégâts</label><select className="input-dark w-full px-3 py-2 rounded-md" value={wType} onChange={e => setWType(e.target.value as any)}><option>Tranchant</option><option>Perforant</option><option>Contondant</option></select></div>
-              <div><label className="block text-sm text-gray-400 mb-1">Propriété(s)</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wProps} onChange={e => setWProps(e.target.value)} placeholder="Finesse, Polyvalente..." /></div>
-              <div><label className="block text-sm text-gray-400 mb-1">Portée</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wRange} onChange={e => setWRange(e.target.value)} placeholder="Corps à corps, 6 m..." /></div>
+              <div><label className="block text-xs text-gray-400 mb-1">Dés de dégâts</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wDice} onChange={e => setWDice(e.target.value)} placeholder="1d6" /></div>
+              <div><label className="block text-xs text-gray-400 mb-1">Type de dégâts</label><select className="input-dark w-full px-3 py-2 rounded-md" value={wType} onChange={e => setWType(e.target.value as any)}><option>Tranchant</option><option>Perforant</option><option>Contondant</option></select></div>
+              <div><label className="block text-xs text-gray-400 mb-1">Propriété(s)</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wProps} onChange={e => setWProps(e.target.value)} placeholder="Finesse, Polyvalente..." /></div>
+              <div><label className="block text-xs text-gray-400 mb-1">Portée</label><input className="input-dark w-full px-3 py-2 rounded-md" value={wRange} onChange={e => setWRange(e.target.value)} placeholder="Corps à corps, 6 m..." /></div>
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Catégorie d'arme</label>
+              <label className="block text-xs text-gray-400 mb-1">Catégorie d'arme</label>
               <select className="input-dark w-full px-3 py-2 rounded-md" value={wCategory} onChange={e => setWCategory(e.target.value as WeaponCategory)}>
                 <option value="Armes courantes">Armes courantes</option>
                 <option value="Armes de guerre">Armes de guerre</option>
@@ -130,19 +142,19 @@ export function CustomItemModal({
           </div>
         )}
 
-        <div className="mt-3">
-          <label className="block text-sm text-gray-400 mb-1">Description</label>
-          <textarea className="input-dark w-full px-3 py-2 rounded-md" rows={4} value={description} onChange={e => setDescription(e.target.value)} />
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-300 mb-1">Quantité</label>
+          <input type="number" min={1} className="input-dark w-full px-3 py-2 rounded-md" value={quantity} onChange={e => setQuantity(parseInt(e.target.value) || 1)} />
         </div>
 
-        <div className="mt-3 flex items-center gap-3">
-          <label className="text-sm text-gray-400">Quantité</label>
-          <input type="number" min={1} className="input-dark w-24 px-3 py-2 rounded-md" value={quantity} onChange={e => setQuantity(parseInt(e.target.value) || 1)} />
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
+          <textarea className="input-dark w-full px-3 py-2 rounded-md" rows={4} value={description} onChange={e => setDescription(e.target.value)} placeholder="Description de l'objet" />
         </div>
 
-        <div className="mt-4 flex justify-end gap-2">
-          <button onClick={add} className="btn-primary px-4 py-2 rounded-lg">Ajouter</button>
+        <div className="mt-6 flex justify-end gap-3">
           <button onClick={onClose} className="btn-secondary px-4 py-2 rounded-lg">Annuler</button>
+          <button onClick={add} className="btn-primary px-4 py-2 rounded-lg">Ajouter</button>
         </div>
       </div>
     </div>
