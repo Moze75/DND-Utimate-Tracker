@@ -96,25 +96,13 @@ export function WeaponsManageModal({
   };
 
   const handleEquipClick = async (item: InventoryItem) => {
-    const playerProficiencies = getPlayerWeaponProficiencies(player);
-    const meta = parseMeta(item.description);
-    const explicitCategory = meta?.weapon?.category;
-    const weaponProperties = meta?.weapon?.properties;
-    const proficiencyResult = checkWeaponProficiency(item.name, playerProficiencies, explicitCategory, weaponProperties);
-
-    if (!proficiencyResult.isProficient) {
-      setPendingWeaponEquip(item);
-      setProficiencyCheck(proficiencyResult);
-      setShowProficiencyWarning(true);
-    } else {
-      setPendingId(item.id);
-      try {
-        await onEquip(item);
-      } catch (error) {
-        console.error('Erreur lors de l\'équipement:', error);
-      } finally {
-        setPendingId(null);
-      }
+    setPendingId(item.id);
+    try {
+      await onEquip(item);
+    } catch (error) {
+      console.error('Erreur lors de l\'équipement:', error);
+    } finally {
+      setPendingId(null);
     }
   };
 
