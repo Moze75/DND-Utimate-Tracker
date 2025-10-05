@@ -57,11 +57,23 @@ export function WeaponsManageModal({
 }) {
   const [q, setQ] = React.useState('');
   const [pendingId, setPendingId] = React.useState<string | null>(null);
-  
-  // ✅ AJOUT : États pour la modal d'avertissement
+
   const [showProficiencyWarning, setShowProficiencyWarning] = React.useState(false);
   const [proficiencyCheck, setProficiencyCheck] = React.useState<WeaponProficiencyCheck | null>(null);
   const [pendingWeaponEquip, setPendingWeaponEquip] = React.useState<InventoryItem | null>(null);
+
+  React.useEffect(() => {
+    if (pendingId) {
+      const item = inventory.find(i => i.id === pendingId);
+      if (item) {
+        const meta = parseMeta(item.description);
+        if (meta?.equipped === true) {
+          setPendingId(null);
+          setPendingWeaponEquip(null);
+        }
+      }
+    }
+  }, [inventory, pendingId]);
   
   const weapons = React.useMemo(() => {
     return inventory
@@ -83,8 +95,7 @@ export function WeaponsManageModal({
     });
   };
 
-  // ✅ AJOUT : Fonction pour équiper avec vérification des maîtrises
-  const handleEquipWithProficiencyCheck = async (item: InventoryItem) => {
+  const handleEquipClick = async (item: InventoryItem) => {
     const playerProficiencies = getPlayerWeaponProficiencies(player);
     const meta = parseMeta(item.description);
     const explicitCategory = meta?.weapon?.category;
@@ -92,16 +103,17 @@ export function WeaponsManageModal({
     const proficiencyResult = checkWeaponProficiency(item.name, playerProficiencies, explicitCategory, weaponProperties);
 
     if (!proficiencyResult.isProficient) {
-      // Arme non maîtrisée : afficher l'avertissement
       setPendingWeaponEquip(item);
       setProficiencyCheck(proficiencyResult);
       setShowProficiencyWarning(true);
-      // Ne pas réinitialiser pendingId ici car la modal va s'afficher
-      return { needsConfirmation: true };
     } else {
-      // Arme maîtrisée : équiper directement
-      await onEquip(item);
-      return { needsConfirmation: false };
+      try {
+        await onEquip(item);
+      } catch (error) {
+        console.error('Erreur lors de l\'équipement:', error);
+      } finally {
+        setPendingId(null);
+      }
     }
   };
 
@@ -186,10 +198,13 @@ export function WeaponsManageModal({
                 </div>
                 <div className="flex items-center gap-2">
                   {showEquipped ? (
-                    // Section "Armes équipées" : Badge vert + bouton déséquiper
                     <>
-                      <span className="px-2 py-1 rounded text-xs border border-green-500/40 text-green-300 bg-green-900/20">
-                        Équipé
+                      <span className={`px-2 py-1 rounded text-xs border ${
+                        proficiencyStatus.isProficient
+                          ? 'border-green-500/40 text-green-300 bg-green-900/20'
+                          : 'border-amber-500/40 text-amber-300 bg-amber-900/20'
+                      }`}>
+                        {proficiencyStatus.isProficient ? 'Équipé' : 'Équipé ⚠'}
                       </span>
                       <button
                         onClick={async (e) => {
@@ -222,37 +237,26 @@ export function WeaponsManageModal({
                         Non équipé
                       </span>
                       <button
-                        onClick={async (e) => {
+                        onClick={(e) => {
                           e.stopPropagation();
                           if (isPending) return;
                           setPendingId(it.id);
-                          try {
-                            // ✅ MODIFICATION : Utiliser la fonction avec vérification
-                            const result = await handleEquipWithProficiencyCheck(it);
-                            // Si une confirmation est nécessaire, ne pas réinitialiser pendingId
-                            // car l'équipement se fera après confirmation
-                            if (!result?.needsConfirmation) {
-                              setPendingId(null);
-                            }
-                          } catch (error) {
-                            console.error('Erreur équipement:', error);
-                            setPendingId(null);
-                          }
+                          handleEquipClick(it);
                         }}
                         disabled={isPending}
                         className={`px-2 py-1 rounded text-xs border ${
-                          isPending 
+                          isPending
                             ? 'border-gray-500 text-gray-500 bg-gray-800/50 cursor-not-allowed'
                             : proficiencyStatus.isProficient
                               ? 'border-green-500/40 text-green-300 bg-green-900/20 hover:border-green-400/60'
                               : 'border-yellow-500/40 text-yellow-300 bg-yellow-900/20 hover:border-yellow-400/60'
                         }`}
                         title={
-                          isPending 
-                            ? "Traitement en cours..." 
-                            : proficiencyStatus.isProficient 
-                              ? "Équiper" 
-                              : "Équiper (non maîtrisé - désavantage aux attaques)"
+                          isPending
+                            ? "Traitement en cours..."
+                            : proficiencyStatus.isProficient
+                              ? "Équiper"
+                              : "Équiper (non maîtrisé - pas de bonus de maîtrise)"
                         }
                       >
                         {isPending ? 'En cours...' : (
