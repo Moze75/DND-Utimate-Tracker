@@ -441,7 +441,7 @@ export default function PlayerProfileProfileTab({ player }: PlayerProfileProfile
       </SectionContainer>
 
       {/* Dons */}
-      <SectionContainer icon={<Sparkles size={18} className="text-amber-400" />} title="Dons" defaultOpen={false}
+      <SectionContainer icon={<Sparkles size={18} className="text-amber-400" />} title="Dons" defaultOpen> 
         {(donsOrigIdx.loading || donsGenIdx.loading || stylesIdx.loading) && <LoadingInline />}
         {(donsOrigIdx.error || donsGenIdx.error || stylesIdx.error) && (
           <div className="text-sm text-red-400 space-y-1">
