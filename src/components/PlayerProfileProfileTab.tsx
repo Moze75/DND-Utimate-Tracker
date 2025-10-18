@@ -171,7 +171,7 @@ type SectionContainerProps = {
   defaultOpen?: boolean;
 };
 
-function SectionContainer({ icon, title, children, subtitle, defaultOpen = true }: SectionContainerProps) {
+function SectionContainer({ icon, title, children, subtitle, defaultOpen = false }: SectionContainerProps) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="stat-card">
